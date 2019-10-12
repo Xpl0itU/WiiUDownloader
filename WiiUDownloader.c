@@ -4,6 +4,9 @@
 #include <inttypes.h>
 #include <unistd.h>
 #include <byteswap.h>
+#ifndef _WIN32
+#    include <sys/stat.h>
+#endif
 
 #include <curl/curl.h>
 
@@ -130,7 +133,7 @@ int main(int argc, char** argv)
     char output_path[strlen(output_dir) + 14];
 
     // create the output directory if it doesn't exist
-    #if defined(_WIN32)
+    #ifdef _WIN32
         mkdir(output_dir);
     #else
         mkdir(output_dir, 0700);

@@ -3,8 +3,6 @@
 #include <string.h>
 #include <inttypes.h>
 #include <unistd.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <byteswap.h>
 
 #include <curl/curl.h>
@@ -119,15 +117,12 @@ int main(int argc, char** argv)
     char download_url[81];
     char output_path[strlen(output_dir) + 14];
 
-    // check whether the output directory exists, create it if not
-    struct stat _st = {0};
-    if (stat(output_dir, &_st) == -1) {
-        #if defined(_WIN32)
+    // create the output directory if it doesn't exist
+    #if defined(_WIN32)
         mkdir(output_dir);
-        #else
+    #else
         mkdir(output_dir, 0700);
-        #endif
-    }
+    #endif
 
     // initialize curl
     curl_global_init(CURL_GLOBAL_ALL);

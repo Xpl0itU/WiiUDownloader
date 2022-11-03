@@ -1,15 +1,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include <inttypes.h>
 #include <unistd.h>
 #include <byteswap.h>
 #ifndef _WIN32
-#    include <sys/stat.h>
+    #include <sys/stat.h>
 #endif
 
+#include <keygen.h>
 #include <curl/curl.h>
-
 
 struct MemoryStruct {
   uint8_t* memory;
@@ -21,6 +22,38 @@ struct PathFileStruct {
     FILE* file_pointer;
 };
 
+int progress_func(void* ptr, double TotalToDownload, double NowDownloaded, 
+                    double TotalToUpload, double NowUploaded)
+{
+    // ensure that the file to be downloaded is not empty
+    // because that would cause a division by zero error later on
+    if (TotalToDownload <= 0.0) {
+        return 0;
+    }
+
+    // how wide you want the progress meter to be
+    int totaldotz=40;
+    double fractiondownloaded = NowDownloaded / TotalToDownload;
+    // part of the progressmeter that's already "full"
+    int dotz = (int) round(fractiondownloaded * totaldotz);
+
+    // create the "meter"
+    int ii=0;
+    printf("%3.0f%% [",fractiondownloaded*100);
+    // part  that's full already
+    for ( ; ii < dotz;ii++) {
+        printf("=");
+    }
+    // remaining part (spaces)
+    for ( ; ii < totaldotz;ii++) {
+        printf(" ");
+    }
+    // and back to line begin - do not forget the fflush to avoid output buffering problems!
+    printf("]\r");
+    fflush(stdout);
+    // if you don't return 0, the transfer will be aborted - see the documentation
+    return 0; 
+}
 
 static size_t WriteDataToMemory(void* contents, size_t size, size_t nmemb, void* userp)
 {
@@ -32,27 +65,6 @@ static size_t WriteDataToMemory(void* contents, size_t size, size_t nmemb, void*
     mem->size += realsize;
 
     return realsize;
-}
-
-
-int char2int(char input)
-{
-    if (input >= '0' && input <= '9')
-        return input - '0';
-    if (input >= 'A' && input <= 'F')
-        return input - 'A' + 10;
-    if (input >= 'a' && input <= 'f')
-        return input - 'a' + 10;
-    fprintf(stderr, "Error: Malformed input.\n");
-    exit(EXIT_FAILURE);
-}
-
-void hex2bytes(const char* input, uint8_t* output)
-{
-    int input_length = strlen(input);
-    for (int i = 0; i < input_length; i += 2) {
-        output[i / 2] = char2int(input[i]) * 16 + char2int(input[i + 1]);
-    }
 }
 
 void create_ticket(char* title_id, char* title_key, uint16_t title_version, char* output_path)
@@ -73,27 +85,26 @@ void create_ticket(char* title_id, char* title_key, uint16_t title_version, char
     printf("Finished creating \"%s\".\n", output_path);
 }
 
-
 static size_t write_data(void* data, size_t size, size_t nmemb, void* file_stream)
 {
     size_t written = fwrite(data, size, nmemb, file_stream);
     return written;
 }
 
-
-void add_curl_handle(CURLM* curl_multi_handle, char* download_url, char* output_path)
-{
+int downloadFile(char *download_url, char *output_path) {
     CURL* new_handle = curl_easy_init();
     curl_easy_setopt(new_handle, CURLOPT_FAILONERROR, 1L);
     curl_easy_setopt(new_handle, CURLOPT_URL, download_url);
     curl_easy_setopt(new_handle, CURLOPT_WRITEFUNCTION, write_data);
+    curl_easy_setopt(new_handle, CURLOPT_NOPROGRESS, 0);
+    curl_easy_setopt(new_handle, CURLOPT_PROGRESSFUNCTION, progress_func); 
 
     FILE* output_file = fopen(output_path, "wb");
     if (!output_file) {
         fprintf(stderr, "Error: The file \"%s\" couldn't be opened. Will exit now.\n", output_path);
         exit(EXIT_FAILURE);
     }
-    printf("Queuing up download for file \"%s\".\n", download_url);
+    printf("Downloading file \"%s\".\n", download_url);
 
     struct PathFileStruct* struct_to_save = malloc(sizeof(struct PathFileStruct));
     struct_to_save->file_path = malloc(strlen(output_path) + 1);
@@ -101,29 +112,26 @@ void add_curl_handle(CURLM* curl_multi_handle, char* download_url, char* output_
     struct_to_save->file_pointer = output_file;
     curl_easy_setopt(new_handle, CURLOPT_WRITEDATA, output_file);
     curl_easy_setopt(new_handle, CURLOPT_PRIVATE, struct_to_save);
-    curl_multi_add_handle(curl_multi_handle, new_handle);
+    curl_easy_perform(new_handle);
+    curl_easy_cleanup(new_handle);
+    return 0;
 }
-
 
 int main(int argc, char** argv)
 {
-    if (argc != 3 && argc != 4) {
+    if (argc != 2 && argc != 3) {
         printf("WiiUDownloader, (more or less) a C port of the FunKiiU program.\n");
         printf("It allows to download game files from the nintendo servers.\n\n");
-        printf("Usage: ./WiiUDownloader <TitleID> <TitleKey> [output directory]\n");
+        printf("Usage: ./WiiUDownloader <TitleID> [output directory]\n");
         exit(EXIT_SUCCESS);
     }
     if (strlen(argv[1]) != 16) {
         fprintf(stderr, "Error: TitleID has a wrong length!");
         exit(EXIT_FAILURE);
     }
-    if (strlen(argv[2]) != 32) {
-        fprintf(stderr, "Error: TitleKey has a wrong length!");
-        exit(EXIT_FAILURE);
-    }
 
     // initialize some useful variables
-    char* output_dir = (argc == 4) ? argv[3] : argv[1];
+    char* output_dir = (argc == 3) ? argv[2] : argv[1];
     if (output_dir[strlen(output_dir)-1] == '/' || output_dir[strlen(output_dir)-1] == '\\') {
         output_dir[strlen(output_dir)-1] = '\0';
     }
@@ -171,14 +179,14 @@ int main(int argc, char** argv)
     uint16_t title_version;
     memcpy(&title_version, &tmd_data.memory[476], 2);
     snprintf(output_path, sizeof(output_path), "%s/%s", output_dir, "title.tik");
-    create_ticket(argv[1], argv[2], title_version, output_path);
+    char titleKey[128];
+    getTitleKeyFromTitleID(argv[1], titleKey);
+    create_ticket(argv[1], titleKey, title_version, output_path);
 
     uint16_t content_count;
     memcpy(&content_count, &tmd_data.memory[478], 2);
     content_count = bswap_16(content_count);
 
-    // Download content asynchronously using a multi handle
-    CURLM* curl_multi_handle = curl_multi_init();
     // Add all needed curl handles to the multi handle
     for (int i = 0; i < content_count; i++) {
         int offset = 2820 + (48 * i);
@@ -189,48 +197,19 @@ int main(int argc, char** argv)
         // add a curl handle for the content file (.app file)
         snprintf(output_path, sizeof(output_path), "%s/%08X.app", output_dir, id);
         snprintf(download_url, 78, "%s/%08X", base_url, id);
-        add_curl_handle(curl_multi_handle, download_url, output_path);
+        downloadFile(download_url, output_path);
 
         if ((tmd_data.memory[offset + 7] & 0x2) == 2) {
             // add a curl handle for the hash file (.h3 file)
             snprintf(output_path, sizeof(output_path), "%s/%08X.h3", output_dir, id);
             snprintf(download_url, 81, "%s/%08X.h3", base_url, id);
-            add_curl_handle(curl_multi_handle, download_url, output_path);
+            downloadFile(download_url, output_path);
         }
     }
     free(tmd_data.memory);
 
-    printf("Downloading all files for TitleID %s asynchronously...\n", argv[1]);
-
-    // Perform the download requests
-    int still_alive = 1;
-    while (still_alive) {
-        curl_multi_perform(curl_multi_handle, &still_alive);
-
-        CURLMsg* msg;
-        int msgs_left = 1;
-        while ((msg = curl_multi_info_read(curl_multi_handle, &msgs_left))) {
-            if (msg->msg == CURLMSG_DONE) {
-                CURL* finished_handle = msg->easy_handle;
-                struct PathFileStruct* saved_struct;
-                curl_easy_getinfo(finished_handle, CURLINFO_PRIVATE, &saved_struct);
-                printf("Finished downloading \"%s\".\n", saved_struct->file_path);
-                free(saved_struct->file_path);
-                fclose(saved_struct->file_pointer);
-                free(saved_struct);
-                curl_multi_remove_handle(curl_multi_handle, finished_handle);
-                curl_easy_cleanup(finished_handle);
-            } else {
-                fprintf(stderr, "AN ERROR OCCURED!\n");
-            }
-        }
-
-        if (still_alive) {
-            curl_multi_wait(curl_multi_handle, NULL, 0, 1000, NULL);
-        }
-    }
+    printf("Downloading all files for TitleID %s done...\n", argv[1]);
 
     // cleanup curl stuff
-    curl_multi_cleanup(curl_multi_handle);
     curl_global_cleanup();
 }

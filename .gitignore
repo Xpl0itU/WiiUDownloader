@@ -1,6 +1,8 @@
 .vs/
 .vscode/
 .idea/
+build
+src/gtitles.c
 
 WiiUDownloader
 WiiUDownloader.exe

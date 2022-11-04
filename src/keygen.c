@@ -92,7 +92,7 @@ static inline const char *transformPassword(TITLE_KEY in)
 }
 
 bool generateKey(const char *tid, TITLE_KEY title_key, uint8_t *out) {
-    uint8_t *ti;
+    uint8_t *ti = malloc(128);
     hex2bytes(tid, ti);
     size_t i;
     size_t j;
@@ -113,6 +113,7 @@ bool generateKey(const char *tid, TITLE_KEY title_key, uint8_t *out) {
     memmove(key, KEYGEN_SECRET, 10);
     memmove(key + 10, ++ti, i);
     mbedtls_md5(key, j, key);
+    free(--ti);
 
     // The key is the password salted with the md5 hash from above
     const char *pw = transformPassword(title_key);
@@ -129,12 +130,13 @@ bool generateKey(const char *tid, TITLE_KEY title_key, uint8_t *out) {
 }
 
 void getTitleKeyFromTitleID(const char *tid, char *out) {
-    uint8_t tKey[32];
-    for(int i = 0; i <= getTitleEntriesSize(TITLE_CATEGORY_ALL); ++i) {
+    uint8_t *tKey = malloc(128);
+    for(size_t i = 0; i <= getTitleEntriesSize(TITLE_CATEGORY_ALL); ++i) {
         if(getTitleEntries(TITLE_CATEGORY_ALL)[i].tid == convertStringToU64(tid)) {
             generateKey(tid, getTitleEntries(TITLE_CATEGORY_ALL)[i].key, tKey);
             sprintf(out, "%032x", tKey);
             break;
         }
     }
+    free(tKey);
 }

@@ -7,22 +7,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-static const uint8_t KEYGEN_SECRET[10] = { 0xfd, 0x04, 0x01, 0x05, 0x06, 0x0b, 0x11, 0x1c, 0x2d, 0x49 };
+#define KEYGEN_SECRET  "fd040105060b111c2d49"
 
+static const uint8_t keygen_pw[] = { 0x6d, 0x79, 0x70, 0x61, 0x73, 0x73 };
 static const uint8_t commonKey[16] = { 0xd7, 0xb0, 0x04, 0x02, 0x65, 0x9b, 0xa2, 0xab, 0xd2, 0xcb, 0x0d, 0xb2, 0x7f, 0xa2, 0xb6, 0x56 };
-
-uint64_t convertStringToU64(const char *str)   // char * preferred
-{
-  char t[16] = "0123456789ABCDEF";
-
-  uint64_t val = 0;
-  for (int i = 0; i < strlen(str); i++)
-  {
-    val = val * 16;
-    val = val + str[i] - '0';  // convert char to numeric value << this line needs to be expanded to include ABCDEF
-  }
-  return val;
-}
 
 int char2int(char input)
 {
@@ -32,7 +20,7 @@ int char2int(char input)
         return input - 'A' + 10;
     if (input >= 'a' && input <= 'f')
         return input - 'a' + 10;
-    fprintf(stderr, "Error: Malformed input.\n");
+    fprintf(stderr, "Error: Malformed input: %c\n", input);
     exit(1);
 }
 
@@ -63,80 +51,65 @@ bool encryptAES(void *data, int data_len, const unsigned char *key, unsigned cha
     return ret;
 }
 
-static inline const char *transformPassword(TITLE_KEY in)
-{
-    switch(in)
-    {
-        case TITLE_KEY_mypass:
-        case TITLE_KEY_MAGIC:
-            return "mypass";
-        case TITLE_KEY_nintendo:
-            return "nintendo";
-        case TITLE_KEY_test:
-            return "test";
-        case TITLE_KEY_1234567890:
-            return "1234567890";
-        case TITLE_KEY_Lucy131211:
-            return "Lucy131211";
-        case TITLE_KEY_fbf10:
-            return "fbf10";
-        case TITLE_KEY_5678:
-            return "5678";
-        case TITLE_KEY_1234:
-            return "1234";
-        case TITLE_KEY_:
-            return "";
-        default:
-            return "mypass"; // Seems to work so far even for newest releases
-    }
+void hex(uint64_t i, int digits, char *out) {
+	char x[8]; // max 99 digits!
+	sprintf(x, "%%0%illx", digits);
+	sprintf(out, x, i);
 }
 
-bool generateKey(const char *tid, TITLE_KEY title_key, uint8_t *out) {
-    uint8_t *ti = malloc(128);
-    hex2bytes(tid, ti);
-    size_t i;
-    size_t j;
-    switch(getTidHighFromTid(convertStringToU64(tid)))
-    {
-        case TID_HIGH_VWII_IOS:
-            ti += 2;
-            i = 8 - 3;
-            j = 8 - 3 + 10;
-            break;
-        default:
-            i = 8 - 1;
-            j = 8 - 1 + 10;
-    }
-
-    uint8_t key[17];
-    // The salt is a md5 hash of the keygen secret + part of the title key
-    memmove(key, KEYGEN_SECRET, 10);
-    memmove(key + 10, ++ti, i);
-    mbedtls_md5(key, j, key);
-    free(--ti);
-
-    // The key is the password salted with the md5 hash from above
-    const char *pw = transformPassword(title_key);
+bool generateKey(const char *tid, char *out)
+{
+	char *ret = malloc(33);
+	if(ret == NULL)
+		return false;
+	
+	char *tmp = tid;
+	while(tmp[0] == '0' && tmp[1] == '0')
+		tmp += 2;
+	
+	char h[1024];
+	strcpy(h, KEYGEN_SECRET);
+	strcat(h, tmp);
+	
+	size_t bhl = strlen(h) >> 1;
+	uint8_t bh[bhl];
+	for(size_t i = 0, j = 0; j < bhl; i += 2, j++)
+        bh[j] = (h[i] % 32 + 9) % 25 * 16 + (h[i + 1] % 32 + 9) % 25;
+	
+	uint8_t md5sum[16];
+    mbedtls_md5(bh, bhl, md5sum);
+	
+	uint8_t key[16];
     mbedtls_md_context_t ctx;
     mbedtls_md_setup(&ctx, mbedtls_md_info_from_type(MBEDTLS_MD_SHA1), 1);
-    if(mbedtls_pkcs5_pbkdf2_hmac(&ctx, (const unsigned char *)pw, strlen(pw), key, 16, 20, 16, key) != 0)
+    if(mbedtls_pkcs5_pbkdf2_hmac(&ctx, (const unsigned char *)keygen_pw, sizeof(keygen_pw), md5sum, 16, 20, 16, key) != 0)
         return false;
+	
+	uint8_t iv[16];
+	for(size_t i = 0, j = 0; j < 8; i += 2, j++)
+        iv[j] = (tid[i] % 32 + 9) % 25 * 16 + (tid[i + 1] % 32 + 9) % 25;
+	
+	memset(&iv[8], 0, 8);
+    encryptAES(key, 16, commonKey, iv, key);
+	
+	tmp = ret;
+	for(int i = 0; i < 16; i++, tmp += 2)
+		sprintf(tmp, "%02x", key[i]);
 
-    // The final key needs to be AES encrypted with the Wii U common key and part of the title ID padded with zeroes as IV
-    uint8_t iv[16];
-    memmove(iv, tid, 8);
-    memset(iv + 8, 0, 8);
-    return encryptAES(key, 16, commonKey, iv, out);
+    sprintf(out, "%s", ret);
+	
+	return ret != NULL;
 }
 
 void getTitleKeyFromTitleID(const char *tid, char *out) {
-    uint8_t *tKey = malloc(128);
+    uint64_t titleIDNumeric = strtoull(tid, NULL, 16);
     for(size_t i = 0; i <= getTitleEntriesSize(TITLE_CATEGORY_ALL); ++i) {
-        if(getTitleEntries(TITLE_CATEGORY_ALL)[i].tid == convertStringToU64(tid)) {
-            generateKey(tid, getTitleEntries(TITLE_CATEGORY_ALL)[i].key, tKey);
-            sprintf(out, "%032x", tKey);
-            break;
+        if(getTitleEntries(TITLE_CATEGORY_ALL)[i].tid == titleIDNumeric) {
+            printf("tid 1: %016lx\n",titleIDNumeric);
+            if(generateKey(tid, out)) {
+                fprintf(stderr, "titlekey: %s\n", out);
+                break;
+            }
         }
     }
-    free(tKey);
 }

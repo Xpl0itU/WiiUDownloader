@@ -2,4 +2,13 @@
 
 #include <stdbool.h>
 
-bool generateCert(const char *path);
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
+    bool generateCert(const char *path);
+
+#ifdef __cplusplus
+}
+#endif

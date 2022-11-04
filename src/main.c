@@ -10,6 +10,7 @@
 #endif
 
 #include <keygen.h>
+#include <ticket.h>
 #include <curl/curl.h>
 
 struct MemoryStruct {
@@ -67,7 +68,7 @@ static size_t WriteDataToMemory(void* contents, size_t size, size_t nmemb, void*
     return realsize;
 }
 
-void create_ticket(char* title_id, char* title_key, uint16_t title_version, char* output_path)
+void create_ticket(const char* title_id, const char* title_key, uint16_t title_version, const char* output_path)
 {
     FILE* ticket_file = fopen(output_path, "wb");
     if (!ticket_file) {
@@ -117,26 +118,14 @@ int downloadFile(char *download_url, char *output_path) {
     return 0;
 }
 
-int main(int argc, char** argv)
-{
-    if (argc != 2 && argc != 3) {
-        printf("WiiUDownloader, (more or less) a C port of the FunKiiU program.\n");
-        printf("It allows to download game files from the nintendo servers.\n\n");
-        printf("Usage: ./WiiUDownloader <TitleID> [output directory]\n");
-        exit(EXIT_SUCCESS);
-    }
-    if (strlen(argv[1]) != 16) {
-        fprintf(stderr, "Error: TitleID has a wrong length!");
-        exit(EXIT_FAILURE);
-    }
-
+int downloadTitle(const char *titleID) {
     // initialize some useful variables
-    char* output_dir = (argc == 3) ? argv[2] : argv[1];
+    char* output_dir = strdup(titleID);
     if (output_dir[strlen(output_dir)-1] == '/' || output_dir[strlen(output_dir)-1] == '\\') {
         output_dir[strlen(output_dir)-1] = '\0';
     }
     char base_url[69];
-    snprintf(base_url, 69, "http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/%s", argv[1]);
+    snprintf(base_url, 69, "http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/%s", titleID);
     char download_url[81];
     char output_path[strlen(output_dir) + 14];
 
@@ -166,9 +155,12 @@ int main(int argc, char** argv)
     curl_easy_perform(tmd_handle);
     curl_easy_cleanup(tmd_handle);
     // write out the tmd file
+    snprintf(output_path, sizeof(output_path), "%s/%s", output_dir, "title.cert");
+    generateCert(output_path);
     snprintf(output_path, sizeof(output_path), "%s/%s", output_dir, "title.tmd");
     FILE* tmd_file = fopen(output_path, "wb");
     if (!tmd_file) {
+        free(output_dir);
         fprintf(stderr, "Error: The file \"%s\" couldn't be opened. Will exit now.\n", output_path);
         exit(EXIT_FAILURE);
     }
@@ -180,8 +172,8 @@ int main(int argc, char** argv)
     memcpy(&title_version, &tmd_data.memory[476], 2);
     snprintf(output_path, sizeof(output_path), "%s/%s", output_dir, "title.tik");
     char titleKey[128];
-    getTitleKeyFromTitleID(argv[1], titleKey);
-    create_ticket(argv[1], titleKey, title_version, output_path);
+    getTitleKeyFromTitleID(titleID, titleKey);
+    create_ticket(titleID, titleKey, title_version, output_path);
 
     uint16_t content_count;
     memcpy(&content_count, &tmd_data.memory[478], 2);
@@ -208,8 +200,24 @@ int main(int argc, char** argv)
     }
     free(tmd_data.memory);
 
-    printf("Downloading all files for TitleID %s done...\n", argv[1]);
+    printf("Downloading all files for TitleID %s done...\n", titleID);
 
     // cleanup curl stuff
     curl_global_cleanup();
+    free(output_dir);
+}
+
+int main(int argc, char** argv)
+{
+    if (argc != 2 && argc != 3) {
+        printf("WiiUDownloader, (more or less) a C port of the FunKiiU program.\n");
+        printf("It allows to download game files from the nintendo servers.\n\n");
+        printf("Usage: ./WiiUDownloader <TitleID> [output directory]\n");
+        exit(EXIT_SUCCESS);
+    }
+    if (strlen(argv[1]) != 16) {
+        fprintf(stderr, "Error: TitleID has a wrong length!");
+        exit(EXIT_FAILURE);
+    }
+    downloadTitle(argv[1]);
 }

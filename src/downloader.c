@@ -11,6 +11,7 @@
 
 #include <keygen.h>
 #include <ticket.h>
+#include <downloader.h>
 #include <curl/curl.h>
 
 struct MemoryStruct {
@@ -205,19 +206,4 @@ int downloadTitle(const char *titleID) {
     // cleanup curl stuff
     curl_global_cleanup();
     free(output_dir);
-}
-
-int main(int argc, char** argv)
-{
-    if (argc != 2 && argc != 3) {
-        printf("WiiUDownloader, (more or less) a C port of the FunKiiU program.\n");
-        printf("It allows to download game files from the nintendo servers.\n\n");
-        printf("Usage: ./WiiUDownloader <TitleID> [output directory]\n");
-        exit(EXIT_SUCCESS);
-    }
-    if (strlen(argv[1]) != 16) {
-        fprintf(stderr, "Error: TitleID has a wrong length!");
-        exit(EXIT_FAILURE);
-    }
-    downloadTitle(argv[1]);
 }

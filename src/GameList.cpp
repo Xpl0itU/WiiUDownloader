@@ -52,11 +52,5 @@ void GameList::on_gamelist_row_activated(const Gtk::TreePath& treePath, Gtk::Tre
     gameListWindow->set_sensitive(false);
     sprintf(selectedTID, "%016lx", infos[row[columns.index]].tid);
     downloadTitle(selectedTID);
-    //deleteConn = gameListWindow->signal_delete_event().connect(sigc::mem_fun(*this, &GameList::on_gamelist_delete_event));
-}
-
-bool GameList::on_gamelist_delete_event(GdkEventAny* event)
-{
-    
-    return false;
+    gameListWindow->set_sensitive(true);
 }

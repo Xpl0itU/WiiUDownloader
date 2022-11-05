@@ -29,38 +29,28 @@ struct PathFileStruct {
 };
 
 GtkWidget *progress_bar;
+GtkWidget *button;
+GtkWidget *window;
 
-int progress_func(void* ptr, double TotalToDownload, double NowDownloaded, 
-                    double TotalToUpload, double NowUploaded)
+//Thread
+pthread_t thread;
+int thread_running = 0;
+
+CURL* new_handle;
+
+//LibCurl progress function
+int progress_func(void *ptr, double t, double d, double ultotal, double ulnow)
 {
-    // ensure that the file to be downloaded is not empty
-    // because that would cause a division by zero error later on
-    if (TotalToDownload <= 0.0) {
+    if(t == 0) {
+        gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progress_bar), 0);
         return 0;
     }
 
-    // how wide you want the progress meter to be
-    int totaldotz=40;
-    double fractiondownloaded = NowDownloaded / TotalToDownload;
-    // part of the progressmeter that's already "full"
-    int dotz = (int) round(fractiondownloaded * totaldotz);
+    gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progress_bar), d/t);
+    while(gtk_events_pending())
+        gtk_main_iteration();
 
-    // create the "meter"
-    int ii=0;
-    printf("%3.0f%% [",fractiondownloaded*100);
-    // part  that's full already
-    for ( ; ii < dotz;ii++) {
-        printf("=");
-    }
-    // remaining part (spaces)
-    for ( ; ii < totaldotz;ii++) {
-        printf(" ");
-    }
-    // and back to line begin - do not forget the fflush to avoid output buffering problems!
-    printf("]\r");
-    fflush(stdout);
-    // if you don't return 0, the transfer will be aborted - see the documentation
-    return 0; 
+    return 0;
 }
 
 void destroy(GtkWidget *widget, gpointer data)
@@ -117,38 +107,69 @@ static size_t write_data(void* data, size_t size, size_t nmemb, void* file_strea
     return written;
 }
 
+//LibCurl download function
+void *download(void *ptr)
+{
+    if (new_handle) {
+        curl_easy_perform(new_handle);
+        curl_easy_cleanup(new_handle);
+    }
+    thread_running = 0;
+    return NULL;
+}
+
+
+//Start download function
+void start_download(GtkWidget *widget, gpointer data)
+{
+    if(thread_running)
+        return;
+
+    thread_running = 1;
+    if(pthread_create(&thread, NULL, download, NULL)) {
+        fprintf(stderr, "Error creating thread\n");
+        thread_running = 0;
+        return;
+    }
+    pthread_join(thread, NULL);
+}
+
 void *progressDialog() {
     gtk_init(NULL, NULL);
 
-    GtkWidget *window;
-    GtkWidget *vbox;
-
+    //Create window
     window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-    gtk_window_set_title(GTK_WINDOW(window), "Libcurl Progress");
-    gtk_window_set_default_size(GTK_WINDOW(window), 400, 100);
+    gtk_window_set_title(GTK_WINDOW(window), "LibCurl Download Progress Bar");
+    gtk_window_set_default_size(GTK_WINDOW(window), 300, 50);
     gtk_container_set_border_width(GTK_CONTAINER(window), 10);
-    g_signal_connect(window, "destroy", G_CALLBACK(destroy), NULL);
+    g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
 
-    vbox = gtk_vbox_new(FALSE, 0);
-    gtk_container_add(GTK_CONTAINER(window), vbox);
-
+    //Create progress bar
     progress_bar = gtk_progress_bar_new();
-    gtk_box_pack_start(GTK_BOX(vbox), progress_bar, TRUE, TRUE, 5);
+    gtk_progress_bar_set_show_text(GTK_PROGRESS_BAR(progress_bar), TRUE);
+    gtk_progress_bar_set_text(GTK_PROGRESS_BAR(progress_bar), "Downloading");
+
+    //Create container for the window
+    GtkWidget *main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+    gtk_container_add(GTK_CONTAINER(window), main_box);
+    gtk_box_pack_start(GTK_BOX(main_box), progress_bar, FALSE, FALSE, 0);
 
     gtk_widget_show_all(window);
 
-    gtk_main();
+    start_download(window, NULL);
+
+    //gtk_main();
 }
 
 int downloadFile(char *download_url, char *output_path) {
-    CURL* new_handle = curl_easy_init();
+    new_handle = curl_easy_init();
 
     curl_easy_setopt(new_handle, CURLOPT_FAILONERROR, 1L);
     curl_easy_setopt(new_handle, CURLOPT_URL, download_url);
     curl_easy_setopt(new_handle, CURLOPT_WRITEFUNCTION, write_data);
-    curl_easy_setopt(new_handle, CURLOPT_NOPROGRESS, 0);
-    curl_easy_setopt(new_handle, CURLOPT_PROGRESSFUNCTION, progress_func); 
-    curl_easy_setopt(new_handle, CURLOPT_XFERINFOFUNCTION, xferinfo);
+    curl_easy_setopt(new_handle, CURLOPT_NOPROGRESS, 0L);
+    curl_easy_setopt(new_handle, CURLOPT_PROGRESSFUNCTION, progress_func);
+    curl_easy_setopt(new_handle, CURLOPT_PROGRESSDATA, progress_bar);
 
     FILE* output_file = fopen(output_path, "wb");
     if (!output_file) {
@@ -165,9 +186,7 @@ int downloadFile(char *download_url, char *output_path) {
     curl_easy_setopt(new_handle, CURLOPT_PRIVATE, struct_to_save);
     pthread_t inputTimer;
     pthread_create(&inputTimer, NULL, &progressDialog, NULL);
-    curl_easy_perform(new_handle);
-    curl_easy_cleanup(new_handle);
-    pthread_cancel(inputTimer);
+    pthread_join(inputTimer, NULL);
     return 0;
 }
 

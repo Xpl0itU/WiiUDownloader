@@ -1,7 +1,7 @@
 TARGET_EXEC := WiiUDownloader
 
 CFLAGS := -Ofast -flto=auto -fno-fat-lto-objects -fuse-linker-plugin -pipe `pkg-config gtkmm-3.0 --cflags`
-CXXFLAGS := $(CFLAGS)
+CXXFLAGS := $(CFLAGS) -fpermissive
 LDFLAGS := -lcurl -lmbedtls -lmbedx509 -lmbedcrypto `pkg-config gtkmm-3.0 --libs`
 
 BUILD_DIR := build

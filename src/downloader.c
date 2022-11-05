@@ -58,19 +58,6 @@ void destroy(GtkWidget *widget, gpointer data)
     gtk_main_quit();
 }
 
-int xferinfo(void *p, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow)
-{
-    if(dltotal == 0)
-        dltotal = 1;
-    if(dlnow == 0)
-        dlnow = 1;
-    gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progress_bar), (gdouble)dlnow/(gdouble)dltotal);
-    while (gtk_events_pending()) {
-        gtk_main_iteration();
-    }
-    return 0;
-}
-
 static size_t WriteDataToMemory(void* contents, size_t size, size_t nmemb, void* userp)
 {
     size_t realsize = size * nmemb;

@@ -12,7 +12,11 @@
 #include <keygen.h>
 #include <ticket.h>
 #include <downloader.h>
+
+#include <gtk/gtk.h>
 #include <curl/curl.h>
+
+#include <pthread.h>
 
 struct MemoryStruct {
   uint8_t* memory;
@@ -23,6 +27,8 @@ struct PathFileStruct {
     char* file_path;
     FILE* file_pointer;
 };
+
+GtkWidget *progress_bar;
 
 int progress_func(void* ptr, double TotalToDownload, double NowDownloaded, 
                     double TotalToUpload, double NowUploaded)
@@ -55,6 +61,24 @@ int progress_func(void* ptr, double TotalToDownload, double NowDownloaded,
     fflush(stdout);
     // if you don't return 0, the transfer will be aborted - see the documentation
     return 0; 
+}
+
+void destroy(GtkWidget *widget, gpointer data)
+{
+    gtk_main_quit();
+}
+
+int xferinfo(void *p, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow)
+{
+    if(dltotal == 0)
+        dltotal = 1;
+    if(dlnow == 0)
+        dlnow = 1;
+    gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progress_bar), (gdouble)dlnow/(gdouble)dltotal);
+    while (gtk_events_pending()) {
+        gtk_main_iteration();
+    }
+    return 0;
 }
 
 static size_t WriteDataToMemory(void* contents, size_t size, size_t nmemb, void* userp)
@@ -93,13 +117,38 @@ static size_t write_data(void* data, size_t size, size_t nmemb, void* file_strea
     return written;
 }
 
+void *progressDialog() {
+    gtk_init(NULL, NULL);
+
+    GtkWidget *window;
+    GtkWidget *vbox;
+
+    window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+    gtk_window_set_title(GTK_WINDOW(window), "Libcurl Progress");
+    gtk_window_set_default_size(GTK_WINDOW(window), 400, 100);
+    gtk_container_set_border_width(GTK_CONTAINER(window), 10);
+    g_signal_connect(window, "destroy", G_CALLBACK(destroy), NULL);
+
+    vbox = gtk_vbox_new(FALSE, 0);
+    gtk_container_add(GTK_CONTAINER(window), vbox);
+
+    progress_bar = gtk_progress_bar_new();
+    gtk_box_pack_start(GTK_BOX(vbox), progress_bar, TRUE, TRUE, 5);
+
+    gtk_widget_show_all(window);
+
+    gtk_main();
+}
+
 int downloadFile(char *download_url, char *output_path) {
     CURL* new_handle = curl_easy_init();
+
     curl_easy_setopt(new_handle, CURLOPT_FAILONERROR, 1L);
     curl_easy_setopt(new_handle, CURLOPT_URL, download_url);
     curl_easy_setopt(new_handle, CURLOPT_WRITEFUNCTION, write_data);
     curl_easy_setopt(new_handle, CURLOPT_NOPROGRESS, 0);
     curl_easy_setopt(new_handle, CURLOPT_PROGRESSFUNCTION, progress_func); 
+    curl_easy_setopt(new_handle, CURLOPT_XFERINFOFUNCTION, xferinfo);
 
     FILE* output_file = fopen(output_path, "wb");
     if (!output_file) {
@@ -114,8 +163,11 @@ int downloadFile(char *download_url, char *output_path) {
     struct_to_save->file_pointer = output_file;
     curl_easy_setopt(new_handle, CURLOPT_WRITEDATA, output_file);
     curl_easy_setopt(new_handle, CURLOPT_PRIVATE, struct_to_save);
+    pthread_t inputTimer;
+    pthread_create(&inputTimer, NULL, &progressDialog, NULL);
     curl_easy_perform(new_handle);
     curl_easy_cleanup(new_handle);
+    pthread_cancel(inputTimer);
     return 0;
 }
 

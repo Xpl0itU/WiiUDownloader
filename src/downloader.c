@@ -28,14 +28,10 @@ struct PathFileStruct {
 };
 
 GtkWidget *progress_bar;
-GtkWidget *button;
 GtkWidget *window;
 
-//Thread
-pthread_t thread;
-int thread_running = 0;
-
 CURL* new_handle;
+char currentFile[255] = "None";
 
 uint16_t bswap_16(uint16_t value)
 {
@@ -56,7 +52,11 @@ void progress_func(void *p, double dltotal, double dlnow, double ultotal, double
         dlnow = 1;
     GtkProgressBar *progress_bar = (GtkProgressBar *)p;
 
+    char downloadString[255] = "Downloading ";
+    strcat(downloadString, currentFile);
+
     gtk_progress_bar_set_fraction(progress_bar, dlnow/dltotal);
+    gtk_progress_bar_set_text(GTK_PROGRESS_BAR(progress_bar), downloadString);
     // force redraw
     while (gtk_events_pending())
         gtk_main_iteration();
@@ -117,17 +117,14 @@ int download_file(gpointer progress)
 }
 
 void *progressDialog() {
-    GtkWidget *window;
-    GtkWidget *progress;
-
     gtk_init(NULL, NULL);
 
     //Create window
     window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-    gtk_window_set_title(GTK_WINDOW(window), "LibCurl Download Progress Bar");
+    gtk_window_set_title(GTK_WINDOW(window), "Download Progress");
     gtk_window_set_default_size(GTK_WINDOW(window), 300, 50);
     gtk_container_set_border_width(GTK_CONTAINER(window), 10);
-    //g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
+    gtk_window_set_modal(GTK_WINDOW(window), TRUE);
 
     //Create progress bar
     progress_bar = gtk_progress_bar_new();
@@ -140,10 +137,6 @@ void *progressDialog() {
     gtk_box_pack_start(GTK_BOX(main_box), progress_bar, FALSE, FALSE, 0);
 
     gtk_widget_show_all(window);
-
-    download_file(progress_bar);
-    
-    gtk_widget_destroy(GTK_WIDGET(window));
 }
 
 int downloadFile(char *download_url, char *output_path) {
@@ -169,7 +162,7 @@ int downloadFile(char *download_url, char *output_path) {
     struct_to_save->file_pointer = output_file;
     curl_easy_setopt(new_handle, CURLOPT_WRITEDATA, output_file);
     curl_easy_setopt(new_handle, CURLOPT_PRIVATE, struct_to_save);
-    progressDialog();
+    download_file(progress_bar);
     return 0;
 }
 
@@ -275,6 +268,7 @@ int downloadTitle(const char *titleID) {
     content_count = bswap_16(content_count);
 
     // Add all needed curl handles to the multi handle
+    progressDialog();
     for (int i = 0; i < content_count; i++) {
         int offset = 2820 + (48 * i);
         uint32_t id; // the id should usually be chronological, but we wanna be sure
@@ -284,12 +278,14 @@ int downloadTitle(const char *titleID) {
         // add a curl handle for the content file (.app file)
         snprintf(output_path, sizeof(output_path), "%s/%08X.app", output_dir, id);
         snprintf(download_url, 78, "%s/%08X", base_url, id);
+        sprintf(currentFile, "%08X.app", id);
         downloadFile(download_url, output_path);
 
         if ((tmd_data.memory[offset + 7] & 0x2) == 2) {
             // add a curl handle for the hash file (.h3 file)
             snprintf(output_path, sizeof(output_path), "%s/%08X.h3", output_dir, id);
             snprintf(download_url, 81, "%s/%08X.h3", base_url, id);
+            sprintf(currentFile, "%08X.h3", id);
             downloadFile(download_url, output_path);
         }
     }
@@ -298,6 +294,7 @@ int downloadTitle(const char *titleID) {
     printf("Downloading all files for TitleID %s done...\n", titleID);
 
     // cleanup curl stuff
+    gtk_widget_destroy(GTK_WIDGET(window));
     curl_global_cleanup();
     free(output_dir);
 }

@@ -33,7 +33,7 @@ void writeRandomBytes(FILE* fp, uint32_t len) {
 
 static void writeHeader(FILE *fp) {
 	writeCustomBytes(fp, "0x00010004000102030405060708090000"); // Magic 32 bit value + our magic value + padding
-	writeCustomBytes(fp, "0x4E555373706C69"); // "NUSspli"
+	writeCustomBytes(fp, "0x646F776E6C6F61"); // "downloa"
 	writeVoidBytes(fp, 0x9);
 	int vl = strlen("TEST");
 	fwrite("TEST", 1, vl, fp);

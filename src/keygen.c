@@ -100,16 +100,3 @@ bool generateKey(const char *tid, char *out)
 	
 	return ret != NULL;
 }
-
-void getTitleKeyFromTitleID(const char *tid, char *out) {
-    uint64_t titleIDNumeric = strtoull(tid, NULL, 16);
-    for(size_t i = 0; i <= getTitleEntriesSize(TITLE_CATEGORY_ALL); ++i) {
-        if(getTitleEntries(TITLE_CATEGORY_ALL)[i].tid == titleIDNumeric) {
-            printf("tid 1: %016lx\n",titleIDNumeric);
-            if(generateKey(tid, out)) {
-                fprintf(stderr, "titlekey: %s\n", out);
-                break;
-            }
-        }
-    }
-}

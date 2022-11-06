@@ -4,14 +4,18 @@
 #include <math.h>
 #include <inttypes.h>
 #include <unistd.h>
-#include <byteswap.h>
 #ifndef _WIN32
     #include <sys/stat.h>
 #endif
 
 #include <keygen.h>
 #include <ticket.h>
+#include <downloader.h>
+
+#include <gtk/gtk.h>
 #include <curl/curl.h>
+
+#include <pthread.h>
 
 struct MemoryStruct {
   uint8_t* memory;
@@ -23,37 +27,39 @@ struct PathFileStruct {
     FILE* file_pointer;
 };
 
-int progress_func(void* ptr, double TotalToDownload, double NowDownloaded, 
-                    double TotalToUpload, double NowUploaded)
+GtkWidget *progress_bar;
+GtkWidget *button;
+GtkWidget *window;
+
+//Thread
+pthread_t thread;
+int thread_running = 0;
+
+CURL* new_handle;
+
+uint16_t bswap_16(uint16_t value)
 {
-    // ensure that the file to be downloaded is not empty
-    // because that would cause a division by zero error later on
-    if (TotalToDownload <= 0.0) {
-        return 0;
-    }
+	return (uint16_t) ((0x00FF & (value >> 8)) | (0xFF00 & (value << 8)));
+}
 
-    // how wide you want the progress meter to be
-    int totaldotz=40;
-    double fractiondownloaded = NowDownloaded / TotalToDownload;
-    // part of the progressmeter that's already "full"
-    int dotz = (int) round(fractiondownloaded * totaldotz);
+static inline uint32_t bswap_32(uint32_t __x)
+{
+	return __x>>24 | __x>>8&0xff00 | __x<<8&0xff0000 | __x<<24;
+}
 
-    // create the "meter"
-    int ii=0;
-    printf("%3.0f%% [",fractiondownloaded*100);
-    // part  that's full already
-    for ( ; ii < dotz;ii++) {
-        printf("=");
-    }
-    // remaining part (spaces)
-    for ( ; ii < totaldotz;ii++) {
-        printf(" ");
-    }
-    // and back to line begin - do not forget the fflush to avoid output buffering problems!
-    printf("]\r");
-    fflush(stdout);
-    // if you don't return 0, the transfer will be aborted - see the documentation
-    return 0; 
+//LibCurl progress function
+void progress_func(void *p, double dltotal, double dlnow, double ultotal, double ulnow)
+{
+    if(dltotal == 0)
+        dltotal = 1;
+    if(dlnow == 0)
+        dlnow = 1;
+    GtkProgressBar *progress_bar = (GtkProgressBar *)p;
+
+    gtk_progress_bar_set_fraction(progress_bar, dlnow/dltotal);
+    // force redraw
+    while (gtk_events_pending())
+        gtk_main_iteration();
 }
 
 static size_t WriteDataToMemory(void* contents, size_t size, size_t nmemb, void* userp)
@@ -92,13 +98,63 @@ static size_t write_data(void* data, size_t size, size_t nmemb, void* file_strea
     return written;
 }
 
+int download_file(gpointer progress)
+{
+    if(new_handle) {
+        // set progress bar
+        curl_easy_setopt(new_handle, CURLOPT_NOPROGRESS, FALSE);
+        curl_easy_setopt(new_handle, CURLOPT_PROGRESSFUNCTION, progress_func);
+        curl_easy_setopt(new_handle, CURLOPT_PROGRESSDATA, progress);
+
+        // perform download
+        curl_easy_perform(new_handle);
+
+        // cleanup
+        curl_easy_cleanup(new_handle);
+    }
+
+    return 0;
+}
+
+void *progressDialog() {
+    GtkWidget *window;
+    GtkWidget *progress;
+
+    gtk_init(NULL, NULL);
+
+    //Create window
+    window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+    gtk_window_set_title(GTK_WINDOW(window), "LibCurl Download Progress Bar");
+    gtk_window_set_default_size(GTK_WINDOW(window), 300, 50);
+    gtk_container_set_border_width(GTK_CONTAINER(window), 10);
+    //g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
+
+    //Create progress bar
+    progress_bar = gtk_progress_bar_new();
+    gtk_progress_bar_set_show_text(GTK_PROGRESS_BAR(progress_bar), TRUE);
+    gtk_progress_bar_set_text(GTK_PROGRESS_BAR(progress_bar), "Downloading");
+
+    //Create container for the window
+    GtkWidget *main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+    gtk_container_add(GTK_CONTAINER(window), main_box);
+    gtk_box_pack_start(GTK_BOX(main_box), progress_bar, FALSE, FALSE, 0);
+
+    gtk_widget_show_all(window);
+
+    download_file(progress_bar);
+    
+    gtk_widget_destroy(GTK_WIDGET(window));
+}
+
 int downloadFile(char *download_url, char *output_path) {
-    CURL* new_handle = curl_easy_init();
+    new_handle = curl_easy_init();
+
     curl_easy_setopt(new_handle, CURLOPT_FAILONERROR, 1L);
     curl_easy_setopt(new_handle, CURLOPT_URL, download_url);
     curl_easy_setopt(new_handle, CURLOPT_WRITEFUNCTION, write_data);
-    curl_easy_setopt(new_handle, CURLOPT_NOPROGRESS, 0);
-    curl_easy_setopt(new_handle, CURLOPT_PROGRESSFUNCTION, progress_func); 
+    curl_easy_setopt(new_handle, CURLOPT_NOPROGRESS, 0L);
+    curl_easy_setopt(new_handle, CURLOPT_PROGRESSFUNCTION, progress_func);
+    curl_easy_setopt(new_handle, CURLOPT_PROGRESSDATA, progress_bar);
 
     FILE* output_file = fopen(output_path, "wb");
     if (!output_file) {
@@ -113,14 +169,53 @@ int downloadFile(char *download_url, char *output_path) {
     struct_to_save->file_pointer = output_file;
     curl_easy_setopt(new_handle, CURLOPT_WRITEDATA, output_file);
     curl_easy_setopt(new_handle, CURLOPT_PRIVATE, struct_to_save);
-    curl_easy_perform(new_handle);
-    curl_easy_cleanup(new_handle);
+    progressDialog();
     return 0;
+}
+
+// function to return the path of the selected folder
+char *gtk3_show_folder_select_dialog()
+{
+  GtkWidget *dialog;
+  GtkFileChooserAction action = GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER;
+  gint res;
+  char *folder_path = NULL;
+
+  dialog = gtk_file_chooser_dialog_new ("Select a folder",
+                                        NULL,
+                                        action,
+                                        "_Cancel",
+                                        GTK_RESPONSE_CANCEL,
+                                        "_Select",
+                                        GTK_RESPONSE_ACCEPT,
+                                        NULL);
+
+  res = gtk_dialog_run (GTK_DIALOG (dialog));
+
+  if (res == GTK_RESPONSE_ACCEPT)
+    {
+      GtkFileChooser *chooser = GTK_FILE_CHOOSER (dialog);
+      folder_path = gtk_file_chooser_get_filename (chooser);
+    }
+
+  gtk_widget_destroy (dialog);
+
+  return folder_path;
+}
+
+void prepend(char* s, const char* t)
+{
+    size_t len = strlen(t);
+    memmove(s + len, s, strlen(s) + 1);
+    memcpy(s, t, len);
 }
 
 int downloadTitle(const char *titleID) {
     // initialize some useful variables
-    char* output_dir = strdup(titleID);
+    char* output_dir = malloc(1024);
+    strcpy(output_dir, titleID);
+    prepend(output_dir, "/");
+    prepend(output_dir, gtk3_show_folder_select_dialog());
     if (output_dir[strlen(output_dir)-1] == '/' || output_dir[strlen(output_dir)-1] == '\\') {
         output_dir[strlen(output_dir)-1] = '\0';
     }
@@ -172,7 +267,7 @@ int downloadTitle(const char *titleID) {
     memcpy(&title_version, &tmd_data.memory[476], 2);
     snprintf(output_path, sizeof(output_path), "%s/%s", output_dir, "title.tik");
     char titleKey[128];
-    getTitleKeyFromTitleID(titleID, titleKey);
+    generateKey(titleID, titleKey);
     create_ticket(titleID, titleKey, title_version, output_path);
 
     uint16_t content_count;
@@ -205,19 +300,4 @@ int downloadTitle(const char *titleID) {
     // cleanup curl stuff
     curl_global_cleanup();
     free(output_dir);
-}
-
-int main(int argc, char** argv)
-{
-    if (argc != 2 && argc != 3) {
-        printf("WiiUDownloader, (more or less) a C port of the FunKiiU program.\n");
-        printf("It allows to download game files from the nintendo servers.\n\n");
-        printf("Usage: ./WiiUDownloader <TitleID> [output directory]\n");
-        exit(EXIT_SUCCESS);
-    }
-    if (strlen(argv[1]) != 16) {
-        fprintf(stderr, "Error: TitleID has a wrong length!");
-        exit(EXIT_FAILURE);
-    }
-    downloadTitle(argv[1]);
 }

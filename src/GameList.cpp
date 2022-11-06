@@ -33,20 +33,29 @@ GameList::GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos)
     }
 
     treeView->append_column("TitleID", columns.titleId);
-    treeView->get_column(1);
-    treeView->get_column(1);
+    treeView->get_column(0);
+    treeView->get_column(0);
 
     treeView->append_column("Kind", columns.kind);
-    treeView->get_column(2);
-    treeView->get_column(2);
+    treeView->get_column(1);
+    treeView->get_column(1);
 
     treeView->append_column("Region", columns.region);
+    treeView->get_column(2);
+    treeView->get_column(2);
+
+    treeView->append_column("Name", columns.name);
     treeView->get_column(3);
     treeView->get_column(3);
 
-    treeView->append_column("Name", columns.name);
-    treeView->get_column(4);
-    treeView->get_column(4);
+    // Search for name
+    treeView->set_search_column(4);
+
+    // Sort by name by default
+    treeModel->set_sort_column(GTK_TREE_SORTABLE_UNSORTED_SORT_COLUMN_ID, Gtk::SortType::SORT_ASCENDING);
+    treeModel->set_sort_column(4, Gtk::SortType::SORT_ASCENDING);
+
+    treeView->set_search_equal_func(sigc::mem_fun(*this, &GameList::on_search_equal));
 }
 
 GameList::~GameList()
@@ -64,4 +73,25 @@ void GameList::on_gamelist_row_activated(const Gtk::TreePath& treePath, Gtk::Tre
     sprintf(selectedTID, "%016llx", infos[row[columns.index]].tid);
     downloadTitle(selectedTID);
     gameListWindow->set_sensitive(true);
+}
+
+bool GameList::on_search_equal(const Glib::RefPtr<Gtk::TreeModel>& model, int column, const Glib::ustring& key, const Gtk::TreeModel::iterator& iter)
+{
+    Gtk::TreeModel::Row row = *iter;
+
+    Glib::ustring name = row[columns.name];
+    std::string string_name(name.lowercase());
+    std::string string_key(key.lowercase());
+    if (string_name.find(string_key) != std::string::npos)
+    {
+        return false;
+    }
+
+    Glib::ustring titleId = row[columns.titleId];
+    if (strcmp(titleId.c_str(), key.c_str()) == 0)
+    {
+        return false;
+    }
+
+    return true;
 }

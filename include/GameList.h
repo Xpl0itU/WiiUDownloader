@@ -34,6 +34,7 @@ public:
 
     void on_gamelist_row_activated(const Gtk::TreePath& treePath, Gtk::TreeViewColumn* const& column);
     void on_dumpWindow_closed();
+    bool on_search_equal(const Glib::RefPtr<Gtk::TreeModel>& model, int column, const Glib::ustring& key, const Gtk::TreeModel::iterator& iter);
 
     Gtk::Window* getWindow() { return gameListWindow; }
 

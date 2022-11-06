@@ -17,11 +17,13 @@ public:
         {
             add(index);
             add(titleId);
+            add(region);
             add(name);
         }
 
         Gtk::TreeModelColumn<int> index;
         Gtk::TreeModelColumn<Glib::ustring> titleId;
+        Gtk::TreeModelColumn<Glib::ustring> region;
         Gtk::TreeModelColumn<Glib::ustring> name;
     };
 

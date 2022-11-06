@@ -173,9 +173,49 @@ int downloadFile(char *download_url, char *output_path) {
     return 0;
 }
 
+// function to return the path of the selected folder
+char *gtk3_show_folder_select_dialog()
+{
+  GtkWidget *dialog;
+  GtkFileChooserAction action = GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER;
+  gint res;
+  char *folder_path = NULL;
+
+  dialog = gtk_file_chooser_dialog_new ("Select a folder",
+                                        NULL,
+                                        action,
+                                        "_Cancel",
+                                        GTK_RESPONSE_CANCEL,
+                                        "_Select",
+                                        GTK_RESPONSE_ACCEPT,
+                                        NULL);
+
+  res = gtk_dialog_run (GTK_DIALOG (dialog));
+
+  if (res == GTK_RESPONSE_ACCEPT)
+    {
+      GtkFileChooser *chooser = GTK_FILE_CHOOSER (dialog);
+      folder_path = gtk_file_chooser_get_filename (chooser);
+    }
+
+  gtk_widget_destroy (dialog);
+
+  return folder_path;
+}
+
+void prepend(char* s, const char* t)
+{
+    size_t len = strlen(t);
+    memmove(s + len, s, strlen(s) + 1);
+    memcpy(s, t, len);
+}
+
 int downloadTitle(const char *titleID) {
     // initialize some useful variables
-    char* output_dir = strdup(titleID);
+    char* output_dir = malloc(1024);
+    strcpy(output_dir, titleID);
+    prepend(output_dir, "/");
+    prepend(output_dir, gtk3_show_folder_select_dialog());
     if (output_dir[strlen(output_dir)-1] == '/' || output_dir[strlen(output_dir)-1] == '\\') {
         output_dir[strlen(output_dir)-1] = '\0';
     }

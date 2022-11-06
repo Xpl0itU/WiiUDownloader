@@ -4,7 +4,6 @@
 #include <math.h>
 #include <inttypes.h>
 #include <unistd.h>
-#include <byteswap.h>
 #ifndef _WIN32
     #include <sys/stat.h>
 #endif
@@ -37,6 +36,16 @@ pthread_t thread;
 int thread_running = 0;
 
 CURL* new_handle;
+
+uint16_t bswap_16(uint16_t value)
+{
+	return (uint16_t) ((0x00FF & (value >> 8)) | (0xFF00 & (value << 8)));
+}
+
+static inline uint32_t bswap_32(uint32_t __x)
+{
+	return __x>>24 | __x>>8&0xff00 | __x<<8&0xff0000 | __x<<24;
+}
 
 //LibCurl progress function
 void progress_func(void *p, double dltotal, double dlnow, double ultotal, double ulnow)

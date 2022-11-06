@@ -50,17 +50,16 @@ static inline uint32_t bswap_32(uint32_t __x)
 //LibCurl progress function
 void progress_func(void *p, double dltotal, double dlnow, double ultotal, double ulnow)
 {
+    if(dltotal == 0)
+        dltotal = 1;
+    if(dlnow == 0)
+        dlnow = 1;
     GtkProgressBar *progress_bar = (GtkProgressBar *)p;
 
     gtk_progress_bar_set_fraction(progress_bar, dlnow/dltotal);
     // force redraw
     while (gtk_events_pending())
         gtk_main_iteration();
-}
-
-void destroy(GtkWidget *widget, gpointer data)
-{
-    gtk_main_quit();
 }
 
 static size_t WriteDataToMemory(void* contents, size_t size, size_t nmemb, void* userp)
@@ -128,7 +127,7 @@ void *progressDialog() {
     gtk_window_set_title(GTK_WINDOW(window), "LibCurl Download Progress Bar");
     gtk_window_set_default_size(GTK_WINDOW(window), 300, 50);
     gtk_container_set_border_width(GTK_CONTAINER(window), 10);
-    g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
+    //g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
 
     //Create progress bar
     progress_bar = gtk_progress_bar_new();
@@ -144,7 +143,7 @@ void *progressDialog() {
 
     download_file(progress_bar);
     
-    gdk_window_destroy(window);
+    gtk_widget_destroy(GTK_WIDGET(window));
 }
 
 int downloadFile(char *download_url, char *output_path) {

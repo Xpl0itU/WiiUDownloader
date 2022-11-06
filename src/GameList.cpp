@@ -3,8 +3,6 @@
 #include <downloader.h>
 #include <iostream>
 
-char selectedTID[128];
-
 GameList::GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos)
 {
     this->builder = builder;
@@ -50,7 +48,8 @@ void GameList::on_gamelist_row_activated(const Gtk::TreePath& treePath, Gtk::Tre
     Gtk::TreeModel::Row row = *selection->get_selected();
 
     gameListWindow->set_sensitive(false);
-    sprintf(selectedTID, "%016lx", infos[row[columns.index]].tid);
+    char selectedTID[128];
+    sprintf(selectedTID, "%016llx", infos[row[columns.index]].tid);
     downloadTitle(selectedTID);
     gameListWindow->set_sensitive(true);
 }

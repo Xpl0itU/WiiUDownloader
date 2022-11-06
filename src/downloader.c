@@ -219,7 +219,7 @@ int downloadTitle(const char *titleID) {
     memcpy(&title_version, &tmd_data.memory[476], 2);
     snprintf(output_path, sizeof(output_path), "%s/%s", output_dir, "title.tik");
     char titleKey[128];
-    getTitleKeyFromTitleID(titleID, titleKey);
+    generateKey(titleID, titleKey);
     create_ticket(titleID, titleKey, title_version, output_path);
 
     uint16_t content_count;

@@ -27,7 +27,7 @@ Window::Window() {
 Window::~Window() {}
 
 void Window::on_button_clicked() {
-  builder = Gtk::Builder::create_from_file("dumpsteru.ui");
+  builder = Gtk::Builder::create_from_file("wiiudownloader.ui");
 
   GameList *list = new GameList(builder, getTitleEntries(TITLE_CATEGORY_ALL));
 }

@@ -32,19 +32,19 @@ GameList::GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos)
 
     builder->get_widget("gamesButton", gamesButton);
     gamesButton->set_active();
-    gamesButton->signal_button_press_event().connect_notify(sigc::mem_fun(*this, &GameList::on_game_button_selected));
+    gamesButton->signal_button_press_event().connect_notify(sigc::bind(sigc::mem_fun(*this, &GameList::on_button_selected), TITLE_CATEGORY_GAME));
 
     builder->get_widget("updatesButton", updatesButton);
-    updatesButton->signal_button_press_event().connect_notify(sigc::mem_fun(*this, &GameList::on_update_button_selected));
+    updatesButton->signal_button_press_event().connect_notify(sigc::bind(sigc::mem_fun(*this, &GameList::on_button_selected), TITLE_CATEGORY_UPDATE));
 
     builder->get_widget("dlcsButton", dlcsButton);
-    dlcsButton->signal_button_press_event().connect_notify(sigc::mem_fun(*this, &GameList::on_dlc_button_selected));
+    dlcsButton->signal_button_press_event().connect_notify(sigc::bind(sigc::mem_fun(*this, &GameList::on_button_selected), TITLE_CATEGORY_DLC));
 
     builder->get_widget("demoButton", demosButton);
-    demosButton->signal_button_press_event().connect_notify(sigc::mem_fun(*this, &GameList::on_demo_button_selected));
+    demosButton->signal_button_press_event().connect_notify(sigc::bind(sigc::mem_fun(*this, &GameList::on_button_selected), TITLE_CATEGORY_DEMO));
 
     builder->get_widget("allButton", allButton);
-    allButton->signal_button_press_event().connect_notify(sigc::mem_fun(*this, &GameList::on_all_button_selected));
+    allButton->signal_button_press_event().connect_notify(sigc::bind(sigc::mem_fun(*this, &GameList::on_button_selected), TITLE_CATEGORY_ALL));
 
     builder->get_widget("gameTree", treeView);
     treeView->signal_row_activated().connect(sigc::mem_fun(*this, &GameList::on_gamelist_row_activated));
@@ -82,36 +82,8 @@ GameList::~GameList()
     
 }
 
-void GameList::on_game_button_selected(GdkEventButton* ev) {
-    currentCategory = TITLE_CATEGORY_GAME;
-    infos = getTitleEntries(currentCategory);
-    updateTitles(currentCategory);
-    return;
-}
-
-void GameList::on_update_button_selected(GdkEventButton* ev) {
-    currentCategory = TITLE_CATEGORY_UPDATE;
-    infos = getTitleEntries(currentCategory);
-    updateTitles(currentCategory);
-    return;
-}
-
-void GameList::on_dlc_button_selected(GdkEventButton* ev) {
-    currentCategory = TITLE_CATEGORY_DLC;
-    infos = getTitleEntries(currentCategory);
-    updateTitles(currentCategory);
-    return;
-}
-
-void GameList::on_demo_button_selected(GdkEventButton* ev) {
-    currentCategory = TITLE_CATEGORY_DEMO;
-    infos = getTitleEntries(currentCategory);
-    updateTitles(currentCategory);
-    return;
-}
-
-void GameList::on_all_button_selected(GdkEventButton* ev) {
-    currentCategory = TITLE_CATEGORY_ALL;
+void GameList::on_button_selected(GdkEventButton* ev, TITLE_CATEGORY cat) {
+    currentCategory = cat;
     infos = getTitleEntries(currentCategory);
     updateTitles(currentCategory);
     return;

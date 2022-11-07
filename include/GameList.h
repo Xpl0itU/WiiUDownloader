@@ -35,11 +35,7 @@ public:
     void updateTitles(TITLE_CATEGORY cat);
 
     void on_gamelist_row_activated(const Gtk::TreePath& treePath, Gtk::TreeViewColumn* const& column);
-    void on_game_button_selected(GdkEventButton* ev);
-    void on_update_button_selected(GdkEventButton* ev);
-    void on_dlc_button_selected(GdkEventButton* ev);
-    void on_demo_button_selected(GdkEventButton* ev);
-    void on_all_button_selected(GdkEventButton* ev);
+    void on_button_selected(GdkEventButton* ev, TITLE_CATEGORY cat);
     void on_dumpWindow_closed();
     bool on_search_equal(const Glib::RefPtr<Gtk::TreeModel>& model, int column, const Glib::ustring& key, const Gtk::TreeModel::iterator& iter);
 

@@ -206,12 +206,14 @@ void prepend(char* s, const char* t)
 int downloadTitle(const char *titleID) {
     // initialize some useful variables
     char* output_dir = malloc(1024);
-    char *selected_dir = malloc(1024);
+    char *selected_dir = NULL;
     strcpy(output_dir, titleID);
     prepend(output_dir, "/");
     selected_dir = gtk3_show_folder_select_dialog();
-    if(selected_dir == NULL)
+    if(selected_dir == NULL) {
+        free(output_dir);
         return 0;
+    }
     prepend(output_dir, selected_dir);
     if (output_dir[strlen(output_dir)-1] == '/' || output_dir[strlen(output_dir)-1] == '\\') {
         output_dir[strlen(output_dir)-1] = '\0';

@@ -62,20 +62,14 @@ GameList::GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos)
     updateTitles(currentCategory, selectedRegion);
 
     treeView->append_column("TitleID", columns.titleId);
-    treeView->get_column(0);
-    treeView->get_column(0);
+    treeView->get_column(0)->set_sort_column(columns.titleId);
 
     treeView->append_column("Kind", columns.kind);
-    treeView->get_column(1);
-    treeView->get_column(1);
 
     treeView->append_column("Region", columns.region);
-    treeView->get_column(2);
-    treeView->get_column(2);
 
     treeView->append_column("Name", columns.name);
-    treeView->get_column(3);
-    treeView->get_column(3);
+    treeView->get_column(3)->set_sort_column(columns.name);
 
     // Search for name
     treeView->set_search_column(4);

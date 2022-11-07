@@ -5,34 +5,12 @@
 #include <downloader.h>
 #include <iostream>
 
-TITLE_CATEGORY currentCategory = TITLE_CATEGORY_ALL;
+TITLE_CATEGORY currentCategory = TITLE_CATEGORY_GAME;
+Glib::RefPtr<Gtk::ListStore> treeModel;
 
-GameList::GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos)
-{
-    this->builder = builder;
-    this->infos = infos;
-
-    builder->get_widget("gameListWindow", gameListWindow);
-    gameListWindow->show();
-
-    builder->get_widget("gamesButton", gamesButton);
-    gamesButton->set_active();
-    gamesButton->signal_button_press_event().connect_notify(sigc::mem_fun(*this, &GameList::on_button_selected));
-
-    builder->get_widget("updatesButton", updatesButton);
-
-    builder->get_widget("dlcsButton", dlcsButton);
-
-    builder->get_widget("demoButton", demosButton);
-
-    builder->get_widget("allButton", allButton);
-
-    builder->get_widget("gameTree", treeView);
-    treeView->signal_row_activated().connect(sigc::mem_fun(*this, &GameList::on_gamelist_row_activated));
-    
-    Glib::RefPtr<Gtk::ListStore> treeModel = Gtk::ListStore::create(columns);
+void GameList::updateTitles(TITLE_CATEGORY cat) {
+    treeModel = Gtk::ListStore::create(columns);
     treeView->set_model(treeModel);
-
     for (unsigned int i = 0; i < getTitleEntriesSize(currentCategory); i++)
     {
         char id[128];
@@ -45,6 +23,36 @@ GameList::GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos)
         row[columns.kind] = Glib::ustring::format(getFormattedKind(infos[i].tid));
         row[columns.titleId] = Glib::ustring::format(id);
     }
+}
+
+GameList::GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos)
+{
+    this->builder = builder;
+    this->infos = infos;
+
+    builder->get_widget("gameListWindow", gameListWindow);
+    gameListWindow->show();
+
+    builder->get_widget("gamesButton", gamesButton);
+    gamesButton->set_active();
+    gamesButton->signal_button_press_event().connect_notify(sigc::mem_fun(*this, &GameList::on_game_button_selected));
+
+    builder->get_widget("updatesButton", updatesButton);
+    updatesButton->signal_button_press_event().connect_notify(sigc::mem_fun(*this, &GameList::on_update_button_selected));
+
+    builder->get_widget("dlcsButton", dlcsButton);
+    dlcsButton->signal_button_press_event().connect_notify(sigc::mem_fun(*this, &GameList::on_dlc_button_selected));
+
+    builder->get_widget("demoButton", demosButton);
+    demosButton->signal_button_press_event().connect_notify(sigc::mem_fun(*this, &GameList::on_demo_button_selected));
+
+    builder->get_widget("allButton", allButton);
+    allButton->signal_button_press_event().connect_notify(sigc::mem_fun(*this, &GameList::on_all_button_selected));
+
+    builder->get_widget("gameTree", treeView);
+    treeView->signal_row_activated().connect(sigc::mem_fun(*this, &GameList::on_gamelist_row_activated));
+
+    updateTitles(currentCategory);
 
     treeView->append_column("TitleID", columns.titleId);
     treeView->get_column(0);
@@ -77,8 +85,38 @@ GameList::~GameList()
     
 }
 
-void GameList::on_button_selected(GdkEventButton* ev) {
-    fprintf(stderr, "button changed");
+void GameList::on_game_button_selected(GdkEventButton* ev) {
+    currentCategory = TITLE_CATEGORY_GAME;
+    infos = getTitleEntries(currentCategory);
+    updateTitles(currentCategory);
+    return;
+}
+
+void GameList::on_update_button_selected(GdkEventButton* ev) {
+    currentCategory = TITLE_CATEGORY_UPDATE;
+    infos = getTitleEntries(currentCategory);
+    updateTitles(currentCategory);
+    return;
+}
+
+void GameList::on_dlc_button_selected(GdkEventButton* ev) {
+    currentCategory = TITLE_CATEGORY_DLC;
+    infos = getTitleEntries(currentCategory);
+    updateTitles(currentCategory);
+    return;
+}
+
+void GameList::on_demo_button_selected(GdkEventButton* ev) {
+    currentCategory = TITLE_CATEGORY_DEMO;
+    infos = getTitleEntries(currentCategory);
+    updateTitles(currentCategory);
+    return;
+}
+
+void GameList::on_all_button_selected(GdkEventButton* ev) {
+    currentCategory = TITLE_CATEGORY_ALL;
+    infos = getTitleEntries(currentCategory);
+    updateTitles(currentCategory);
     return;
 }
 

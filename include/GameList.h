@@ -33,6 +33,7 @@ public:
     ~GameList();
 
     void on_gamelist_row_activated(const Gtk::TreePath& treePath, Gtk::TreeViewColumn* const& column);
+    void on_button_selected(GdkEventButton* ev);
     void on_dumpWindow_closed();
     bool on_search_equal(const Glib::RefPtr<Gtk::TreeModel>& model, int column, const Glib::ustring& key, const Gtk::TreeModel::iterator& iter);
 
@@ -44,6 +45,11 @@ private:
     std::vector<uint8_t> key;
 
     Gtk::TreeView* treeView = nullptr;
+    Gtk::RadioButton *gamesButton = nullptr;
+    Gtk::RadioButton *updatesButton = nullptr;
+    Gtk::RadioButton *dlcsButton = nullptr;
+    Gtk::RadioButton *demosButton = nullptr;
+    Gtk::RadioButton *allButton = nullptr;
     ModelColumns columns;
     const TitleEntry *infos;
 

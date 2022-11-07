@@ -5,6 +5,8 @@
 #include <downloader.h>
 #include <iostream>
 
+TITLE_CATEGORY currentCategory = TITLE_CATEGORY_ALL;
+
 GameList::GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos)
 {
     this->builder = builder;
@@ -13,13 +15,25 @@ GameList::GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos)
     builder->get_widget("gameListWindow", gameListWindow);
     gameListWindow->show();
 
+    builder->get_widget("gamesButton", gamesButton);
+    gamesButton->set_active();
+    gamesButton->signal_button_press_event().connect_notify(sigc::mem_fun(*this, &GameList::on_button_selected));
+
+    builder->get_widget("updatesButton", updatesButton);
+
+    builder->get_widget("dlcsButton", dlcsButton);
+
+    builder->get_widget("demoButton", demosButton);
+
+    builder->get_widget("allButton", allButton);
+
     builder->get_widget("gameTree", treeView);
     treeView->signal_row_activated().connect(sigc::mem_fun(*this, &GameList::on_gamelist_row_activated));
     
     Glib::RefPtr<Gtk::ListStore> treeModel = Gtk::ListStore::create(columns);
     treeView->set_model(treeModel);
 
-    for (unsigned int i = 0; i < getTitleEntriesSize(TITLE_CATEGORY_ALL); i++)
+    for (unsigned int i = 0; i < getTitleEntriesSize(currentCategory); i++)
     {
         char id[128];
         hex(infos[i].tid, 16, id);
@@ -61,6 +75,11 @@ GameList::GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos)
 GameList::~GameList()
 {
     
+}
+
+void GameList::on_button_selected(GdkEventButton* ev) {
+    fprintf(stderr, "button changed");
+    return;
 }
 
 void GameList::on_gamelist_row_activated(const Gtk::TreePath& treePath, Gtk::TreeViewColumn* const& column)

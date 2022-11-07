@@ -5,9 +5,6 @@
 #include <downloader.h>
 #include <iostream>
 
-TITLE_CATEGORY currentCategory = TITLE_CATEGORY_GAME;
-Glib::RefPtr<Gtk::ListStore> treeModel;
-
 void GameList::updateTitles(TITLE_CATEGORY cat) {
     treeModel = Gtk::ListStore::create(columns);
     treeView->set_model(treeModel);
@@ -19,7 +16,7 @@ void GameList::updateTitles(TITLE_CATEGORY cat) {
 
         row[columns.index] = i;
         row[columns.name] = infos[i].name;
-        row[columns.region] = Glib::ustring::format(getFormattedRegion(infos[i].region));
+        row[columns.region] = Glib::ustring::format(getFormattedRegion((MCPRegion)infos[i].region));
         row[columns.kind] = Glib::ustring::format(getFormattedKind(infos[i].tid));
         row[columns.titleId] = Glib::ustring::format(id);
     }

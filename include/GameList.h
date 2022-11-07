@@ -59,6 +59,9 @@ private:
     ModelColumns columns;
     const TitleEntry *infos;
 
+    TITLE_CATEGORY currentCategory = TITLE_CATEGORY_GAME;
+    Glib::RefPtr<Gtk::ListStore> treeModel;
+
     sigc::connection deleteConn;
 
     Gtk::AboutDialog* aboutDialog = nullptr;

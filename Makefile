@@ -26,6 +26,7 @@ $(BUILD_DIR)/%.cpp.o: %.cpp
 $(BUILD_DIR)/%.c.o: %.c
 	mkdir -p $(dir $@)
 	gcc $(CFLAGS) $(INC_FLAGS) -c $< -o $@
+	
 
 .PHONY: clean
 clean:

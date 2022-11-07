@@ -6,6 +6,7 @@
 
 #include <keygen.h>
 #include <gtitles.h>
+#include <titleInfo.h>
 
 class GameList
 {
@@ -32,10 +33,11 @@ public:
     GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos);
     ~GameList();
 
-    void updateTitles(TITLE_CATEGORY cat);
+    void updateTitles(TITLE_CATEGORY cat, MCPRegion reg);
 
     void on_gamelist_row_activated(const Gtk::TreePath& treePath, Gtk::TreeViewColumn* const& column);
     void on_button_selected(GdkEventButton* ev, TITLE_CATEGORY cat);
+    void on_region_selected(Gtk::ToggleButton* button, MCPRegion reg);
     void on_dumpWindow_closed();
     bool on_search_equal(const Glib::RefPtr<Gtk::TreeModel>& model, int column, const Glib::ustring& key, const Gtk::TreeModel::iterator& iter);
 
@@ -52,6 +54,9 @@ private:
     Gtk::RadioButton *dlcsButton = nullptr;
     Gtk::RadioButton *demosButton = nullptr;
     Gtk::RadioButton *allButton = nullptr;
+    Gtk::CheckButton *japanButton = nullptr;
+    Gtk::CheckButton *usaButton = nullptr;
+    Gtk::CheckButton *europeButton = nullptr;
     ModelColumns columns;
     const TitleEntry *infos;
 
@@ -59,6 +64,8 @@ private:
     Glib::RefPtr<Gtk::ListStore> treeModel;
 
     sigc::connection deleteConn;
+
+    MCPRegion selectedRegion = MCP_REGION_JAPAN | MCP_REGION_USA | MCP_REGION_EUROPE;
 
     Gtk::AboutDialog* aboutDialog = nullptr;
     sigc::connection aboutConn;

@@ -1,15 +1,16 @@
 #include <GameList.h>
 
 #include <cstdlib>
-#include <titleInfo.h>
 #include <downloader.h>
 #include <iostream>
 
-void GameList::updateTitles(TITLE_CATEGORY cat) {
+void GameList::updateTitles(TITLE_CATEGORY cat, MCPRegion reg) {
     treeModel = Gtk::ListStore::create(columns);
     treeView->set_model(treeModel);
     for (unsigned int i = 0; i < getTitleEntriesSize(currentCategory); i++)
     {
+        if(!(reg & infos[i].region))
+            continue;
         char id[128];
         hex(infos[i].tid, 16, id);
         Gtk::TreeModel::Row row = *(treeModel->append());
@@ -46,10 +47,19 @@ GameList::GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos)
     builder->get_widget("allButton", allButton);
     allButton->signal_button_press_event().connect_notify(sigc::bind(sigc::mem_fun(*this, &GameList::on_button_selected), TITLE_CATEGORY_ALL));
 
+    builder->get_widget("japanButton", japanButton);
+    japanButton->signal_toggled().connect_notify(sigc::bind(sigc::mem_fun(*this, &GameList::on_region_selected), japanButton, MCP_REGION_JAPAN));
+
+    builder->get_widget("usaButton", usaButton);
+    usaButton->signal_toggled().connect_notify(sigc::bind(sigc::mem_fun(*this, &GameList::on_region_selected), usaButton, MCP_REGION_USA));
+
+    builder->get_widget("europeButton", europeButton);
+    europeButton->signal_toggled().connect_notify(sigc::bind(sigc::mem_fun(*this, &GameList::on_region_selected), europeButton, MCP_REGION_EUROPE));
+
     builder->get_widget("gameTree", treeView);
     treeView->signal_row_activated().connect(sigc::mem_fun(*this, &GameList::on_gamelist_row_activated));
 
-    updateTitles(currentCategory);
+    updateTitles(currentCategory, selectedRegion);
 
     treeView->append_column("TitleID", columns.titleId);
     treeView->get_column(0);
@@ -85,7 +95,16 @@ GameList::~GameList()
 void GameList::on_button_selected(GdkEventButton* ev, TITLE_CATEGORY cat) {
     currentCategory = cat;
     infos = getTitleEntries(currentCategory);
-    updateTitles(currentCategory);
+    updateTitles(currentCategory, selectedRegion);
+    return;
+}
+
+void GameList::on_region_selected(Gtk::ToggleButton* button, MCPRegion reg) {
+    if (button->get_active())
+        selectedRegion |= reg;
+    else
+        selectedRegion &= ~reg;
+    updateTitles(currentCategory, selectedRegion);
     return;
 }
 

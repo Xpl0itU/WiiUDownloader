@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include "titleInfo.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -54,7 +55,7 @@ extern "C"
     {
         const char *name;
         const uint64_t tid;
-        const int region;
+        const MCPRegion region;
         const TITLE_KEY key;
     } TitleEntry;
 

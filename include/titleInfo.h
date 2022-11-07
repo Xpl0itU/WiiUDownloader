@@ -9,12 +9,12 @@ extern "C"
 
     typedef enum MCPRegion
     {
-    MCP_REGION_JAPAN                    = 0x01,
-    MCP_REGION_USA                      = 0x02,
-    MCP_REGION_EUROPE                   = 0x04,
-    MCP_REGION_CHINA                    = 0x10,
-    MCP_REGION_KOREA                    = 0x20,
-    MCP_REGION_TAIWAN                   = 0x40,
+        MCP_REGION_JAPAN                    = 0x01,
+        MCP_REGION_USA                      = 0x02,
+        MCP_REGION_EUROPE                   = 0x04,
+        MCP_REGION_CHINA                    = 0x10,
+        MCP_REGION_KOREA                    = 0x20,
+        MCP_REGION_TAIWAN                   = 0x40,
     } MCPRegion;
 
     typedef enum

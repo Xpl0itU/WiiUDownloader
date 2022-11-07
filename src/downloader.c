@@ -43,6 +43,17 @@ static inline uint32_t bswap_32(uint32_t __x)
 	return __x>>24 | __x>>8&0xff00 | __x<<8&0xff0000 | __x<<24;
 }
 
+char* readable_fs(double size, char *buf) {
+    int i = 0;
+    const char* units[] = {"B", "kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"};
+    while (size > 1024) {
+        size /= 1024;
+        i++;
+    }
+    sprintf(buf, "%.*f %s", i, size, units[i]);
+    return buf;
+}
+
 //LibCurl progress function
 void progress_func(void *p, double dltotal, double dlnow, double ultotal, double ulnow)
 {
@@ -52,8 +63,12 @@ void progress_func(void *p, double dltotal, double dlnow, double ultotal, double
         dlnow = 1;
     GtkProgressBar *progress_bar = (GtkProgressBar *)p;
 
-    char downloadString[255] = "Downloading ";
-    strcat(downloadString, currentFile);
+    char downloadString[255];
+    char downNow[255];
+    char downTotal[255];
+    readable_fs(dlnow, downNow);
+    readable_fs(dltotal, downTotal);
+    sprintf(downloadString, "Downloading %s (%s/%s)", currentFile, downNow, downTotal);
 
     gtk_progress_bar_set_fraction(progress_bar, dlnow/dltotal);
     gtk_progress_bar_set_text(GTK_PROGRESS_BAR(progress_bar), downloadString);

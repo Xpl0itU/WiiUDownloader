@@ -32,6 +32,7 @@ GtkWidget *window;
 
 CURL* new_handle;
 char currentFile[255] = "None";
+char *selected_dir = NULL;
 
 uint16_t bswap_16(uint16_t value)
 {
@@ -221,10 +222,10 @@ void prepend(char* s, const char* t)
 int downloadTitle(const char *titleID) {
     // initialize some useful variables
     char* output_dir = malloc(1024);
-    char *selected_dir = NULL;
     strcpy(output_dir, titleID);
     prepend(output_dir, "/");
-    selected_dir = gtk3_show_folder_select_dialog();
+    if(selected_dir == NULL)
+        selected_dir = gtk3_show_folder_select_dialog();
     if(selected_dir == NULL) {
         free(output_dir);
         return 0;

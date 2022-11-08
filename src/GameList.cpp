@@ -7,7 +7,7 @@
 void GameList::updateTitles(TITLE_CATEGORY cat, MCPRegion reg) {
     treeModel = Gtk::ListStore::create(columns);
     treeView->set_model(treeModel);
-    for (unsigned int i = 0; i < getTitleEntriesSize(currentCategory); i++)
+    for (unsigned int i = 0; i < getTitleEntriesSize(cat); i++)
     {
         if(!(reg & infos[i].region))
             continue;

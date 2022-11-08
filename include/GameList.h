@@ -42,6 +42,7 @@ public:
     void on_region_selected(Gtk::ToggleButton* button, MCPRegion reg);
     void on_add_to_queue(GdkEventButton* ev);
     void on_selection_changed();
+    void on_download_queue(GdkEventButton* ev);
     void on_dumpWindow_closed();
     bool on_search_equal(const Glib::RefPtr<Gtk::TreeModel>& model, int column, const Glib::ustring& key, const Gtk::TreeModel::iterator& iter);
 
@@ -62,8 +63,11 @@ private:
     Gtk::CheckButton *usaButton = nullptr;
     Gtk::CheckButton *europeButton = nullptr;
     Gtk::Button *addToQueueButton = nullptr;
+    Gtk::Button *downloadQueueButton = nullptr;
     ModelColumns columns;
     const TitleEntry *infos;
+
+    std::vector<uint64_t> queueVector;
 
     TITLE_CATEGORY currentCategory = TITLE_CATEGORY_GAME;
     Glib::RefPtr<Gtk::ListStore> treeModel;

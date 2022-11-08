@@ -127,6 +127,21 @@
             <property name="can-focus">False</property>
             <property name="layout-style">end</property>
             <child>
+              <object class="GtkButton" id="downloadQueueButton">
+                <property name="label" translatable="yes">Download Queue</property>
+                <property name="visible">True</property>
+                <property name="can-focus">True</property>
+                <property name="receives-default">True</property>
+              </object>
+              <packing>
+                <property name="expand">True</property>
+                <property name="fill">True</property>
+                <property name="position">0</property>
+                <property name="secondary">True</property>
+                <property name="non-homogeneous">True</property>
+              </packing>
+            </child>
+            <child>
               <object class="GtkCheckButton" id="japanButton">
                 <property name="label" translatable="yes">Japan</property>
                 <property name="visible">True</property>

@@ -17,6 +17,7 @@ public:
         ModelColumns()
         {
             add(index);
+            add(toQueue);
             add(titleId);
             add(kind);
             add(region);
@@ -28,6 +29,7 @@ public:
         Gtk::TreeModelColumn<Glib::ustring> kind;
         Gtk::TreeModelColumn<Glib::ustring> region;
         Gtk::TreeModelColumn<Glib::ustring> name;
+        Gtk::TreeModelColumn<bool> toQueue;
     };
 
     GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos);
@@ -38,6 +40,8 @@ public:
     void on_gamelist_row_activated(const Gtk::TreePath& treePath, Gtk::TreeViewColumn* const& column);
     void on_button_selected(GdkEventButton* ev, TITLE_CATEGORY cat);
     void on_region_selected(Gtk::ToggleButton* button, MCPRegion reg);
+    void on_add_to_queue(GdkEventButton* ev);
+    void on_selection_changed();
     void on_dumpWindow_closed();
     bool on_search_equal(const Glib::RefPtr<Gtk::TreeModel>& model, int column, const Glib::ustring& key, const Gtk::TreeModel::iterator& iter);
 
@@ -57,6 +61,7 @@ private:
     Gtk::CheckButton *japanButton = nullptr;
     Gtk::CheckButton *usaButton = nullptr;
     Gtk::CheckButton *europeButton = nullptr;
+    Gtk::Button *addToQueueButton = nullptr;
     ModelColumns columns;
     const TitleEntry *infos;
 

@@ -1,7 +1,18 @@
 # WiiUDownloader
-Allows to download encrypted wiiu files from nintendo's official servers
+Allows to download encrypted wiiu files from Nintendo's official servers
 
-A port of [FunKiiU](https://github.com/llakssz/FunKiiU) in C, compiled using a self-compiled version of libcurl.
-For license information, see the "libcurl license.txt" file. For information on how to compile this project or libcurl itself (which might be necessary), see the "command.txt".
+## Features
+- Multiplatform (Windows and Linux)
+- Nice UI
+- Queue for title download
+- Title filtering (Games, Updates, DLCs and Demos)
+- Uses same Title Database as NUSspli, so it has the same titles as NUSspli
 
-If you have any questions, just uh write an issue and ask I guess.
+## TODO
+- Allow for decryption of files after download
+- Better file downloading UI with info about the current title being downloaded and stuff
+- Better queue management and overall UI
+
+## Thanks to:
+- V10lator for a lot of inspiration, code and hosting and providing the Title Database
+- Morilli for the original WiiUDownloader

@@ -67,7 +67,7 @@ private:
     ModelColumns columns;
     const TitleEntry *infos;
 
-    std::vector<uint64_t> queueVector;
+    std::vector<uint64_t> queueVector = {};
 
     TITLE_CATEGORY currentCategory = TITLE_CATEGORY_GAME;
     Glib::RefPtr<Gtk::ListStore> treeModel;

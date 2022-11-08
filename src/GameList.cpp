@@ -14,9 +14,8 @@ void GameList::updateTitles(TITLE_CATEGORY cat, MCPRegion reg) {
         char id[128];
         hex(infos[i].tid, 16, id);
         Gtk::TreeModel::Row row = *(treeModel->append());
-        bool present = std::binary_search(queueVector.begin(), queueVector.end(), infos[i].tid);
         row[columns.index] = i;
-        row[columns.toQueue] = present;
+        row[columns.toQueue] = queueVector.empty() ? false : std::binary_search(queueVector.begin(), queueVector.end(), infos[i].tid);
         row[columns.name] = infos[i].name;
         row[columns.region] = Glib::ustring::format(getFormattedRegion((MCPRegion)infos[i].region));
         row[columns.kind] = Glib::ustring::format(getFormattedKind(infos[i].tid));

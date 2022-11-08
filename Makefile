@@ -1,6 +1,6 @@
 TARGET_EXEC := WiiUDownloader
 
-CFLAGS := -Ofast -flto=auto -fno-strict-aliasing -fno-fat-lto-objects -fno-strict-aliasing -fuse-linker-plugin -pipe `pkg-config gtkmm-3.0 --cflags`
+CFLAGS := -Ofast -flto=auto -fno-fat-lto-objects -fno-strict-aliasing -fuse-linker-plugin -pipe `pkg-config gtkmm-3.0 --cflags`
 CXXFLAGS := $(CFLAGS) -fpermissive
 LDFLAGS := -lcurl -lmbedtls -lmbedx509 -lmbedcrypto `pkg-config gtkmm-3.0 --libs`
 
@@ -17,7 +17,7 @@ INC_FLAGS := $(addprefix -I,$(INC_DIRS))
 
 ./$(TARGET_EXEC): $(OBJS)
 	g++ $(CXXFLAGS) $(INC_FLAGS) $(OBJS) -o $@ $(LDFLAGS)
-#	strip -s $@
+	strip -s $@
 
 $(BUILD_DIR)/%.cpp.o: %.cpp
 	mkdir -p $(dir $@)

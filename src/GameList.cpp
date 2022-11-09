@@ -73,7 +73,6 @@ GameList::GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos)
     Gtk::TreeViewColumn* pColumn = treeView->get_column(cols_count-1);
     pColumn->pack_start(*renderer);
     pColumn->add_attribute(*renderer, "active", columns.toQueue);
-    pColumn->add_attribute(*renderer, "activatable", TRUE);
 
     treeView->append_column("TitleID", columns.titleId);
     treeView->get_column(1)->set_sort_column(columns.titleId);

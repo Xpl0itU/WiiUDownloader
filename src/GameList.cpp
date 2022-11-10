@@ -111,9 +111,9 @@ void GameList::on_download_queue(GdkEventButton *ev) {
 void GameList::on_selection_changed() {
     Glib::RefPtr<Gtk::TreeSelection> selection = treeView->get_selection();
     Gtk::TreeModel::Row row = *selection->get_selected();
-    if(row) {
+    if (row) {
         if (row[columns.toQueue] == true) {
-        addToQueueButton->set_label("Remove from queue");
+            addToQueueButton->set_label("Remove from queue");
         } else {
             addToQueueButton->set_label("Add to queue");
         }
@@ -123,7 +123,7 @@ void GameList::on_selection_changed() {
 void GameList::on_add_to_queue(GdkEventButton *ev) {
     Glib::RefPtr<Gtk::TreeSelection> selection = treeView->get_selection();
     Gtk::TreeModel::Row row = *selection->get_selected();
-    if(row) {
+    if (row) {
         row[columns.toQueue] = !row[columns.toQueue];
         if (row[columns.toQueue]) {
             queueVector.push_back(infos[row[columns.index]].tid);
@@ -144,9 +144,9 @@ void GameList::on_button_selected(GdkEventButton *ev, TITLE_CATEGORY cat) {
 
 void GameList::on_region_selected(Gtk::ToggleButton *button, MCPRegion reg) {
     if (button->get_active())
-        selectedRegion |= reg;
+        selectedRegion = (MCPRegion) (selectedRegion | reg);
     else
-        selectedRegion &= ~reg;
+        selectedRegion = (MCPRegion) (selectedRegion & ~reg);
     updateTitles(currentCategory, selectedRegion);
     return;
 }
@@ -154,7 +154,7 @@ void GameList::on_region_selected(Gtk::ToggleButton *button, MCPRegion reg) {
 void GameList::on_gamelist_row_activated(const Gtk::TreePath &treePath, Gtk::TreeViewColumn *const &column) {
     Glib::RefPtr<Gtk::TreeSelection> selection = treeView->get_selection();
     Gtk::TreeModel::Row row = *selection->get_selected();
-    if(row) {
+    if (row) {
         gameListWindow->set_sensitive(false);
         char selectedTID[128];
         sprintf(selectedTID, "%016llx", infos[row[columns.index]].tid);
@@ -165,7 +165,7 @@ void GameList::on_gamelist_row_activated(const Gtk::TreePath &treePath, Gtk::Tre
 
 bool GameList::on_search_equal(const Glib::RefPtr<Gtk::TreeModel> &model, int column, const Glib::ustring &key, const Gtk::TreeModel::iterator &iter) {
     Gtk::TreeModel::Row row = *iter;
-    if(row) {
+    if (row) {
         Glib::ustring name = row[columns.name];
         std::string string_name(name.lowercase());
         std::string string_key(key.lowercase());
@@ -177,7 +177,6 @@ bool GameList::on_search_equal(const Glib::RefPtr<Gtk::TreeModel> &model, int co
         if (strcmp(titleId.c_str(), key.c_str()) == 0) {
             return false;
         }
-
-        return true;
     }
+    return true;
 }

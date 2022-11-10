@@ -73,7 +73,7 @@ bool generateKey(const char *tid, char *out) {
         bh[j] = (h[i] % 32 + 9) % 25 * 16 + (h[i + 1] % 32 + 9) % 25;
 
     uint8_t md5sum[16];
-    mbedtls_md5(bh, bhl, md5sum);
+    mbedtls_md5_ret(bh, bhl, md5sum);
 
     uint8_t key[16];
     mbedtls_md_context_t ctx;

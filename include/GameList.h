@@ -75,7 +75,4 @@ private:
     sigc::connection deleteConn;
 
     MCPRegion selectedRegion = MCP_REGION_JAPAN | MCP_REGION_USA | MCP_REGION_EUROPE;
-
-    Gtk::AboutDialog* aboutDialog = nullptr;
-    sigc::connection aboutConn;
 };

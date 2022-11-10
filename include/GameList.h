@@ -4,18 +4,15 @@
 #include <string>
 #include <vector>
 
-#include <keygen.h>
 #include <gtitles.h>
+#include <keygen.h>
 #include <titleInfo.h>
 
-class GameList
-{
+class GameList {
 public:
-    class ModelColumns : public Gtk::TreeModel::ColumnRecord
-    {
+    class ModelColumns : public Gtk::TreeModel::ColumnRecord {
     public:
-        ModelColumns()
-        {
+        ModelColumns() {
             add(index);
             add(toQueue);
             add(titleId);
@@ -37,23 +34,23 @@ public:
 
     void updateTitles(TITLE_CATEGORY cat, MCPRegion reg);
 
-    void on_gamelist_row_activated(const Gtk::TreePath& treePath, Gtk::TreeViewColumn* const& column);
-    void on_button_selected(GdkEventButton* ev, TITLE_CATEGORY cat);
-    void on_region_selected(Gtk::ToggleButton* button, MCPRegion reg);
-    void on_add_to_queue(GdkEventButton* ev);
+    void on_gamelist_row_activated(const Gtk::TreePath &treePath, Gtk::TreeViewColumn *const &column);
+    void on_button_selected(GdkEventButton *ev, TITLE_CATEGORY cat);
+    void on_region_selected(Gtk::ToggleButton *button, MCPRegion reg);
+    void on_add_to_queue(GdkEventButton *ev);
     void on_selection_changed();
-    void on_download_queue(GdkEventButton* ev);
+    void on_download_queue(GdkEventButton *ev);
     void on_dumpWindow_closed();
-    bool on_search_equal(const Glib::RefPtr<Gtk::TreeModel>& model, int column, const Glib::ustring& key, const Gtk::TreeModel::iterator& iter);
+    bool on_search_equal(const Glib::RefPtr<Gtk::TreeModel> &model, int column, const Glib::ustring &key, const Gtk::TreeModel::iterator &iter);
 
-    Gtk::Window* getWindow() { return gameListWindow; }
+    Gtk::Window *getWindow() { return gameListWindow; }
 
 private:
-    Gtk::Window* gameListWindow = nullptr;
+    Gtk::Window *gameListWindow = nullptr;
     Glib::RefPtr<Gtk::Builder> builder;
     std::vector<uint8_t> key;
 
-    Gtk::TreeView* treeView = nullptr;
+    Gtk::TreeView *treeView = nullptr;
     Gtk::RadioButton *gamesButton = nullptr;
     Gtk::RadioButton *updatesButton = nullptr;
     Gtk::RadioButton *dlcsButton = nullptr;

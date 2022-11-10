@@ -1,52 +1,50 @@
+#include <inttypes.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
-#include <inttypes.h>
 #include <unistd.h>
 #ifndef _WIN32
-    #include <sys/stat.h>
+#include <sys/stat.h>
 #endif
 
+#include <downloader.h>
 #include <keygen.h>
 #include <ticket.h>
-#include <downloader.h>
 
-#include <gtk/gtk.h>
 #include <curl/curl.h>
+#include <gtk/gtk.h>
 
 #include <pthread.h>
 
 struct MemoryStruct {
-  uint8_t* memory;
-  size_t size;
+    uint8_t *memory;
+    size_t size;
 };
 
 struct PathFileStruct {
-    char* file_path;
-    FILE* file_pointer;
+    char *file_path;
+    FILE *file_pointer;
 };
 
 GtkWidget *progress_bar;
 GtkWidget *window;
 
-CURL* new_handle;
+CURL *new_handle;
 char currentFile[255] = "None";
 char *selected_dir = NULL;
 
-uint16_t bswap_16(uint16_t value)
-{
-	return (uint16_t) ((0x00FF & (value >> 8)) | (0xFF00 & (value << 8)));
+uint16_t bswap_16(uint16_t value) {
+    return (uint16_t) ((0x00FF & (value >> 8)) | (0xFF00 & (value << 8)));
 }
 
-static inline uint32_t bswap_32(uint32_t __x)
-{
-	return __x>>24 | __x>>8&0xff00 | __x<<8&0xff0000 | __x<<24;
+static inline uint32_t bswap_32(uint32_t __x) {
+    return __x >> 24 | __x >> 8 & 0xff00 | __x << 8 & 0xff0000 | __x << 24;
 }
 
-char* readable_fs(double size, char *buf) {
+char *readable_fs(double size, char *buf) {
     int i = 0;
-    const char* units[] = {"B", "kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"};
+    const char *units[] = {"B", "kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"};
     while (size > 1024) {
         size /= 1024;
         i++;
@@ -56,13 +54,12 @@ char* readable_fs(double size, char *buf) {
 }
 
 //LibCurl progress function
-void progress_func(void *p, double dltotal, double dlnow, double ultotal, double ulnow)
-{
-    if(dltotal == 0)
+void progress_func(void *p, double dltotal, double dlnow, double ultotal, double ulnow) {
+    if (dltotal == 0)
         dltotal = 1;
-    if(dlnow == 0)
+    if (dlnow == 0)
         dlnow = 1;
-    GtkProgressBar *progress_bar = (GtkProgressBar *)p;
+    GtkProgressBar *progress_bar = (GtkProgressBar *) p;
 
     char downloadString[255];
     char downNow[255];
@@ -71,17 +68,16 @@ void progress_func(void *p, double dltotal, double dlnow, double ultotal, double
     readable_fs(dltotal, downTotal);
     sprintf(downloadString, "Downloading %s (%s/%s)", currentFile, downNow, downTotal);
 
-    gtk_progress_bar_set_fraction(progress_bar, dlnow/dltotal);
+    gtk_progress_bar_set_fraction(progress_bar, dlnow / dltotal);
     gtk_progress_bar_set_text(GTK_PROGRESS_BAR(progress_bar), downloadString);
     // force redraw
     while (gtk_events_pending())
         gtk_main_iteration();
 }
 
-static size_t WriteDataToMemory(void* contents, size_t size, size_t nmemb, void* userp)
-{
+static size_t WriteDataToMemory(void *contents, size_t size, size_t nmemb, void *userp) {
     size_t realsize = size * nmemb;
-    struct MemoryStruct* mem = (struct MemoryStruct*) userp;
+    struct MemoryStruct *mem = (struct MemoryStruct *) userp;
 
     mem->memory = realloc(mem->memory, mem->size + realsize);
     memcpy(&(mem->memory[mem->size]), contents, realsize);
@@ -90,9 +86,8 @@ static size_t WriteDataToMemory(void* contents, size_t size, size_t nmemb, void*
     return realsize;
 }
 
-void create_ticket(const char* title_id, const char* title_key, uint16_t title_version, const char* output_path)
-{
-    FILE* ticket_file = fopen(output_path, "wb");
+void create_ticket(const char *title_id, const char *title_key, uint16_t title_version, const char *output_path) {
+    FILE *ticket_file = fopen(output_path, "wb");
     if (!ticket_file) {
         fprintf(stderr, "Error: The file \"%s\" couldn't be opened. Will exit now.\n", output_path);
         exit(EXIT_FAILURE);
@@ -108,15 +103,13 @@ void create_ticket(const char* title_id, const char* title_key, uint16_t title_v
     printf("Finished creating \"%s\".\n", output_path);
 }
 
-static size_t write_data(void* data, size_t size, size_t nmemb, void* file_stream)
-{
+static size_t write_data(void *data, size_t size, size_t nmemb, void *file_stream) {
     size_t written = fwrite(data, size, nmemb, file_stream);
     return written;
 }
 
-int download_file(gpointer progress)
-{
-    if(new_handle) {
+int download_file(gpointer progress) {
+    if (new_handle) {
         // set progress bar
         curl_easy_setopt(new_handle, CURLOPT_NOPROGRESS, FALSE);
         curl_easy_setopt(new_handle, CURLOPT_PROGRESSFUNCTION, progress_func);
@@ -165,14 +158,14 @@ int downloadFile(char *download_url, char *output_path) {
     curl_easy_setopt(new_handle, CURLOPT_PROGRESSFUNCTION, progress_func);
     curl_easy_setopt(new_handle, CURLOPT_PROGRESSDATA, progress_bar);
 
-    FILE* output_file = fopen(output_path, "wb");
+    FILE *output_file = fopen(output_path, "wb");
     if (!output_file) {
         fprintf(stderr, "Error: The file \"%s\" couldn't be opened. Will exit now.\n", output_path);
         exit(EXIT_FAILURE);
     }
     printf("Downloading file \"%s\".\n", download_url);
 
-    struct PathFileStruct* struct_to_save = malloc(sizeof(struct PathFileStruct));
+    struct PathFileStruct *struct_to_save = malloc(sizeof(struct PathFileStruct));
     struct_to_save->file_path = malloc(strlen(output_path) + 1);
     strcpy(struct_to_save->file_path, output_path);
     struct_to_save->file_pointer = output_file;
@@ -183,37 +176,34 @@ int downloadFile(char *download_url, char *output_path) {
 }
 
 // function to return the path of the selected folder
-char *gtk3_show_folder_select_dialog()
-{
-  GtkWidget *dialog;
-  GtkFileChooserAction action = GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER;
-  gint res;
-  char *folder_path = NULL;
+char *gtk3_show_folder_select_dialog() {
+    GtkWidget *dialog;
+    GtkFileChooserAction action = GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER;
+    gint res;
+    char *folder_path = NULL;
 
-  dialog = gtk_file_chooser_dialog_new ("Select a folder",
-                                        NULL,
-                                        action,
-                                        "_Cancel",
-                                        GTK_RESPONSE_CANCEL,
-                                        "_Select",
-                                        GTK_RESPONSE_ACCEPT,
-                                        NULL);
+    dialog = gtk_file_chooser_dialog_new("Select a folder",
+                                         NULL,
+                                         action,
+                                         "_Cancel",
+                                         GTK_RESPONSE_CANCEL,
+                                         "_Select",
+                                         GTK_RESPONSE_ACCEPT,
+                                         NULL);
 
-  res = gtk_dialog_run (GTK_DIALOG (dialog));
+    res = gtk_dialog_run(GTK_DIALOG(dialog));
 
-  if (res == GTK_RESPONSE_ACCEPT)
-    {
-      GtkFileChooser *chooser = GTK_FILE_CHOOSER (dialog);
-      folder_path = gtk_file_chooser_get_filename (chooser);
+    if (res == GTK_RESPONSE_ACCEPT) {
+        GtkFileChooser *chooser = GTK_FILE_CHOOSER(dialog);
+        folder_path = gtk_file_chooser_get_filename(chooser);
     }
 
-  gtk_widget_destroy (dialog);
+    gtk_widget_destroy(dialog);
 
-  return folder_path;
+    return folder_path;
 }
 
-void prepend(char* s, const char* t)
-{
+void prepend(char *s, const char *t) {
     size_t len = strlen(t);
     memmove(s + len, s, strlen(s) + 1);
     memcpy(s, t, len);
@@ -221,36 +211,36 @@ void prepend(char* s, const char* t)
 
 int downloadTitle(const char *titleID) {
     // initialize some useful variables
-    char* output_dir = malloc(1024);
+    char *output_dir = malloc(1024);
     strcpy(output_dir, titleID);
     prepend(output_dir, "/");
-    if(selected_dir == NULL)
+    if (selected_dir == NULL)
         selected_dir = gtk3_show_folder_select_dialog();
-    if(selected_dir == NULL) {
+    if (selected_dir == NULL) {
         free(output_dir);
         return 0;
     }
     prepend(output_dir, selected_dir);
-    if (output_dir[strlen(output_dir)-1] == '/' || output_dir[strlen(output_dir)-1] == '\\') {
-        output_dir[strlen(output_dir)-1] = '\0';
+    if (output_dir[strlen(output_dir) - 1] == '/' || output_dir[strlen(output_dir) - 1] == '\\') {
+        output_dir[strlen(output_dir) - 1] = '\0';
     }
     char base_url[69];
     snprintf(base_url, 69, "http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/%s", titleID);
     char download_url[81];
     char output_path[strlen(output_dir) + 14];
 
-    // create the output directory if it doesn't exist
-    #ifdef _WIN32
-        mkdir(output_dir);
-    #else
-        mkdir(output_dir, 0700);
-    #endif
+// create the output directory if it doesn't exist
+#ifdef _WIN32
+    mkdir(output_dir);
+#else
+    mkdir(output_dir, 0700);
+#endif
 
     // initialize curl
     curl_global_init(CURL_GLOBAL_ALL);
 
     // make an own handle for the tmd file, as we wanna download it to memory first
-    CURL* tmd_handle = curl_easy_init();
+    CURL *tmd_handle = curl_easy_init();
     curl_easy_setopt(tmd_handle, CURLOPT_FAILONERROR, 1L);
 
     // Download the tmd and save it in memory, as we need some data from it
@@ -261,14 +251,14 @@ int downloadTitle(const char *titleID) {
     struct MemoryStruct tmd_data;
     tmd_data.memory = malloc(0);
     tmd_data.size = 0;
-    curl_easy_setopt(tmd_handle, CURLOPT_WRITEDATA, (void*) &tmd_data);
+    curl_easy_setopt(tmd_handle, CURLOPT_WRITEDATA, (void *) &tmd_data);
     curl_easy_perform(tmd_handle);
     curl_easy_cleanup(tmd_handle);
     // write out the tmd file
     snprintf(output_path, sizeof(output_path), "%s/%s", output_dir, "title.cert");
     generateCert(output_path);
     snprintf(output_path, sizeof(output_path), "%s/%s", output_dir, "title.tmd");
-    FILE* tmd_file = fopen(output_path, "wb");
+    FILE *tmd_file = fopen(output_path, "wb");
     if (!tmd_file) {
         free(output_dir);
         fprintf(stderr, "Error: The file \"%s\" couldn't be opened. Will exit now.\n", output_path);

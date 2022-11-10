@@ -23,44 +23,41 @@
 #include <stdint.h>
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
-    typedef enum
-    {
-        TITLE_CATEGORY_GAME = 0,
-        TITLE_CATEGORY_UPDATE = 1,
-        TITLE_CATEGORY_DLC = 2,
-        TITLE_CATEGORY_DEMO = 3,
-        TITLE_CATEGORY_ALL = 4,
-        TITLE_CATEGORY_DISC = 5,
-    } TITLE_CATEGORY;
+typedef enum {
+    TITLE_CATEGORY_GAME = 0,
+    TITLE_CATEGORY_UPDATE = 1,
+    TITLE_CATEGORY_DLC = 2,
+    TITLE_CATEGORY_DEMO = 3,
+    TITLE_CATEGORY_ALL = 4,
+    TITLE_CATEGORY_DISC = 5,
+} TITLE_CATEGORY;
 
-    typedef enum
-    {
-        TITLE_KEY_mypass = 0,
-        TITLE_KEY_nintendo = 1,
-        TITLE_KEY_test = 2,
-        TITLE_KEY_1234567890 = 3,
-        TITLE_KEY_Lucy131211 = 4,
-        TITLE_KEY_fbf10 = 5,
-        TITLE_KEY_5678 = 6,
-        TITLE_KEY_1234 = 7,
-        TITLE_KEY_ = 8,
-        TITLE_KEY_MAGIC = 9,
-    } TITLE_KEY;
+typedef enum {
+    TITLE_KEY_mypass = 0,
+    TITLE_KEY_nintendo = 1,
+    TITLE_KEY_test = 2,
+    TITLE_KEY_1234567890 = 3,
+    TITLE_KEY_Lucy131211 = 4,
+    TITLE_KEY_fbf10 = 5,
+    TITLE_KEY_5678 = 6,
+    TITLE_KEY_1234 = 7,
+    TITLE_KEY_ = 8,
+    TITLE_KEY_MAGIC = 9,
+} TITLE_KEY;
 
-    typedef struct
-    {
-        const char *name;
-        const uint64_t tid;
-        const MCPRegion region;
-        const TITLE_KEY key;
-    } TitleEntry;
+typedef struct
+{
+    const char *name;
+    const uint64_t tid;
+    const MCPRegion region;
+    const TITLE_KEY key;
+} TitleEntry;
 
-    const TitleEntry *getTitleEntries(TITLE_CATEGORY cat);
-    size_t getTitleEntriesSize(TITLE_CATEGORY cat);
+const TitleEntry *getTitleEntries(TITLE_CATEGORY cat);
+size_t getTitleEntriesSize(TITLE_CATEGORY cat);
 
 #ifdef __cplusplus
 }

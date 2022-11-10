@@ -1,8 +1,8 @@
 #include <titleInfo.h>
 
-const char* getFormattedKind(uint64_t tid) {
+const char *getFormattedKind(uint64_t tid) {
     uint32_t highID = getTidHighFromTid(tid);
-    switch(highID) {
+    switch (highID) {
         case TID_HIGH_GAME:
             return "Game";
             break;
@@ -39,17 +39,15 @@ const char* getFormattedKind(uint64_t tid) {
     }
 }
 
-const char *getFormattedRegion(MCPRegion region)
-{
-    if(region & MCP_REGION_EUROPE)
-    {
-        if(region & MCP_REGION_USA)
+const char *getFormattedRegion(MCPRegion region) {
+    if (region & MCP_REGION_EUROPE) {
+        if (region & MCP_REGION_USA)
             return region & MCP_REGION_JAPAN ? "All" : "USA/Europe";
 
         return region & MCP_REGION_JAPAN ? "Europe/Japan" : "Europe";
     }
 
-    if(region & MCP_REGION_USA)
+    if (region & MCP_REGION_USA)
         return region & MCP_REGION_JAPAN ? "USA/Japan" : "USA";
 
     return region & MCP_REGION_JAPAN ? "Japan" : "Unknown";

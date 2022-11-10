@@ -7,9 +7,8 @@
 void GameList::updateTitles(TITLE_CATEGORY cat, MCPRegion reg) {
     treeModel = Gtk::ListStore::create(columns);
     treeView->set_model(treeModel);
-    for (unsigned int i = 0; i < getTitleEntriesSize(cat); i++)
-    {
-        if(!(reg & infos[i].region))
+    for (unsigned int i = 0; i < getTitleEntriesSize(cat); i++) {
+        if (!(reg & infos[i].region))
             continue;
         char id[128];
         hex(infos[i].tid, 16, id);
@@ -17,14 +16,13 @@ void GameList::updateTitles(TITLE_CATEGORY cat, MCPRegion reg) {
         row[columns.index] = i;
         row[columns.toQueue] = queueVector.empty() ? false : std::binary_search(queueVector.begin(), queueVector.end(), infos[i].tid);
         row[columns.name] = infos[i].name;
-        row[columns.region] = Glib::ustring::format(getFormattedRegion((MCPRegion)infos[i].region));
+        row[columns.region] = Glib::ustring::format(getFormattedRegion((MCPRegion) infos[i].region));
         row[columns.kind] = Glib::ustring::format(getFormattedKind(infos[i].tid));
         row[columns.titleId] = Glib::ustring::format(id);
     }
 }
 
-GameList::GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos)
-{
+GameList::GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos) {
     this->builder = builder;
     this->infos = infos;
 
@@ -52,7 +50,7 @@ GameList::GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos)
 
     builder->get_widget("downloadQueueButton", downloadQueueButton);
     downloadQueueButton->signal_button_press_event().connect_notify(sigc::mem_fun(*this, &GameList::on_download_queue));
-    
+
     builder->get_widget("japanButton", japanButton);
     japanButton->signal_toggled().connect_notify(sigc::bind(sigc::mem_fun(*this, &GameList::on_region_selected), japanButton, MCP_REGION_JAPAN));
 
@@ -68,10 +66,10 @@ GameList::GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos)
 
     updateTitles(currentCategory, selectedRegion);
 
-    Gtk::CellRendererToggle* renderer = Gtk::manage( new Gtk::CellRendererToggle() );
+    Gtk::CellRendererToggle *renderer = Gtk::manage(new Gtk::CellRendererToggle());
     int cols_count = treeView->append_column("Queue", *renderer);
-    Gtk::TreeViewColumn* pColumn = treeView->get_column(cols_count-1);
-    
+    Gtk::TreeViewColumn *pColumn = treeView->get_column(cols_count - 1);
+
     pColumn->add_attribute(*renderer, "active", columns.toQueue);
 
     treeView->append_column("TitleID", columns.titleId);
@@ -94,16 +92,14 @@ GameList::GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos)
     treeView->set_search_equal_func(sigc::mem_fun(*this, &GameList::on_search_equal));
 }
 
-GameList::~GameList()
-{
-    
+GameList::~GameList() {
 }
 
-void GameList::on_download_queue(GdkEventButton* ev) {
-    if(queueVector.empty())
+void GameList::on_download_queue(GdkEventButton *ev) {
+    if (queueVector.empty())
         return;
     gameListWindow->set_sensitive(false);
-    for(auto queuedItem : queueVector) {
+    for (auto queuedItem : queueVector) {
         char tid[128];
         sprintf(tid, "%016llx", queuedItem);
         downloadTitle(tid);
@@ -115,18 +111,18 @@ void GameList::on_download_queue(GdkEventButton* ev) {
 void GameList::on_selection_changed() {
     Glib::RefPtr<Gtk::TreeSelection> selection = treeView->get_selection();
     Gtk::TreeModel::Row row = *selection->get_selected();
-    if(row[columns.toQueue] == true) {
+    if (row[columns.toQueue] == true) {
         addToQueueButton->set_label("Remove from queue");
     } else {
         addToQueueButton->set_label("Add to queue");
     }
 }
 
-void GameList::on_add_to_queue(GdkEventButton* ev) {
+void GameList::on_add_to_queue(GdkEventButton *ev) {
     Glib::RefPtr<Gtk::TreeSelection> selection = treeView->get_selection();
     Gtk::TreeModel::Row row = *selection->get_selected();
     row[columns.toQueue] = !row[columns.toQueue];
-    if(row[columns.toQueue]) {
+    if (row[columns.toQueue]) {
         queueVector.push_back(infos[row[columns.index]].tid);
         addToQueueButton->set_label("Remove from queue");
     } else {
@@ -135,14 +131,14 @@ void GameList::on_add_to_queue(GdkEventButton* ev) {
     }
 }
 
-void GameList::on_button_selected(GdkEventButton* ev, TITLE_CATEGORY cat) {
+void GameList::on_button_selected(GdkEventButton *ev, TITLE_CATEGORY cat) {
     currentCategory = cat;
     infos = getTitleEntries(currentCategory);
     updateTitles(currentCategory, selectedRegion);
     return;
 }
 
-void GameList::on_region_selected(Gtk::ToggleButton* button, MCPRegion reg) {
+void GameList::on_region_selected(Gtk::ToggleButton *button, MCPRegion reg) {
     if (button->get_active())
         selectedRegion |= reg;
     else
@@ -151,8 +147,7 @@ void GameList::on_region_selected(Gtk::ToggleButton* button, MCPRegion reg) {
     return;
 }
 
-void GameList::on_gamelist_row_activated(const Gtk::TreePath& treePath, Gtk::TreeViewColumn* const& column)
-{
+void GameList::on_gamelist_row_activated(const Gtk::TreePath &treePath, Gtk::TreeViewColumn *const &column) {
     Glib::RefPtr<Gtk::TreeSelection> selection = treeView->get_selection();
     Gtk::TreeModel::Row row = *selection->get_selected();
 
@@ -163,21 +158,18 @@ void GameList::on_gamelist_row_activated(const Gtk::TreePath& treePath, Gtk::Tre
     gameListWindow->set_sensitive(true);
 }
 
-bool GameList::on_search_equal(const Glib::RefPtr<Gtk::TreeModel>& model, int column, const Glib::ustring& key, const Gtk::TreeModel::iterator& iter)
-{
+bool GameList::on_search_equal(const Glib::RefPtr<Gtk::TreeModel> &model, int column, const Glib::ustring &key, const Gtk::TreeModel::iterator &iter) {
     Gtk::TreeModel::Row row = *iter;
 
     Glib::ustring name = row[columns.name];
     std::string string_name(name.lowercase());
     std::string string_key(key.lowercase());
-    if (string_name.find(string_key) != std::string::npos)
-    {
+    if (string_name.find(string_key) != std::string::npos) {
         return false;
     }
 
     Glib::ustring titleId = row[columns.titleId];
-    if (strcmp(titleId.c_str(), key.c_str()) == 0)
-    {
+    if (strcmp(titleId.c_str(), key.c_str()) == 0) {
         return false;
     }
 

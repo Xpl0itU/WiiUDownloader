@@ -48,7 +48,6 @@ public:
 private:
     Gtk::Window *gameListWindow = nullptr;
     Glib::RefPtr<Gtk::Builder> builder;
-    std::vector<uint8_t> key;
 
     Gtk::TreeView *treeView = nullptr;
     Gtk::RadioButton *gamesButton = nullptr;
@@ -68,8 +67,6 @@ private:
 
     TITLE_CATEGORY currentCategory = TITLE_CATEGORY_GAME;
     Glib::RefPtr<Gtk::ListStore> treeModel;
-
-    sigc::connection deleteConn;
 
     MCPRegion selectedRegion = (MCPRegion) (MCP_REGION_JAPAN | MCP_REGION_USA | MCP_REGION_EUROPE);
 };

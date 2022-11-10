@@ -25,11 +25,11 @@ public:
         }
 
         Gtk::TreeModelColumn<int> index;
+        Gtk::TreeModelColumn<bool> toQueue;
         Gtk::TreeModelColumn<Glib::ustring> titleId;
         Gtk::TreeModelColumn<Glib::ustring> kind;
         Gtk::TreeModelColumn<Glib::ustring> region;
         Gtk::TreeModelColumn<Glib::ustring> name;
-        Gtk::TreeModelColumn<bool> toQueue;
     };
 
     GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos);

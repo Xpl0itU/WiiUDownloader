@@ -40,7 +40,6 @@ public:
     void on_add_to_queue(GdkEventButton *ev);
     void on_selection_changed();
     void on_download_queue(GdkEventButton *ev);
-    void on_dumpWindow_closed();
     bool on_search_equal(const Glib::RefPtr<Gtk::TreeModel> &model, int column, const Glib::ustring &key, const Gtk::TreeModel::iterator &iter);
 
     Gtk::Window *getWindow() { return gameListWindow; }

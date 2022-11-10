@@ -111,23 +111,27 @@ void GameList::on_download_queue(GdkEventButton *ev) {
 void GameList::on_selection_changed() {
     Glib::RefPtr<Gtk::TreeSelection> selection = treeView->get_selection();
     Gtk::TreeModel::Row row = *selection->get_selected();
-    if (row[columns.toQueue] == true) {
+    if(row) {
+        if (row[columns.toQueue] == true) {
         addToQueueButton->set_label("Remove from queue");
-    } else {
-        addToQueueButton->set_label("Add to queue");
+        } else {
+            addToQueueButton->set_label("Add to queue");
+        }
     }
 }
 
 void GameList::on_add_to_queue(GdkEventButton *ev) {
     Glib::RefPtr<Gtk::TreeSelection> selection = treeView->get_selection();
     Gtk::TreeModel::Row row = *selection->get_selected();
-    row[columns.toQueue] = !row[columns.toQueue];
-    if (row[columns.toQueue]) {
-        queueVector.push_back(infos[row[columns.index]].tid);
-        addToQueueButton->set_label("Remove from queue");
-    } else {
-        queueVector.erase(std::remove(queueVector.begin(), queueVector.end(), infos[row[columns.index]].tid), queueVector.end());
-        addToQueueButton->set_label("Add to queue");
+    if(row) {
+        row[columns.toQueue] = !row[columns.toQueue];
+        if (row[columns.toQueue]) {
+            queueVector.push_back(infos[row[columns.index]].tid);
+            addToQueueButton->set_label("Remove from queue");
+        } else {
+            queueVector.erase(std::remove(queueVector.begin(), queueVector.end(), infos[row[columns.index]].tid), queueVector.end());
+            addToQueueButton->set_label("Add to queue");
+        }
     }
 }
 
@@ -150,28 +154,30 @@ void GameList::on_region_selected(Gtk::ToggleButton *button, MCPRegion reg) {
 void GameList::on_gamelist_row_activated(const Gtk::TreePath &treePath, Gtk::TreeViewColumn *const &column) {
     Glib::RefPtr<Gtk::TreeSelection> selection = treeView->get_selection();
     Gtk::TreeModel::Row row = *selection->get_selected();
-
-    gameListWindow->set_sensitive(false);
-    char selectedTID[128];
-    sprintf(selectedTID, "%016llx", infos[row[columns.index]].tid);
-    downloadTitle(selectedTID);
-    gameListWindow->set_sensitive(true);
+    if(row) {
+        gameListWindow->set_sensitive(false);
+        char selectedTID[128];
+        sprintf(selectedTID, "%016llx", infos[row[columns.index]].tid);
+        downloadTitle(selectedTID);
+        gameListWindow->set_sensitive(true);
+    }
 }
 
 bool GameList::on_search_equal(const Glib::RefPtr<Gtk::TreeModel> &model, int column, const Glib::ustring &key, const Gtk::TreeModel::iterator &iter) {
     Gtk::TreeModel::Row row = *iter;
+    if(row) {
+        Glib::ustring name = row[columns.name];
+        std::string string_name(name.lowercase());
+        std::string string_key(key.lowercase());
+        if (string_name.find(string_key) != std::string::npos) {
+            return false;
+        }
 
-    Glib::ustring name = row[columns.name];
-    std::string string_name(name.lowercase());
-    std::string string_key(key.lowercase());
-    if (string_name.find(string_key) != std::string::npos) {
-        return false;
+        Glib::ustring titleId = row[columns.titleId];
+        if (strcmp(titleId.c_str(), key.c_str()) == 0) {
+            return false;
+        }
+
+        return true;
     }
-
-    Glib::ustring titleId = row[columns.titleId];
-    if (strcmp(titleId.c_str(), key.c_str()) == 0) {
-        return false;
-    }
-
-    return true;
 }

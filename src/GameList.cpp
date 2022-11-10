@@ -71,7 +71,7 @@ GameList::GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos)
     Gtk::CellRendererToggle* renderer = Gtk::manage( new Gtk::CellRendererToggle() );
     int cols_count = treeView->append_column("Queue", *renderer);
     Gtk::TreeViewColumn* pColumn = treeView->get_column(cols_count-1);
-    pColumn->pack_start(*renderer);
+    
     pColumn->add_attribute(*renderer, "active", columns.toQueue);
 
     treeView->append_column("TitleID", columns.titleId);

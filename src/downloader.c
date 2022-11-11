@@ -10,7 +10,6 @@
 
 #include <downloader.h>
 #include <keygen.h>
-#include <ticket.h>
 
 #include <curl/curl.h>
 #include <gtk/gtk.h>
@@ -101,6 +100,23 @@ void create_ticket(const char *title_id, const char *title_key, uint16_t title_v
     fwrite(ticket_data, 1, 848, ticket_file);
     fclose(ticket_file);
     printf("Finished creating \"%s\".\n", output_path);
+}
+
+void downloadCert(const char *outputPath) {
+    FILE *cetk = fopen(outputPath, "wb");
+    if(cetk == NULL)
+        return;
+    CURL *certHandle = curl_easy_init();
+    curl_easy_setopt(certHandle, CURLOPT_FAILONERROR, 1L);
+
+    // Download the tmd and save it in memory, as we need some data from it
+    curl_easy_setopt(certHandle, CURLOPT_WRITEFUNCTION, fwrite);
+    curl_easy_setopt(certHandle, CURLOPT_URL, "http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/000500101000400A/cetk");
+    
+    curl_easy_setopt(certHandle, CURLOPT_WRITEDATA, cetk);
+    curl_easy_perform(certHandle);
+    curl_easy_cleanup(certHandle);
+    fclose(cetk);
 }
 
 static size_t write_data(void *data, size_t size, size_t nmemb, void *file_stream) {
@@ -256,7 +272,7 @@ int downloadTitle(const char *titleID) {
     curl_easy_cleanup(tmd_handle);
     // write out the tmd file
     snprintf(output_path, sizeof(output_path), "%s/%s", output_dir, "title.cert");
-    generateCert(output_path);
+    downloadCert(output_path);
     snprintf(output_path, sizeof(output_path), "%s/%s", output_dir, "title.tmd");
     FILE *tmd_file = fopen(output_path, "wb");
     if (!tmd_file) {

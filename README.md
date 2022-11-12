@@ -2,7 +2,7 @@
 Allows to download encrypted wiiu files from Nintendo's official servers
 
 ## Features
-- Multiplatform (Windows and Linux)
+- Multiplatform (Windows, macOS and Linux)
 - Nice UI
 - Queue for title download
 - Title filtering (Games, Updates, DLCs and Demos)

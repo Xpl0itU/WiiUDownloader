@@ -29,7 +29,6 @@ struct PathFileStruct {
 GtkWidget *progress_bar;
 GtkWidget *window;
 
-CURL *new_handle;
 char currentFile[255] = "None";
 char *selected_dir = NULL;
 
@@ -53,7 +52,9 @@ char *readable_fs(double size, char *buf) {
 }
 
 //LibCurl progress function
-void progress_func(void *p, double dltotal, double dlnow, double ultotal, double ulnow) {
+int progress_func(void *p,
+                    curl_off_t dltotal, curl_off_t dlnow,
+                    curl_off_t ultotal, curl_off_t ulnow) {
     if (dltotal == 0)
         dltotal = 1;
     if (dlnow == 0)
@@ -72,6 +73,7 @@ void progress_func(void *p, double dltotal, double dlnow, double ultotal, double
     // force redraw
     while (gtk_events_pending())
         gtk_main_iteration();
+    return 0;
 }
 
 static size_t WriteDataToMemory(void *contents, size_t size, size_t nmemb, void *userp) {
@@ -119,29 +121,7 @@ void downloadCert(const char *outputPath) {
     fclose(cetk);
 }
 
-static size_t write_data(void *data, size_t size, size_t nmemb, void *file_stream) {
-    size_t written = fwrite(data, size, nmemb, file_stream);
-    return written;
-}
-
-int download_file(gpointer progress) {
-    if (new_handle) {
-        // set progress bar
-        curl_easy_setopt(new_handle, CURLOPT_NOPROGRESS, FALSE);
-        curl_easy_setopt(new_handle, CURLOPT_PROGRESSFUNCTION, progress_func);
-        curl_easy_setopt(new_handle, CURLOPT_PROGRESSDATA, progress);
-
-        // perform download
-        curl_easy_perform(new_handle);
-
-        // cleanup
-        curl_easy_cleanup(new_handle);
-    }
-
-    return 0;
-}
-
-void *progressDialog() {
+void progressDialog() {
     gtk_init(NULL, NULL);
 
     //Create window
@@ -164,30 +144,24 @@ void *progressDialog() {
     gtk_widget_show_all(window);
 }
 
-int downloadFile(char *download_url, char *output_path) {
-    new_handle = curl_easy_init();
+int downloadFile(const char *download_url, const char *output_path) {
+    FILE *file = fopen(output_path, "wb");
+    if(file == NULL)
+        return 1;
+    CURL *handle = curl_easy_init();
+    curl_easy_setopt(handle, CURLOPT_FAILONERROR, 1L);
 
-    curl_easy_setopt(new_handle, CURLOPT_FAILONERROR, 1L);
-    curl_easy_setopt(new_handle, CURLOPT_URL, download_url);
-    curl_easy_setopt(new_handle, CURLOPT_WRITEFUNCTION, write_data);
-    curl_easy_setopt(new_handle, CURLOPT_NOPROGRESS, 0L);
-    curl_easy_setopt(new_handle, CURLOPT_PROGRESSFUNCTION, progress_func);
-    curl_easy_setopt(new_handle, CURLOPT_PROGRESSDATA, progress_bar);
-
-    FILE *output_file = fopen(output_path, "wb");
-    if (!output_file) {
-        fprintf(stderr, "Error: The file \"%s\" couldn't be opened. Will exit now.\n", output_path);
-        exit(EXIT_FAILURE);
-    }
-    printf("Downloading file \"%s\".\n", download_url);
-
-    struct PathFileStruct *struct_to_save = malloc(sizeof(struct PathFileStruct));
-    struct_to_save->file_path = malloc(strlen(output_path) + 1);
-    strcpy(struct_to_save->file_path, output_path);
-    struct_to_save->file_pointer = output_file;
-    curl_easy_setopt(new_handle, CURLOPT_WRITEDATA, output_file);
-    curl_easy_setopt(new_handle, CURLOPT_PRIVATE, struct_to_save);
-    download_file(progress_bar);
+    // Download the tmd and save it in memory, as we need some data from it
+    curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, fwrite);
+    curl_easy_setopt(handle, CURLOPT_URL, download_url);
+    curl_easy_setopt(handle, CURLOPT_NOPROGRESS, 0L);
+    curl_easy_setopt(handle, CURLOPT_XFERINFOFUNCTION, progress_func);
+    curl_easy_setopt(handle, CURLOPT_PROGRESSDATA, progress_bar);
+    
+    curl_easy_setopt(handle, CURLOPT_WRITEDATA, file);
+    curl_easy_perform(handle);
+    curl_easy_cleanup(handle);
+    fclose(file);
     return 0;
 }
 
@@ -280,7 +254,7 @@ int downloadTitle(const char *titleID) {
         fprintf(stderr, "Error: The file \"%s\" couldn't be opened. Will exit now.\n", output_path);
         exit(EXIT_FAILURE);
     }
-    write_data(tmd_data.memory, 1, tmd_data.size, tmd_file);
+    fwrite(tmd_data.memory, 1, tmd_data.size, tmd_file);
     fclose(tmd_file);
     printf("Finished downloading \"%s\".\n", output_path);
 

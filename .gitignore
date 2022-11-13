@@ -2,6 +2,7 @@
 .vscode/
 .idea/
 build
+dist
 src/gtitles.c
 
 WiiUDownloader

@@ -8,6 +8,7 @@
 #include <sys/stat.h>
 #endif
 
+#include <cdecrypt/cdecrypt.h>
 #include <downloader.h>
 #include <keygen.h>
 
@@ -199,6 +200,23 @@ void prepend(char *s, const char *t) {
     memcpy(s, t, len);
 }
 
+char *dirname(char *path) {
+	int len = strlen(path);
+	int last = len - 1;
+	char *parent = malloc(sizeof(char) * (len + 1));
+	strcpy(parent, path);
+	parent[len] = '\0';
+
+	while (last >= 0) {
+		if (parent[last] == '/') {
+			parent[last] = '\0';
+			break;
+		}
+		last--;
+	}
+	return parent;
+}
+
 int downloadTitle(const char *titleID, bool decrypt) {
     // initialize some useful variables
     char *output_dir = malloc(1024);
@@ -298,5 +316,10 @@ int downloadTitle(const char *titleID, bool decrypt) {
     // cleanup curl stuff
     gtk_widget_destroy(GTK_WIDGET(window));
     curl_global_cleanup();
+    if(decrypt) {
+        char *argv[2] = {"WiiUDownloader", dirname(output_path)};
+        printf("dirname: %s\n", dirname(output_path));
+        cdecrypt(2, argv);
+    }
     free(output_dir);
 }

@@ -1,6 +1,6 @@
 TARGET_EXEC := WiiUDownloader
 
-CFLAGS := -Ofast -fno-strict-aliasing -pipe `pkg-config gtkmm-3.0 --cflags` -I/usr/local/include
+CFLAGS := -std=c99 -D_GNU_SOURCE -UNDEBUG -DAES_ROM_TABLES -fvisibility=hidden -Ofast -fno-strict-aliasing -pipe `pkg-config gtkmm-3.0 --cflags` -I/usr/local/include
 CXXFLAGS := $(CFLAGS) -fpermissive -std=c++20
 LDFLAGS := -L/usr/local/lib -lmbedtls -lmbedx509 -lmbedcrypto `pkg-config gtkmm-3.0 libcurl --libs`
 

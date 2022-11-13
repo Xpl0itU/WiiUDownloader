@@ -16,3 +16,4 @@ Allows to download encrypted wiiu files from Nintendo's official servers
 ## Thanks to:
 - V10lator for a lot of inspiration, code and hosting and providing the Title Database
 - Morilli for the original WiiUDownloader
+- VitaSmith for their CDecrypt fork

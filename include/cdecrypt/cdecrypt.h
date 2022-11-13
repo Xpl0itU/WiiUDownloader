@@ -1,12 +1,10 @@
 #pragma once
 
-#include <stdbool.h>
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-int downloadTitle(const char *titleID, bool decrypt);
+int cdecrypt(int argc, char** argv);
 
 #ifdef __cplusplus
 }

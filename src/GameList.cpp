@@ -60,6 +60,9 @@ GameList::GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos) 
     builder->get_widget("europeButton", europeButton);
     europeButton->signal_toggled().connect_notify(sigc::bind(sigc::mem_fun(*this, &GameList::on_region_selected), europeButton, MCP_REGION_EUROPE));
 
+    builder->get_widget("decryptContentsButton", decryptContentsButton);
+    decryptContentsButton->signal_toggled().connect_notify(sigc::bind(sigc::mem_fun(*this, &GameList::on_decrypt_selected), decryptContentsButton));
+
     builder->get_widget("gameTree", treeView);
     treeView->signal_row_activated().connect(sigc::mem_fun(*this, &GameList::on_gamelist_row_activated));
     treeView->get_selection()->signal_changed().connect(sigc::mem_fun(*this, &GameList::on_selection_changed));
@@ -95,6 +98,11 @@ GameList::GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos) 
 GameList::~GameList() {
 }
 
+void GameList::on_decrypt_selected(Gtk::ToggleButton *button) {
+    decryptContents = !decryptContents;
+    return;
+}
+
 void GameList::on_download_queue(GdkEventButton *ev) {
     if (queueVector.empty())
         return;
@@ -102,7 +110,7 @@ void GameList::on_download_queue(GdkEventButton *ev) {
     for (auto queuedItem : queueVector) {
         char tid[128];
         sprintf(tid, "%016llx", queuedItem);
-        downloadTitle(tid);
+        downloadTitle(tid, decryptContents);
     }
     queueVector.clear();
     gameListWindow->set_sensitive(true);
@@ -158,7 +166,7 @@ void GameList::on_gamelist_row_activated(const Gtk::TreePath &treePath, Gtk::Tre
         gameListWindow->set_sensitive(false);
         char selectedTID[128];
         sprintf(selectedTID, "%016llx", infos[row[columns.index]].tid);
-        downloadTitle(selectedTID);
+        downloadTitle(selectedTID, decryptContents);
         gameListWindow->set_sensitive(true);
     }
 }

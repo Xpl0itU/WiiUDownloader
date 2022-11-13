@@ -199,7 +199,7 @@ void prepend(char *s, const char *t) {
     memcpy(s, t, len);
 }
 
-int downloadTitle(const char *titleID) {
+int downloadTitle(const char *titleID, bool decrypt) {
     // initialize some useful variables
     char *output_dir = malloc(1024);
     strcpy(output_dir, titleID);

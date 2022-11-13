@@ -40,6 +40,7 @@ public:
     void on_add_to_queue(GdkEventButton *ev);
     void on_selection_changed();
     void on_download_queue(GdkEventButton *ev);
+    void on_decrypt_selected(Gtk::ToggleButton *button);
     bool on_search_equal(const Glib::RefPtr<Gtk::TreeModel> &model, int column, const Glib::ustring &key, const Gtk::TreeModel::iterator &iter);
 
     Gtk::Window *getWindow() { return gameListWindow; }
@@ -57,10 +58,13 @@ private:
     Gtk::CheckButton *japanButton = nullptr;
     Gtk::CheckButton *usaButton = nullptr;
     Gtk::CheckButton *europeButton = nullptr;
+    Gtk::CheckButton *decryptContentsButton = nullptr;
     Gtk::Button *addToQueueButton = nullptr;
     Gtk::Button *downloadQueueButton = nullptr;
     ModelColumns columns;
     const TitleEntry *infos;
+
+    bool decryptContents = false;
 
     std::vector<uint64_t> queueVector = {};
 

@@ -9,7 +9,6 @@ Allows to download encrypted wiiu files from Nintendo's official servers
 - Uses same Title Database as NUSspli, so it has the same titles as NUSspli
 
 ## TODO
-- Allow for decryption of files after download
 - Better file downloading UI with info about the current title being downloaded and stuff
 - Better queue management and overall UI
 

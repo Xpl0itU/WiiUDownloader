@@ -318,7 +318,6 @@ int downloadTitle(const char *titleID, bool decrypt) {
     curl_global_cleanup();
     if(decrypt) {
         char *argv[2] = {"WiiUDownloader", dirname(output_path)};
-        printf("dirname: %s\n", dirname(output_path));
         cdecrypt(2, argv);
     }
     free(output_dir);

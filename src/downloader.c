@@ -68,7 +68,7 @@ int progress_func(void *p,
     readable_fs(dltotal, downTotal);
     sprintf(downloadString, "Downloading %s (%s/%s)", currentFile, downNow, downTotal);
 
-    gtk_progress_bar_set_fraction(progress_bar, dlnow / dltotal);
+    gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progress_bar), (double)dlnow / (double)dltotal);
     gtk_progress_bar_set_text(GTK_PROGRESS_BAR(progress_bar), downloadString);
     // force redraw
     while (gtk_events_pending())

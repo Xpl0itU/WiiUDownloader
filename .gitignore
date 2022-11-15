@@ -8,3 +8,4 @@ src/gtitles.c
 WiiUDownloader
 WiiUDownloader.exe
 src/wiiudownloader.c
+src/Resources.c

@@ -65,10 +65,7 @@ void calculate_h0_hashes(const char *file) {
         unsigned char *data = buffer.data();
         mbedtls_sha1(data, 20, hash);
         std::copy(hash, hash + 20, std::back_inserter(hashVector));
-        h0hashes.emplace(block, hashVector);
-
-        block++;
-        int progress = (int) ((block * 1.0 / total_blocks * 1.0) * 100);
+        h0hashes.emplace(block++, hashVector);
     } while (read == buffer_size);
     blockCount = block;
 }

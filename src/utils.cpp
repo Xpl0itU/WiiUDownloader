@@ -28,7 +28,6 @@ int get_chunk_from_stream(std::ifstream &in, std::vector<unsigned char> &buffer,
     int read = 0;
     buffer.resize(buffer_size);
     if (!overflowbuffer.empty()) {
-        int i = buffer_size - overflowbuffer.size();
         buffer.insert(buffer.begin(), overflowbuffer.begin(), overflowbuffer.end());
         overflowbuffer.resize(0);
     }

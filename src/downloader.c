@@ -27,13 +27,13 @@ struct PathFileStruct {
     FILE *file_pointer;
 };
 
-GtkWidget *progress_bar;
-GtkWidget *window;
+static GtkWidget *progress_bar;
+static GtkWidget *window;
 
-char currentFile[255] = "None";
-char *selected_dir = NULL;
+static char currentFile[255] = "None";
+static char *selected_dir = NULL;
 
-uint16_t bswap_16(uint16_t value) {
+static inline uint16_t bswap_16(uint16_t value) {
     return (uint16_t) ((0x00FF & (value >> 8)) | (0xFF00 & (value << 8)));
 }
 
@@ -41,7 +41,7 @@ static inline uint32_t bswap_32(uint32_t __x) {
     return __x >> 24 | __x >> 8 & 0xff00 | __x << 8 & 0xff0000 | __x << 24;
 }
 
-char *readable_fs(double size, char *buf) {
+static char *readable_fs(double size, char *buf) {
     int i = 0;
     const char *units[] = {"B", "kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"};
     while (size > 1024) {
@@ -88,7 +88,7 @@ static size_t WriteDataToMemory(void *contents, size_t size, size_t nmemb, void 
     return realsize;
 }
 
-void create_ticket(const char *title_id, const char *title_key, uint16_t title_version, const char *output_path) {
+static void create_ticket(const char *title_id, const char *title_key, uint16_t title_version, const char *output_path) {
     FILE *ticket_file = fopen(output_path, "wb");
     if (!ticket_file) {
         fprintf(stderr, "Error: The file \"%s\" couldn't be opened. Will exit now.\n", output_path);
@@ -105,7 +105,7 @@ void create_ticket(const char *title_id, const char *title_key, uint16_t title_v
     printf("Finished creating \"%s\".\n", output_path);
 }
 
-void downloadCert(const char *outputPath) {
+static void downloadCert(const char *outputPath) {
     FILE *cetk = fopen(outputPath, "wb");
     if(cetk == NULL)
         return;
@@ -122,7 +122,7 @@ void downloadCert(const char *outputPath) {
     fclose(cetk);
 }
 
-void progressDialog() {
+static void progressDialog() {
     gtk_init(NULL, NULL);
 
     //Create window
@@ -145,7 +145,7 @@ void progressDialog() {
     gtk_widget_show_all(window);
 }
 
-int downloadFile(const char *download_url, const char *output_path) {
+static int downloadFile(const char *download_url, const char *output_path) {
     FILE *file = fopen(output_path, "wb");
     if(file == NULL)
         return 1;
@@ -167,7 +167,7 @@ int downloadFile(const char *download_url, const char *output_path) {
 }
 
 // function to return the path of the selected folder
-char *gtk3_show_folder_select_dialog() {
+static char *gtk3_show_folder_select_dialog() {
     GtkWidget *dialog;
     GtkFileChooserAction action = GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER;
     gint res;
@@ -194,13 +194,13 @@ char *gtk3_show_folder_select_dialog() {
     return folder_path;
 }
 
-void prepend(char *s, const char *t) {
+static void prepend(char *s, const char *t) {
     size_t len = strlen(t);
     memmove(s + len, s, strlen(s) + 1);
     memcpy(s, t, len);
 }
 
-char *dirname(char *path) {
+static char *dirname(char *path) {
 	int len = strlen(path);
 	int last = len - 1;
 	char *parent = malloc(sizeof(char) * (len + 1));

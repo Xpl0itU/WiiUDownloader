@@ -30,7 +30,7 @@ void hex2bytes(const char *input, uint8_t *output) {
     }
 }
 
-bool encryptAES(void *data, int data_len, const unsigned char *key, unsigned char *iv, void *encrypted) {
+static bool encryptAES(void *data, int data_len, const unsigned char *key, unsigned char *iv, void *encrypted) {
     mbedtls_aes_context ctx;
     mbedtls_aes_init(&ctx);
     mbedtls_aes_setkey_enc(&ctx, key, 128);

@@ -17,6 +17,7 @@ urllib.request.install_opener(opener)
 checkAndDeleteFile("src/gtitles.c")
 urllib.request.urlretrieve("https://napi.nbg01.v10lator.de/db", "src/gtitles.c")
 
-os.system("glib-compile-resources --generate-source --target src/wiiudownloader.c wiiudownloader.gresource.xml")
-
+os.mkdir("build")
+os.chdir("build")
+os.system("cmake ..")
 os.system("make")

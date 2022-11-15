@@ -55,8 +55,8 @@ static char *readable_fs(double size, char *buf) {
 
 //LibCurl progress function
 int progress_func(void *p,
-                    curl_off_t dltotal, curl_off_t dlnow,
-                    curl_off_t ultotal, curl_off_t ulnow) {
+                  curl_off_t dltotal, curl_off_t dlnow,
+                  curl_off_t ultotal, curl_off_t ulnow) {
     if (dltotal == 0)
         dltotal = 1;
     if (dlnow == 0)
@@ -70,7 +70,7 @@ int progress_func(void *p,
     readable_fs(dltotal, downTotal);
     sprintf(downloadString, "Downloading %s (%s/%s)", currentFile, downNow, downTotal);
 
-    gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progress_bar), (double)dlnow / (double)dltotal);
+    gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progress_bar), (double) dlnow / (double) dltotal);
     gtk_progress_bar_set_text(GTK_PROGRESS_BAR(progress_bar), downloadString);
     // force redraw
     while (gtk_events_pending())
@@ -108,7 +108,7 @@ static void create_ticket(const char *title_id, const char *title_key, uint16_t 
 
 static void downloadCert(const char *outputPath) {
     FILE *cetk = fopen(outputPath, "wb");
-    if(cetk == NULL)
+    if (cetk == NULL)
         return;
     CURL *certHandle = curl_easy_init();
     curl_easy_setopt(certHandle, CURLOPT_FAILONERROR, 1L);
@@ -116,7 +116,7 @@ static void downloadCert(const char *outputPath) {
     // Download the tmd and save it in memory, as we need some data from it
     curl_easy_setopt(certHandle, CURLOPT_WRITEFUNCTION, fwrite);
     curl_easy_setopt(certHandle, CURLOPT_URL, "http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/000500101000400A/cetk");
-    
+
     curl_easy_setopt(certHandle, CURLOPT_WRITEDATA, cetk);
     curl_easy_perform(certHandle);
     curl_easy_cleanup(certHandle);
@@ -148,7 +148,7 @@ static void progressDialog() {
 
 static int downloadFile(const char *download_url, const char *output_path) {
     FILE *file = fopen(output_path, "wb");
-    if(file == NULL)
+    if (file == NULL)
         return 1;
     CURL *handle = curl_easy_init();
     curl_easy_setopt(handle, CURLOPT_FAILONERROR, 1L);
@@ -159,7 +159,7 @@ static int downloadFile(const char *download_url, const char *output_path) {
     curl_easy_setopt(handle, CURLOPT_NOPROGRESS, 0L);
     curl_easy_setopt(handle, CURLOPT_XFERINFOFUNCTION, progress_func);
     curl_easy_setopt(handle, CURLOPT_PROGRESSDATA, progress_bar);
-    
+
     curl_easy_setopt(handle, CURLOPT_WRITEDATA, file);
     curl_easy_perform(handle);
     curl_easy_cleanup(handle);
@@ -202,20 +202,20 @@ static void prepend(char *s, const char *t) {
 }
 
 static char *dirname(char *path) {
-	int len = strlen(path);
-	int last = len - 1;
-	char *parent = malloc(sizeof(char) * (len + 1));
-	strcpy(parent, path);
-	parent[len] = '\0';
+    int len = strlen(path);
+    int last = len - 1;
+    char *parent = malloc(sizeof(char) * (len + 1));
+    strcpy(parent, path);
+    parent[len] = '\0';
 
-	while (last >= 0) {
-		if (parent[last] == '/') {
-			parent[last] = '\0';
-			break;
-		}
-		last--;
-	}
-	return parent;
+    while (last >= 0) {
+        if (parent[last] == '/') {
+            parent[last] = '\0';
+            break;
+        }
+        last--;
+    }
+    return parent;
 }
 
 int downloadTitle(const char *titleID, bool decrypt) {
@@ -309,7 +309,7 @@ int downloadTitle(const char *titleID, bool decrypt) {
             snprintf(download_url, 81, "%s/%08X.h3", base_url, id);
             sprintf(currentFile, "%08X.h3", id);
             downloadFile(download_url, output_path);
-            if(!compareHashes(output_path))
+            if (!compareHashes(output_path))
                 printf("Error: hash mismatch!\n");
             else
                 printf("Hash checking: ok\n");
@@ -322,7 +322,7 @@ int downloadTitle(const char *titleID, bool decrypt) {
     // cleanup curl stuff
     gtk_widget_destroy(GTK_WIDGET(window));
     curl_global_cleanup();
-    if(decrypt) {
+    if (decrypt) {
         char *argv[2] = {"WiiUDownloader", dirname(output_path)};
         cdecrypt(2, argv);
     }

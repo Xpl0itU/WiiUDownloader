@@ -19,7 +19,7 @@
  *  This file is part of mbed TLS (https://tls.mbed.org) and was downloaded from
  *  https://github.com/Secure-Embedded-Systems/RSA-example/tree/master/library/.
  */
- /*
+/*
   *  The SHA-1 standard was published by NIST in 1993.
   *
   *  http://www.itl.nist.gov/fipspubs/fip180-1.htm
@@ -30,56 +30,50 @@
 #include <string.h>
 
 /* Implementation that should never be optimized out by the compiler */
-static void zeroize(void* v, size_t n) {
-    volatile uint8_t* p = (uint8_t*)v; while (n--) *p++ = 0;
+static void zeroize(void *v, size_t n) {
+    volatile uint8_t *p = (uint8_t *) v;
+    while (n--) *p++ = 0;
 }
 
 /*
  * 32-bit integer manipulation macros (big endian)
  */
 #ifndef GET_UINT32_BE
-#define GET_UINT32_BE(n,b,i)                            \
-{                                                       \
-    (n) = ( (uint32_t) (b)[(i)    ] << 24 )             \
-        | ( (uint32_t) (b)[(i) + 1] << 16 )             \
-        | ( (uint32_t) (b)[(i) + 2] <<  8 )             \
-        | ( (uint32_t) (b)[(i) + 3]       );            \
-}
+#define GET_UINT32_BE(n, b, i)                                                                                                            \
+    {                                                                                                                                     \
+        (n) = ((uint32_t) (b)[(i)] << 24) | ((uint32_t) (b)[(i) + 1] << 16) | ((uint32_t) (b)[(i) + 2] << 8) | ((uint32_t) (b)[(i) + 3]); \
+    }
 #endif
 
 #ifndef PUT_UINT32_BE
-#define PUT_UINT32_BE(n,b,i)                      \
-{                                                 \
-    (b)[(i)    ] = (uint8_t) ( (n) >> 24 );       \
-    (b)[(i) + 1] = (uint8_t) ( (n) >> 16 );       \
-    (b)[(i) + 2] = (uint8_t) ( (n) >>  8 );       \
-    (b)[(i) + 3] = (uint8_t) ( (n)       );       \
-}
+#define PUT_UINT32_BE(n, b, i)                \
+    {                                         \
+        (b)[(i)] = (uint8_t) ((n) >> 24);     \
+        (b)[(i) + 1] = (uint8_t) ((n) >> 16); \
+        (b)[(i) + 2] = (uint8_t) ((n) >> 8);  \
+        (b)[(i) + 3] = (uint8_t) ((n));       \
+    }
 #endif
 
-void sha1_init(sha1_context* ctx)
-{
+void sha1_init(sha1_context *ctx) {
     memset(ctx, 0, sizeof(sha1_context));
 }
 
-void sha1_free(sha1_context* ctx)
-{
+void sha1_free(sha1_context *ctx) {
     if (ctx == NULL)
         return;
 
     zeroize(ctx, sizeof(sha1_context));
 }
 
-void sha1_clone(sha1_context* dst, const sha1_context* src)
-{
+void sha1_clone(sha1_context *dst, const sha1_context *src) {
     *dst = *src;
 }
 
 /*
  * SHA-1 context setup
  */
-void sha1_starts(sha1_context* ctx)
-{
+void sha1_starts(sha1_context *ctx) {
     ctx->total[0] = 0;
     ctx->total[1] = 0;
 
@@ -90,8 +84,7 @@ void sha1_starts(sha1_context* ctx)
     ctx->state[4] = 0xC3D2E1F0;
 }
 
-void sha1_process(sha1_context* ctx, const uint8_t data[64])
-{
+void sha1_process(sha1_context *ctx, const uint8_t data[64]) {
     uint32_t temp, W[16], A, B, C, D, E;
 
     GET_UINT32_BE(W[0], data, 0);
@@ -111,19 +104,19 @@ void sha1_process(sha1_context* ctx, const uint8_t data[64])
     GET_UINT32_BE(W[14], data, 56);
     GET_UINT32_BE(W[15], data, 60);
 
-#define S(x,n) ((x << n) | ((x & 0xFFFFFFFF) >> (32 - n)))
+#define S(x, n) ((x << n) | ((x & 0xFFFFFFFF) >> (32 - n)))
 
-#define R(t)                                            \
-(                                                       \
-    temp = W[( t -  3 ) & 0x0F] ^ W[( t - 8 ) & 0x0F] ^ \
-           W[( t - 14 ) & 0x0F] ^ W[  t       & 0x0F],  \
-    ( W[t & 0x0F] = S(temp,1) )                         \
-)
+#define R(t)                                               \
+    (                                                      \
+            temp = W[(t - 3) & 0x0F] ^ W[(t - 8) & 0x0F] ^ \
+                   W[(t - 14) & 0x0F] ^ W[t & 0x0F],       \
+            (W[t & 0x0F] = S(temp, 1)))
 
-#define P(a,b,c,d,e,x)                                  \
-{                                                       \
-    e += S(a,5) + F(b,c,d) + K + x; b = S(b,30);        \
-}
+#define P(a, b, c, d, e, x)                \
+    {                                      \
+        e += S(a, 5) + F(b, c, d) + K + x; \
+        b = S(b, 30);                      \
+    }
 
     A = ctx->state[0];
     B = ctx->state[1];
@@ -131,8 +124,8 @@ void sha1_process(sha1_context* ctx, const uint8_t data[64])
     D = ctx->state[3];
     E = ctx->state[4];
 
-#define F(x,y,z) (z ^ (x & (y ^ z)))
-#define K 0x5A827999
+#define F(x, y, z) (z ^ (x & (y ^ z)))
+#define K          0x5A827999
 
     P(A, B, C, D, E, W[0]);
     P(E, A, B, C, D, W[1]);
@@ -158,8 +151,8 @@ void sha1_process(sha1_context* ctx, const uint8_t data[64])
 #undef K
 #undef F
 
-#define F(x,y,z) (x ^ y ^ z)
-#define K 0x6ED9EBA1
+#define F(x, y, z) (x ^ y ^ z)
+#define K          0x6ED9EBA1
 
     P(A, B, C, D, E, R(20));
     P(E, A, B, C, D, R(21));
@@ -185,8 +178,8 @@ void sha1_process(sha1_context* ctx, const uint8_t data[64])
 #undef K
 #undef F
 
-#define F(x,y,z) ((x & y) | (z & (x | y)))
-#define K 0x8F1BBCDC
+#define F(x, y, z) ((x & y) | (z & (x | y)))
+#define K          0x8F1BBCDC
 
     P(A, B, C, D, E, R(40));
     P(E, A, B, C, D, R(41));
@@ -212,8 +205,8 @@ void sha1_process(sha1_context* ctx, const uint8_t data[64])
 #undef K
 #undef F
 
-#define F(x,y,z) (x ^ y ^ z)
-#define K 0xCA62C1D6
+#define F(x, y, z) (x ^ y ^ z)
+#define K          0xCA62C1D6
 
     P(A, B, C, D, E, R(60));
     P(E, A, B, C, D, R(61));
@@ -249,8 +242,7 @@ void sha1_process(sha1_context* ctx, const uint8_t data[64])
 /*
  * SHA-1 process buffer
  */
-void sha1_update(sha1_context* ctx, const uint8_t* input, size_t ilen)
-{
+void sha1_update(sha1_context *ctx, const uint8_t *input, size_t ilen) {
     size_t fill;
     uint32_t left;
 
@@ -260,51 +252,46 @@ void sha1_update(sha1_context* ctx, const uint8_t* input, size_t ilen)
     left = ctx->total[0] & 0x3F;
     fill = 64 - left;
 
-    ctx->total[0] += (uint32_t)ilen;
+    ctx->total[0] += (uint32_t) ilen;
     ctx->total[0] &= 0xFFFFFFFF;
 
-    if (ctx->total[0] < (uint32_t)ilen)
+    if (ctx->total[0] < (uint32_t) ilen)
         ctx->total[1]++;
 
-    if (left && ilen >= fill)
-    {
-        memcpy((void*)(ctx->buffer + left), input, fill);
+    if (left && ilen >= fill) {
+        memcpy((void *) (ctx->buffer + left), input, fill);
         sha1_process(ctx, ctx->buffer);
         input += fill;
         ilen -= fill;
         left = 0;
     }
 
-    while (ilen >= 64)
-    {
+    while (ilen >= 64) {
         sha1_process(ctx, input);
         input += 64;
         ilen -= 64;
     }
 
     if (ilen > 0)
-        memcpy((void*)(ctx->buffer + left), input, ilen);
+        memcpy((void *) (ctx->buffer + left), input, ilen);
 }
 
 static const uint8_t sha1_padding[64] =
-{
- 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-};
+        {
+                0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
 /*
  * SHA-1 final digest
  */
-void sha1_finish(sha1_context* ctx, uint8_t output[SHA_DIGEST_LENGTH])
-{
+void sha1_finish(sha1_context *ctx, uint8_t output[SHA_DIGEST_LENGTH]) {
     uint32_t last, padn;
     uint32_t high, low;
     uint8_t msglen[8];
 
-    high = (ctx->total[0] >> 29)
-        | (ctx->total[1] << 3);
+    high = (ctx->total[0] >> 29) | (ctx->total[1] << 3);
     low = (ctx->total[0] << 3);
 
     PUT_UINT32_BE(high, msglen, 0);
@@ -326,8 +313,7 @@ void sha1_finish(sha1_context* ctx, uint8_t output[SHA_DIGEST_LENGTH])
 /*
  * output = SHA-1( input buffer )
  */
-void sha1(const uint8_t* input, size_t ilen, uint8_t output[SHA_DIGEST_LENGTH])
-{
+void sha1(const uint8_t *input, size_t ilen, uint8_t output[SHA_DIGEST_LENGTH]) {
     sha1_context ctx;
 
     sha1_init(&ctx);

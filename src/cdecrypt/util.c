@@ -24,8 +24,7 @@
 #include "utf8.h"
 #include "util.h"
 
-bool create_path(char* path)
-{
+bool create_path(char *path) {
     bool result = true;
     struct stat64_t st;
 #if defined(_WIN32)
@@ -38,7 +37,8 @@ bool create_path(char* path)
         size_t pos = 0;
         for (size_t n = strlen(path); n > 0; n--) {
             if (path[n] == PATH_SEP) {
-                while ((n > 0) && (path[--n] == PATH_SEP));
+                while ((n > 0) && (path[--n] == PATH_SEP))
+                    ;
                 pos = n + 1;
                 break;
             }
@@ -46,7 +46,7 @@ bool create_path(char* path)
         if (pos > 0) {
             // Create parent dirs
             path[pos] = 0;
-            char* new_path = malloc(strlen(path) + 1);
+            char *new_path = malloc(strlen(path) + 1);
             if (new_path == NULL) {
                 fprintf(stderr, "ERROR: Can't allocate path\n");
                 return false;
@@ -71,8 +71,7 @@ bool create_path(char* path)
 // Note that these calls are not concurrent, meaning that you MUST be done
 // using the returned string from a previous call before invoking again.
 #if defined(_WIN32)
-char* _basename_win32(const char* path, bool remove_extension)
-{
+char *_basename_win32(const char *path, bool remove_extension) {
     static char basename[128];
     static char ext[64];
     ext[0] = 0;
@@ -83,8 +82,7 @@ char* _basename_win32(const char* path, bool remove_extension)
 }
 
 // This call should behave pretty similar to UNIX' dirname
-char* _dirname_win32(const char* path)
-{
+char *_dirname_win32(const char *path) {
     static char dir[PATH_MAX];
     static char drive[4];
     int found_sep = 0;
@@ -96,7 +94,7 @@ char* _dirname_win32(const char* path)
     if (drive[1] != ':')
         drive[0] = 0;
     // Removing trailing path separators
-    for (int32_t n = (int32_t)strlen(dir) - 1; (n > 0) && ((dir[n] == '/') || (dir[n] == '\\')); n--) {
+    for (int32_t n = (int32_t) strlen(dir) - 1; (n > 0) && ((dir[n] == '/') || (dir[n] == '\\')); n--) {
         dir[n] = 0;
         found_sep++;
     }
@@ -115,16 +113,14 @@ char* _dirname_win32(const char* path)
     return dir;
 }
 #else
-char* _basename_unix(const char* path)
-{
+char *_basename_unix(const char *path) {
     static char path_copy[PATH_MAX];
     strncpy(path_copy, path, sizeof(path_copy));
     path_copy[PATH_MAX - 1] = 0;
     return basename(path_copy);
 }
 
-char* _dirname_unix(const char* path)
-{
+char *_dirname_unix(const char *path) {
     static char path_copy[PATH_MAX];
     strncpy(path_copy, path, sizeof(path_copy));
     path_copy[PATH_MAX - 1] = 0;
@@ -132,22 +128,19 @@ char* _dirname_unix(const char* path)
 }
 #endif
 
-bool is_file(const char* path)
-{
+bool is_file(const char *path) {
     struct stat64_t st;
     return (stat64_utf8(path, &st) == 0) && S_ISREG(st.st_mode);
 }
 
-bool is_directory(const char* path)
-{
+bool is_directory(const char *path) {
     struct stat64_t st;
     return (stat64_utf8(path, &st) == 0) && S_ISDIR(st.st_mode);
 }
 
-char* change_extension(const char* path, const char* extension)
-{
+char *change_extension(const char *path, const char *extension) {
     static char new_path[PATH_MAX];
-    strncpy(new_path, _basename((char*)path), sizeof(new_path) - 1);
+    strncpy(new_path, _basename((char *) path), sizeof(new_path) - 1);
     for (size_t i = 0; i < sizeof(new_path); i++) {
         if (new_path[i] == '.')
             new_path[i] = 0;
@@ -156,25 +149,24 @@ char* change_extension(const char* path, const char* extension)
     return new_path;
 }
 
-size_t get_trailing_slash(const char* path)
-{
+size_t get_trailing_slash(const char *path) {
     size_t i;
     if ((path == NULL) || (path[0] == 0))
         return 0;
-    for (i = strlen(path) - 1; (i > 0) && ((path[i] != '/') && (path[i] != '\\')); i--);
-    return (i == 0) ? 0: i + 1;
+    for (i = strlen(path) - 1; (i > 0) && ((path[i] != '/') && (path[i] != '\\')); i--)
+        ;
+    return (i == 0) ? 0 : i + 1;
 }
 
-uint32_t read_file_max(const char* path, uint8_t** buf, uint32_t max_size)
-{
-    FILE* file = fopen_utf8(path, "rb");
+uint32_t read_file_max(const char *path, uint8_t **buf, uint32_t max_size) {
+    FILE *file = fopen_utf8(path, "rb");
     if (file == NULL) {
         fprintf(stderr, "ERROR: Can't open '%s'\n", path);
         return 0;
     }
 
     fseek(file, 0L, SEEK_END);
-    uint32_t size = (uint32_t)ftell(file);
+    uint32_t size = (uint32_t) ftell(file);
     fseek(file, 0L, SEEK_SET);
     if (max_size != 0)
         size = min(size, max_size);
@@ -197,9 +189,8 @@ out:
     return size;
 }
 
-uint64_t get_file_size(const char* path)
-{
-    FILE* file = fopen_utf8(path, "rb");
+uint64_t get_file_size(const char *path) {
+    FILE *file = fopen_utf8(path, "rb");
     if (file == NULL) {
         fprintf(stderr, "ERROR: Can't open '%s'\n", path);
         return 0;
@@ -211,11 +202,10 @@ uint64_t get_file_size(const char* path)
     return size;
 }
 
-void create_backup(const char* path)
-{
+void create_backup(const char *path) {
     struct stat64_t st;
     if (stat64_utf8(path, &st) == 0) {
-        char* backup_path = malloc(strlen(path) + 5);
+        char *backup_path = malloc(strlen(path) + 5);
         if (backup_path == NULL)
             return;
         strcpy(backup_path, path);
@@ -230,11 +220,10 @@ void create_backup(const char* path)
     }
 }
 
-bool write_file(const uint8_t* buf, const uint32_t size, const char* path, const bool backup)
-{
+bool write_file(const uint8_t *buf, const uint32_t size, const char *path, const bool backup) {
     if (backup)
         create_backup(path);
-    FILE* file = fopen_utf8(path, "wb");
+    FILE *file = fopen_utf8(path, "wb");
     if (file == NULL) {
         fprintf(stderr, "ERROR: Can't create file '%s'\n", path);
         return false;

@@ -30,6 +30,7 @@
 #include "aes.h"
 #include "sha1.h"
 
+#include <gtk/gtk.h>
 #include <cdecrypt/cdecrypt.h>
 
 #define MAX_ENTRIES     90000
@@ -156,6 +157,34 @@ struct FEntry
     uint16_t Flags;
     uint16_t ContentID;
 };
+
+static GtkWidget *progress_bar;
+static GtkWidget *window;
+
+static char currentFile[255] = "None";
+
+static void progressDialog() {
+    gtk_init(NULL, NULL);
+
+    //Create window
+    window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+    gtk_window_set_title(GTK_WINDOW(window), "Download Progress");
+    gtk_window_set_default_size(GTK_WINDOW(window), 300, 50);
+    gtk_container_set_border_width(GTK_CONTAINER(window), 10);
+    gtk_window_set_modal(GTK_WINDOW(window), TRUE);
+
+    //Create progress bar
+    progress_bar = gtk_progress_bar_new();
+    gtk_progress_bar_set_show_text(GTK_PROGRESS_BAR(progress_bar), TRUE);
+    gtk_progress_bar_set_text(GTK_PROGRESS_BAR(progress_bar), "Downloading");
+
+    //Create container for the window
+    GtkWidget *main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+    gtk_container_add(GTK_CONTAINER(window), main_box);
+    gtk_box_pack_start(GTK_BOX(main_box), progress_bar, FALSE, FALSE, 0);
+
+    gtk_widget_show_all(window);
+}
 
 static bool file_dump(const char* path, void* buf, size_t len)
 {
@@ -513,7 +542,13 @@ int cdecrypt(int argc, char** argv)
 
     uint32_t level = 0;
 
+    progressDialog();
     for (uint32_t i = 1; i < entries; i++) {
+        gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progress_bar), (double)i / (double)entries);
+        gtk_progress_bar_set_text(GTK_PROGRESS_BAR(progress_bar), "Decrypting...");
+        // force redraw
+        while (gtk_events_pending())
+            gtk_main_iteration();
         if (level > 0) {
             while ((level >= 1) && (l_entry[level - 1] == i))
                 level--;
@@ -578,6 +613,7 @@ int cdecrypt(int argc, char** argv)
     r = EXIT_SUCCESS;
 
 out:
+    gtk_widget_destroy(GTK_WIDGET(window));
     free(tmd);
     free(tik);
     free(cnt);

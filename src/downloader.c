@@ -16,7 +16,6 @@
 #include <gtk/gtk.h>
 
 #include <pthread.h>
-#include <utils.h>
 
 struct MemoryStruct {
     uint8_t *memory;
@@ -303,16 +302,11 @@ int downloadTitle(const char *titleID, bool decrypt) {
         downloadFile(download_url, output_path);
 
         if ((tmd_data.memory[offset + 7] & 0x2) == 2) {
-            generateHashes(output_path);
             // add a curl handle for the hash file (.h3 file)
             snprintf(output_path, sizeof(output_path), "%s/%08X.h3", output_dir, id);
             snprintf(download_url, 81, "%s/%08X.h3", base_url, id);
             sprintf(currentFile, "%08X.h3", id);
             downloadFile(download_url, output_path);
-            if (!compareHashes(output_path))
-                printf("Error: hash mismatch!\n");
-            else
-                printf("Hash checking: ok\n");
         }
     }
     free(tmd_data.memory);

@@ -16,12 +16,16 @@ gresource(${CMAKE_CURRENT_SOURCE_DIR}
 
 link_directories(
     ${GTKMM_LIBRARY_DIRS}
+    /usr/local/lib
+    /opt/homebrew/lib
 )
 
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${GTKMM_INCLUDE_DIRS}
-    include/
+    include
+    /usr/local/include
+    /opt/homebrew/include
 )
 
 file(GLOB SOURCES

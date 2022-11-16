@@ -6,7 +6,13 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 find_package(PkgConfig)
 find_package(MbedTLS)
 
-pkg_check_modules(GTKMM gtkmm-3.0)
+if (PKG_CONFIG_FOUND)
+  pkg_check_modules(GTKMM "gtkmm-3.0")
+  if (GTKMM_FOUND)    
+    link_libraries(${GTKMM_LIBRARIES})
+    add_definitions(${GTKMM_CFLAGS} ${GTKMM_CFLAGS_OTHER})
+  endif()
+endif()
 
 include(GResource)
 gresource(${CMAKE_CURRENT_SOURCE_DIR}
@@ -34,13 +40,8 @@ file(GLOB SOURCES
     src/cdecrypt/*.c
 )
 
-if (MINGW)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_GNU_SOURCE -UNDEBUG -DAES_ROM_TABLES -fvisibility=hidden -Ofast -fno-strict-aliasing -pipe -static-libc")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GNU_SOURCE -UNDEBUG -DAES_ROM_TABLES -fvisibility=hidden -Ofast -fno-strict-aliasing -pipe -std=c++20 -static-libstdc++")
-else()
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_GNU_SOURCE -UNDEBUG -DAES_ROM_TABLES -fvisibility=hidden -Ofast -fno-strict-aliasing -pipe")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GNU_SOURCE -UNDEBUG -DAES_ROM_TABLES -fvisibility=hidden -Ofast -fno-strict-aliasing -pipe -std=c++20")
-endif()
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_GNU_SOURCE -UNDEBUG -DAES_ROM_TABLES -fvisibility=hidden -Ofast -fno-strict-aliasing -pipe")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GNU_SOURCE -UNDEBUG -DAES_ROM_TABLES -fvisibility=hidden -Ofast -fno-strict-aliasing -pipe -std=c++20")
 
 add_executable(${CMAKE_PROJECT_NAME}
                 ${SOURCES}
@@ -48,6 +49,7 @@ add_executable(${CMAKE_PROJECT_NAME}
 
 target_link_libraries(${CMAKE_PROJECT_NAME}
     ${GTKMM_LIBRARIES}
+    stdc++
     mbedtls
     mbedcrypto
     mbedx509

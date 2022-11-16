@@ -119,11 +119,9 @@ static bool compareVectors(std::vector<T> a, std::vector<T> b) {
 }
 
 extern "C" bool compareHashes(const char *h3hashPath) {
-    bool ret = false;
     std::vector<unsigned char> h3hash;
     readFile(h3hashPath, h3hash);
-    if (compareVectors(h3hash, h3hashes.begin()->second))
-        ret = true;
+    bool ret = compareVectors(h3hash, h3hashes.begin()->second);
     h0hashes.clear();
     h1hashes.clear();
     h2hashes.clear();

@@ -194,6 +194,35 @@ static char *gtk3_show_folder_select_dialog() {
     return folder_path;
 }
 
+
+int show_error(gchar *message) {
+    GtkWidget *dialog, *label, *content_area;
+    GtkDialogFlags flags;
+
+    // Create the widgets
+    flags = GTK_DIALOG_DESTROY_WITH_PARENT;
+    dialog = gtk_dialog_new_with_buttons ("Error!",
+                                          NULL,
+                                          flags,
+                                          "_OK",
+                                          GTK_RESPONSE_NONE,
+                                          NULL);
+    content_area = gtk_dialog_get_content_area (GTK_DIALOG (dialog));
+    label = gtk_label_new (message);
+
+    // Ensure that the dialog box is destroyed when the user responds
+
+    //gtk_window_set_decorated(GTK_WINDOW(dialog), FALSE);
+    gtk_window_set_position(GTK_WINDOW(dialog), GTK_WIN_POS_CENTER);
+    gtk_label_set_justify(GTK_LABEL(label), GTK_JUSTIFY_CENTER);
+    gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
+    gtk_container_add (GTK_CONTAINER (content_area), label);
+    gtk_widget_show_all (dialog);
+    gtk_dialog_run (GTK_DIALOG (dialog));
+    gtk_widget_destroy (dialog);
+    return 0;
+}
+
 static void prepend(char *s, const char *t) {
     size_t len = strlen(t);
     memmove(s + len, s, strlen(s) + 1);
@@ -217,7 +246,7 @@ static char *dirname(char *path) {
     return parent;
 }
 
-int downloadTitle(const char *titleID, bool decrypt) {
+void downloadTitle(const char *titleID, bool decrypt) {
     // initialize some useful variables
     char *output_dir = malloc(1024);
     strcpy(output_dir, titleID);
@@ -226,7 +255,7 @@ int downloadTitle(const char *titleID, bool decrypt) {
         selected_dir = gtk3_show_folder_select_dialog();
     if (selected_dir == NULL) {
         free(output_dir);
-        return 0;
+        return;
     }
     prepend(output_dir, selected_dir);
     if (output_dir[strlen(output_dir) - 1] == '/' || output_dir[strlen(output_dir) - 1] == '\\') {
@@ -308,10 +337,13 @@ int downloadTitle(const char *titleID, bool decrypt) {
             snprintf(download_url, 81, "%s/%08X.h3", base_url, id);
             sprintf(currentFile, "%08X.h3", id);
             downloadFile(download_url, output_path);
-            if (compareHashes(output_path))
+            if (compareHashes(output_path)) {
                 printf("Hash checking: ok\n");
-            else
+            } else {
                 printf("Error: hash mismatch\n");
+                show_error("Hash mismatch, files are corrupted");
+                break;
+            }    
         }
     }
     free(tmd_data.memory);

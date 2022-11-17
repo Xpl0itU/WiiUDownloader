@@ -325,7 +325,7 @@ void downloadTitle(const char *titleID, bool decrypt) {
                 printf("Error: hash mismatch\n");
                 show_error("Hash mismatch, files are corrupted");
                 break;
-            }    
+            }
         }
     }
     free(tmd_data.memory);

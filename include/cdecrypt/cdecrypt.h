@@ -4,7 +4,7 @@
 extern "C" {
 #endif
 
-int cdecrypt(int argc, char** argv);
+int cdecrypt(int argc, char **argv);
 
 #ifdef __cplusplus
 }

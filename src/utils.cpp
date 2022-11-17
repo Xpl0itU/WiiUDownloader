@@ -1,10 +1,9 @@
 #include <algorithm>
-#include <map>
-#include <math.h>
-#include <vector>
-#include <mbedtls/sha1.h>
 #include <fstream>
 #include <iostream>
+#include <map>
+#include <mbedtls/sha1.h>
+#include <vector>
 
 #include <utils.h>
 
@@ -30,9 +29,9 @@ void CalculateH0Hashes(std::string file) {
     const int bufferSize = 0xFC00;
 
     std::vector<unsigned char> buffer(bufferSize);
-    int total_blocks = (int)(input.tellg() / bufferSize) + 1;
+    int total_blocks = (int) (input.tellg() / bufferSize) + 1;
     for (int block = 0; block < total_blocks; block++) {
-        input.read((char*)&buffer[0], bufferSize);
+        input.read((char *) &buffer[0], bufferSize);
 
         h0Hashes.emplace(block, generateHash(buffer));
 

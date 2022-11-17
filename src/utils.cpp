@@ -14,21 +14,6 @@ std::map<int, std::vector<unsigned char>> h2Hashes;
 std::map<int, std::vector<unsigned char>> h3Hashes;
 int blockCount = 0;
 
-int get_chunk_from_stream(std::ifstream &in, std::vector<unsigned char> &buffer, std::vector<unsigned char> &overflowbuffer, int buffer_size) {
-    int read = 0;
-    buffer.resize(buffer_size);
-    if (!overflowbuffer.empty()) {
-        buffer.insert(buffer.begin(), overflowbuffer.begin(), overflowbuffer.end());
-        overflowbuffer.resize(0);
-    }
-    in.read((char *) buffer.data() + read, buffer_size - read);
-    read += in.gcount();
-    if (read < buffer_size) {
-        buffer.resize(read);
-    }
-    return read;
-}
-
 void setBlockCount(int count) {
     blockCount = count;
 }

@@ -194,32 +194,14 @@ static char *gtk3_show_folder_select_dialog() {
     return folder_path;
 }
 
+static int show_error(gchar *message) {
+    GtkWidget *error_dialog;
 
-int show_error(gchar *message) {
-    GtkWidget *dialog, *label, *content_area;
-    GtkDialogFlags flags;
+    error_dialog = gtk_message_dialog_new(NULL, GTK_DIALOG_MODAL, GTK_MESSAGE_ERROR, GTK_BUTTONS_OK, "%s", message);
+    gtk_window_set_position(GTK_WINDOW(error_dialog), GTK_WIN_POS_CENTER);
+    gtk_dialog_run(GTK_DIALOG(error_dialog));
+    gtk_widget_destroy(error_dialog);
 
-    // Create the widgets
-    flags = GTK_DIALOG_DESTROY_WITH_PARENT;
-    dialog = gtk_dialog_new_with_buttons ("Error!",
-                                          NULL,
-                                          flags,
-                                          "_OK",
-                                          GTK_RESPONSE_NONE,
-                                          NULL);
-    content_area = gtk_dialog_get_content_area (GTK_DIALOG (dialog));
-    label = gtk_label_new (message);
-
-    // Ensure that the dialog box is destroyed when the user responds
-
-    //gtk_window_set_decorated(GTK_WINDOW(dialog), FALSE);
-    gtk_window_set_position(GTK_WINDOW(dialog), GTK_WIN_POS_CENTER);
-    gtk_label_set_justify(GTK_LABEL(label), GTK_JUSTIFY_CENTER);
-    gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
-    gtk_container_add (GTK_CONTAINER (content_area), label);
-    gtk_widget_show_all (dialog);
-    gtk_dialog_run (GTK_DIALOG (dialog));
-    gtk_widget_destroy (dialog);
     return 0;
 }
 

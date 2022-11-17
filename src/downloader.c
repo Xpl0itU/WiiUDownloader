@@ -199,21 +199,20 @@ static int downloadFile(const char *download_url, const char *output_path) {
 
 // function to return the path of the selected folder
 static char *gtk3_show_folder_select_dialog() {
-    GtkWidget *dialog;
+    GtkFileChooserNative *dialog;
     GtkFileChooserAction action = GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER;
     gint res;
     char *folder_path = NULL;
 
-    dialog = gtk_file_chooser_dialog_new("Select a folder",
-                                         NULL,
-                                         action,
-                                         "_Cancel",
-                                         GTK_RESPONSE_CANCEL,
-                                         "_Select",
-                                         GTK_RESPONSE_ACCEPT,
-                                         NULL);
+    dialog = gtk_file_chooser_native_new(
+                                        "Select a folder",
+                                        NULL,
+                                        GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
+                                        "_Select",
+                                        "_Cancel"
+                                );
 
-    res = gtk_dialog_run(GTK_DIALOG(dialog));
+    res = gtk_native_dialog_run(GTK_NATIVE_DIALOG(dialog));
 
     if (res == GTK_RESPONSE_ACCEPT) {
         GtkFileChooser *chooser = GTK_FILE_CHOOSER(dialog);

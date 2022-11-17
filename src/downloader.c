@@ -1,5 +1,7 @@
+#include <curl/curl.h>
 #include <inttypes.h>
 #include <math.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,6 +34,9 @@ static GtkWidget *window;
 
 static char currentFile[255] = "None";
 static char *selected_dir = NULL;
+static bool cancelled = false;
+static bool paused = false;
+CURL *handle;
 
 static inline uint16_t bswap_16(uint16_t value) {
     return (uint16_t) ((0x00FF & (value >> 8)) | (0xFF00 & (value << 8)));
@@ -50,6 +55,22 @@ static char *readable_fs(double size, char *buf) {
     }
     sprintf(buf, "%.*f %s", i, size, units[i]);
     return buf;
+}
+
+static void cancel_button_clicked(GtkWidget* widget, gpointer data) {
+    cancelled = true;
+    curl_global_cleanup();
+}
+
+static void pause_button_clicked(GtkWidget *widget, gpointer data) {
+    if(paused) {
+        curl_easy_pause(handle, CURLPAUSE_CONT);
+        gtk_button_set_label(GTK_BUTTON(widget), "Pause");
+    } else {
+        curl_easy_pause(handle, CURLPAUSE_ALL);
+        gtk_button_set_label(GTK_BUTTON(widget), "Resume");
+    }
+    paused = !paused;
 }
 
 //LibCurl progress function
@@ -123,6 +144,8 @@ static void downloadCert(const char *outputPath) {
 }
 
 static void progressDialog() {
+    GtkWidget *cancelButton = gtk_button_new();
+    GtkWidget *pauseButton = gtk_button_new();
     gtk_init(NULL, NULL);
 
     //Create window
@@ -137,10 +160,18 @@ static void progressDialog() {
     gtk_progress_bar_set_show_text(GTK_PROGRESS_BAR(progress_bar), TRUE);
     gtk_progress_bar_set_text(GTK_PROGRESS_BAR(progress_bar), "Downloading");
 
+    gtk_button_set_label(GTK_BUTTON(cancelButton), "Cancel");
+    g_signal_connect(cancelButton, "clicked", G_CALLBACK(cancel_button_clicked), NULL);
+
+    gtk_button_set_label(GTK_BUTTON(pauseButton), "Pause");
+    g_signal_connect(pauseButton, "clicked", G_CALLBACK(pause_button_clicked), NULL);
+
     //Create container for the window
     GtkWidget *main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     gtk_container_add(GTK_CONTAINER(window), main_box);
     gtk_box_pack_start(GTK_BOX(main_box), progress_bar, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(main_box), pauseButton, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(main_box), cancelButton, FALSE, FALSE, 0);
 
     gtk_widget_show_all(window);
 }
@@ -149,7 +180,7 @@ static int downloadFile(const char *download_url, const char *output_path) {
     FILE *file = fopen(output_path, "wb");
     if (file == NULL)
         return 1;
-    CURL *handle = curl_easy_init();
+    handle = curl_easy_init();
     curl_easy_setopt(handle, CURLOPT_FAILONERROR, 1L);
 
     // Download the tmd and save it in memory, as we need some data from it
@@ -194,17 +225,6 @@ static char *gtk3_show_folder_select_dialog() {
     return folder_path;
 }
 
-static int show_error(gchar *message) {
-    GtkWidget *error_dialog;
-
-    error_dialog = gtk_message_dialog_new(NULL, GTK_DIALOG_MODAL, GTK_MESSAGE_ERROR, GTK_BUTTONS_OK, "%s", message);
-    gtk_window_set_position(GTK_WINDOW(error_dialog), GTK_WIN_POS_CENTER);
-    gtk_dialog_run(GTK_DIALOG(error_dialog));
-    gtk_widget_destroy(error_dialog);
-
-    return 0;
-}
-
 static void prepend(char *s, const char *t) {
     size_t len = strlen(t);
     memmove(s + len, s, strlen(s) + 1);
@@ -230,6 +250,7 @@ static char *dirname(char *path) {
 
 void downloadTitle(const char *titleID, bool decrypt) {
     // initialize some useful variables
+    cancelled = false;
     char *output_dir = malloc(1024);
     strcpy(output_dir, titleID);
     prepend(output_dir, "/");
@@ -301,30 +322,24 @@ void downloadTitle(const char *titleID, bool decrypt) {
     // Add all needed curl handles to the multi handle
     progressDialog();
     for (int i = 0; i < content_count; i++) {
-        int offset = 2820 + (48 * i);
-        uint32_t id; // the id should usually be chronological, but we wanna be sure
-        memcpy(&id, &tmd_data.memory[offset], 4);
-        id = bswap_32(id);
+        if(!cancelled) {
+            int offset = 2820 + (48 * i);
+            uint32_t id; // the id should usually be chronological, but we wanna be sure
+            memcpy(&id, &tmd_data.memory[offset], 4);
+            id = bswap_32(id);
 
-        // add a curl handle for the content file (.app file)
-        snprintf(output_path, sizeof(output_path), "%s/%08X.app", output_dir, id);
-        snprintf(download_url, 78, "%s/%08X", base_url, id);
-        sprintf(currentFile, "%08X.app", id);
-        downloadFile(download_url, output_path);
-
-        if ((tmd_data.memory[offset + 7] & 0x2) == 2) {
-            generateHashes(output_path);
-            // add a curl handle for the hash file (.h3 file)
-            snprintf(output_path, sizeof(output_path), "%s/%08X.h3", output_dir, id);
-            snprintf(download_url, 81, "%s/%08X.h3", base_url, id);
-            sprintf(currentFile, "%08X.h3", id);
+            // add a curl handle for the content file (.app file)
+            snprintf(output_path, sizeof(output_path), "%s/%08X.app", output_dir, id);
+            snprintf(download_url, 78, "%s/%08X", base_url, id);
+            sprintf(currentFile, "%08X.app", id);
             downloadFile(download_url, output_path);
-            if (compareHashes(output_path)) {
-                printf("Hash checking: ok\n");
-            } else {
-                printf("Error: hash mismatch\n");
-                show_error("Hash mismatch, files are corrupted");
-                break;
+
+            if ((tmd_data.memory[offset + 7] & 0x2) == 2) {
+                // add a curl handle for the hash file (.h3 file)
+                snprintf(output_path, sizeof(output_path), "%s/%08X.h3", output_dir, id);
+                snprintf(download_url, 81, "%s/%08X.h3", base_url, id);
+                sprintf(currentFile, "%08X.h3", id);
+                downloadFile(download_url, output_path);
             }
         }
     }
@@ -335,7 +350,7 @@ void downloadTitle(const char *titleID, bool decrypt) {
     // cleanup curl stuff
     gtk_widget_destroy(GTK_WIDGET(window));
     curl_global_cleanup();
-    if (decrypt) {
+    if (decrypt && !cancelled) {
         char *argv[2] = {"WiiUDownloader", dirname(output_path)};
         cdecrypt(2, argv);
     }

@@ -14,6 +14,8 @@ if (PKG_CONFIG_FOUND)
   endif()
 endif()
 
+add_subdirectory(nativefiledialog-extended)
+
 include(GResource)
 gresource(${CMAKE_CURRENT_SOURCE_DIR}
             wiiudownloader.gresource.xml
@@ -54,4 +56,5 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
     mbedcrypto
     mbedx509
     curl
+    nfd
 )

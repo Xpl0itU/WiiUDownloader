@@ -10,6 +10,7 @@
 #include <sys/stat.h>
 #endif
 
+#include <nfd.h>
 #include <cdecrypt/cdecrypt.h>
 #include <downloader.h>
 #include <keygen.h>
@@ -198,30 +199,17 @@ static int downloadFile(const char *download_url, const char *output_path) {
 }
 
 // function to return the path of the selected folder
-static char *gtk3_show_folder_select_dialog() {
-    GtkFileChooserNative *dialog;
-    GtkFileChooserAction action = GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER;
-    gint res;
-    char *folder_path = NULL;
+static char *show_folder_select_dialog() {
+    NFD_Init();
 
-    dialog = gtk_file_chooser_native_new(
-                                        "Select a folder",
-                                        NULL,
-                                        GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
-                                        "_Select",
-                                        "_Cancel"
-                                );
+    nfdchar_t* outPath = NULL;
 
-    res = gtk_native_dialog_run(GTK_NATIVE_DIALOG(dialog));
+    nfdresult_t result = NFD_PickFolder(&outPath, NULL);
 
-    if (res == GTK_RESPONSE_ACCEPT) {
-        GtkFileChooser *chooser = GTK_FILE_CHOOSER(dialog);
-        folder_path = gtk_file_chooser_get_filename(chooser);
-    }
+    // Quit NFD
+    NFD_Quit();
 
-    gtk_widget_destroy(dialog);
-
-    return folder_path;
+    return outPath;
 }
 
 static void prepend(char *s, const char *t) {
@@ -254,7 +242,7 @@ void downloadTitle(const char *titleID, bool decrypt) {
     strcpy(output_dir, titleID);
     prepend(output_dir, "/");
     if (selected_dir == NULL)
-        selected_dir = gtk3_show_folder_select_dialog();
+        selected_dir = show_folder_select_dialog();
     if (selected_dir == NULL) {
         free(output_dir);
         return;

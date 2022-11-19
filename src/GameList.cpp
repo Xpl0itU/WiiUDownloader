@@ -2,25 +2,11 @@
 
 #include <cstdlib>
 #include <downloader.h>
-#include <glibmm-2.4/glibmm/ustring.h>
 #include <iostream>
 
 void GameList::updateTitles(TITLE_CATEGORY cat, MCPRegion reg) {
     treeModel = Gtk::ListStore::create(columns);
-    m_refTreeModelFilter = Gtk::TreeModelFilter::create(treeModel);
-    m_refTreeModelFilter->set_visible_func
-    (
-        [this] (const Gtk::TreeModel::const_iterator& iter) -> bool
-        {
-            if(!iter)
-                return true;
-
-            Gtk::TreeModel::Row row = *iter;
-            Glib::ustring name = row[columns.name];
-            return name.find(searchEntry->get_text()) != Glib::ustring::npos;
-        }
-    );
-    treeView->set_model(m_refTreeModelFilter);
+    treeView->set_model(treeModel);
     for (unsigned int i = 0; i < getTitleEntriesSize(cat); i++) {
         if (!(reg & infos[i].region))
             continue;

@@ -15,6 +15,11 @@ if (PKG_CONFIG_FOUND)
 endif()
 
 add_subdirectory(nativefiledialog-extended)
+if(MINGW64_NT-10.0-19045)
+  link_libraries(nfd ole32 uuid shell32)
+else()
+  link_libraries(nfd)
+endif()
 
 include(GResource)
 gresource(${CMAKE_CURRENT_SOURCE_DIR}
@@ -56,5 +61,4 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
     mbedcrypto
     mbedx509
     curl
-    nfd
 )

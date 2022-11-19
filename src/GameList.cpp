@@ -106,30 +106,27 @@ GameList::~GameList() {
 
 void GameList::search_entry_changed() {
     m_refTreeModelFilter = Gtk::TreeModelFilter::create(treeModel);
-    m_refTreeModelFilter->set_visible_func
-    (
-        [this] (const Gtk::TreeModel::const_iterator& iter) -> bool
-        {
-            if(!iter)
-                return true;
-            
-            Gtk::TreeModel::Row row = *iter;
-            Glib::ustring name = row[columns.name];
-            Glib::ustring key = searchEntry->get_text();
-            std::string string_name(name.lowercase());
-            std::string string_key(key.lowercase());
-            if (string_name.find(string_key) != Glib::ustring::npos) {
-                return true;
-            }
+    m_refTreeModelFilter->set_visible_func(
+            [this](const Gtk::TreeModel::const_iterator &iter) -> bool {
+                if (!iter)
+                    return true;
 
-            Glib::ustring titleId = row[columns.titleId];
-            if (strcmp(titleId.c_str(), key.c_str()) == 0) {
-                return true;
-            }
+                Gtk::TreeModel::Row row = *iter;
+                Glib::ustring name = row[columns.name];
+                Glib::ustring key = searchEntry->get_text();
+                std::string string_name(name.lowercase());
+                std::string string_key(key.lowercase());
+                if (string_name.find(string_key) != Glib::ustring::npos) {
+                    return true;
+                }
 
-            return false;
-        }
-    );
+                Glib::ustring titleId = row[columns.titleId];
+                if (strcmp(titleId.c_str(), key.c_str()) == 0) {
+                    return true;
+                }
+
+                return false;
+            });
     treeView->set_model(m_refTreeModelFilter);
 }
 

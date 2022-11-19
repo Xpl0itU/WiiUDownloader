@@ -10,10 +10,10 @@
 #include <sys/stat.h>
 #endif
 
-#include <nfd.h>
 #include <cdecrypt/cdecrypt.h>
 #include <downloader.h>
 #include <keygen.h>
+#include <nfd.h>
 #include <utils.h>
 
 #include <curl/curl.h>
@@ -57,13 +57,13 @@ static char *readable_fs(double size, char *buf) {
     return buf;
 }
 
-static void cancel_button_clicked(GtkWidget* widget, gpointer data) {
+static void cancel_button_clicked(GtkWidget *widget, gpointer data) {
     cancelled = true;
     curl_global_cleanup();
 }
 
 static void pause_button_clicked(GtkWidget *widget, gpointer data) {
-    if(paused) {
+    if (paused) {
         curl_easy_pause(handle, CURLPAUSE_CONT);
         gtk_button_set_label(GTK_BUTTON(widget), "Pause");
     } else {
@@ -201,7 +201,7 @@ static int downloadFile(const char *download_url, const char *output_path) {
 static char *show_folder_select_dialog() {
     NFD_Init();
 
-    nfdchar_t* outPath = NULL;
+    nfdchar_t *outPath = NULL;
 
     nfdresult_t result = NFD_PickFolder(&outPath, NULL);
 
@@ -312,7 +312,7 @@ void downloadTitle(const char *titleID, bool decrypt) {
     // Add all needed curl handles to the multi handle
     progressDialog();
     for (int i = 0; i < content_count; i++) {
-        if(!cancelled) {
+        if (!cancelled) {
             int offset = 2820 + (48 * i);
             uint32_t id; // the id should usually be chronological, but we wanna be sure
             memcpy(&id, &tmd_data.memory[offset], 4);

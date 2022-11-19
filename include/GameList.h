@@ -1,5 +1,7 @@
 #pragma once
 
+#include <gtkmm-3.0/gtkmm/searchbar.h>
+#include <gtkmm-3.0/gtkmm/searchentry.h>
 #include <gtkmm.h>
 #include <string>
 #include <vector>
@@ -42,6 +44,7 @@ public:
     void on_download_queue(GdkEventButton *ev);
     void on_decrypt_selected(Gtk::ToggleButton *button);
     bool on_search_equal(const Glib::RefPtr<Gtk::TreeModel> &model, int column, const Glib::ustring &key, const Gtk::TreeModel::iterator &iter);
+    void search_entry_changed();
 
     Gtk::Window *getWindow() { return gameListWindow; }
 
@@ -63,6 +66,10 @@ private:
     Gtk::Button *downloadQueueButton = nullptr;
     ModelColumns columns;
     const TitleEntry *infos;
+
+    Glib::RefPtr<Gtk::TreeModelFilter> m_refTreeModelFilter;
+    Gtk::SearchBar *searchBar = nullptr;
+    Gtk::SearchEntry *searchEntry = nullptr;
 
     bool decryptContents = false;
 

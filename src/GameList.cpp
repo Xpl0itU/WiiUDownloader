@@ -2,11 +2,25 @@
 
 #include <cstdlib>
 #include <downloader.h>
+#include <glibmm-2.4/glibmm/ustring.h>
 #include <iostream>
 
 void GameList::updateTitles(TITLE_CATEGORY cat, MCPRegion reg) {
     treeModel = Gtk::ListStore::create(columns);
-    treeView->set_model(treeModel);
+    m_refTreeModelFilter = Gtk::TreeModelFilter::create(treeModel);
+    m_refTreeModelFilter->set_visible_func
+    (
+        [this] (const Gtk::TreeModel::const_iterator& iter) -> bool
+        {
+            if(!iter)
+                return true;
+
+            Gtk::TreeModel::Row row = *iter;
+            Glib::ustring name = row[columns.name];
+            return name.find(searchEntry->get_text()) != Glib::ustring::npos;
+        }
+    );
+    treeView->set_model(m_refTreeModelFilter);
     for (unsigned int i = 0; i < getTitleEntriesSize(cat); i++) {
         if (!(reg & infos[i].region))
             continue;
@@ -64,6 +78,10 @@ GameList::GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos) 
     decryptContentsButton->signal_toggled().connect_notify(sigc::bind(sigc::mem_fun(*this, &GameList::on_decrypt_selected), decryptContentsButton));
     decryptContentsButton->set_active(TRUE);
 
+    builder->get_widget("searchBar", searchBar);
+    builder->get_widget("searchEntry", searchEntry);
+    searchEntry->signal_changed().connect(sigc::mem_fun(*this, &GameList::search_entry_changed));
+
     builder->get_widget("gameTree", treeView);
     treeView->signal_row_activated().connect(sigc::mem_fun(*this, &GameList::on_gamelist_row_activated));
     treeView->get_selection()->signal_changed().connect(sigc::mem_fun(*this, &GameList::on_selection_changed));
@@ -97,6 +115,36 @@ GameList::GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos) 
 }
 
 GameList::~GameList() {
+}
+
+
+void GameList::search_entry_changed() {
+    m_refTreeModelFilter = Gtk::TreeModelFilter::create(treeModel);
+    m_refTreeModelFilter->set_visible_func
+    (
+        [this] (const Gtk::TreeModel::const_iterator& iter) -> bool
+        {
+            if(!iter)
+                return true;
+            
+            Gtk::TreeModel::Row row = *iter;
+            Glib::ustring name = row[columns.name];
+            Glib::ustring key = searchEntry->get_text();
+            std::string string_name(name.lowercase());
+            std::string string_key(key.lowercase());
+            if (string_name.find(string_key) != Glib::ustring::npos) {
+                return true;
+            }
+
+            Glib::ustring titleId = row[columns.titleId];
+            if (strcmp(titleId.c_str(), key.c_str()) == 0) {
+                return true;
+            }
+
+            return false;
+        }
+    );
+    treeView->set_model(m_refTreeModelFilter);
 }
 
 void GameList::on_decrypt_selected(Gtk::ToggleButton *button) {

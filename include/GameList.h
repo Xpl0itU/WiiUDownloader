@@ -1,7 +1,5 @@
 #pragma once
 
-#include <gtkmm-3.0/gtkmm/searchbar.h>
-#include <gtkmm-3.0/gtkmm/searchentry.h>
 #include <gtkmm.h>
 #include <string>
 #include <vector>

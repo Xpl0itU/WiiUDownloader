@@ -104,6 +104,11 @@ GameList::GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos) 
 GameList::~GameList() {
 }
 
+bool ask(Glib::ustring question){
+	Glib::ustring msg = Glib::ustring(question);
+	Gtk::MessageDialog dlg(msg, true, Gtk::MESSAGE_QUESTION, Gtk::BUTTONS_YES_NO, true);
+	return dlg.run() == Gtk::RESPONSE_YES;
+}
 
 void GameList::search_entry_changed() {
     m_refTreeModelFilter = Gtk::TreeModelFilter::create(treeModel);
@@ -169,9 +174,9 @@ void GameList::on_add_to_queue(GdkEventButton *ev) {
         if (row[columns.toQueue]) {
             queueVector.push_back(infos[row[columns.index]].tid);
             uint64_t updateTID = 0;
-            if(getUpdateFromBaseGame(infos[row[columns.index]].tid, &updateTID)) {
-                queueVector.push_back(updateTID);
-            }
+            if(getUpdateFromBaseGame(infos[row[columns.index]].tid, &updateTID))
+                if(ask("Update detected.\nDo you want to add the update to the queue too?"))
+                    queueVector.push_back(updateTID);
             addToQueueButton->set_label("Remove from queue");
         } else {
             queueVector.erase(std::remove(queueVector.begin(), queueVector.end(), infos[row[columns.index]].tid), queueVector.end());

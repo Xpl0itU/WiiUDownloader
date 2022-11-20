@@ -30,7 +30,7 @@ bool getTitleNameFromTid(uint64_t tid, char *out) {
     if (found != entries + getTitleEntriesSize(TITLE_CATEGORY_ALL)) {
         char name[255];
         normalizeFilename(found->name, name);
-        sprintf(out, "%s [%016llx]", name, found->tid);
+        sprintf(out, "%s [%s] [%016llx]", name, getFormattedKind(tid), found->tid);
         return true;
     } else {
         sprintf(out, "Unknown");

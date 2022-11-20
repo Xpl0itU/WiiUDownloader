@@ -1,3 +1,4 @@
+#include <utils.h>
 #include <GameList.h>
 
 #include <cstdlib>
@@ -167,6 +168,10 @@ void GameList::on_add_to_queue(GdkEventButton *ev) {
         row[columns.toQueue] = !row[columns.toQueue];
         if (row[columns.toQueue]) {
             queueVector.push_back(infos[row[columns.index]].tid);
+            uint64_t updateTID = 0;
+            if(getUpdateFromBaseGame(infos[row[columns.index]].tid, &updateTID)) {
+                queueVector.push_back(updateTID);
+            }
             addToQueueButton->set_label("Remove from queue");
         } else {
             queueVector.erase(std::remove(queueVector.begin(), queueVector.end(), infos[row[columns.index]].tid), queueVector.end());

@@ -180,6 +180,13 @@ void GameList::on_add_to_queue(GdkEventButton *ev) {
             addToQueueButton->set_label("Remove from queue");
         } else {
             queueVector.erase(std::remove(queueVector.begin(), queueVector.end(), infos[row[columns.index]].tid), queueVector.end());
+            uint64_t updateTID = 0;
+            if(getUpdateFromBaseGame(infos[row[columns.index]].tid, &updateTID)) {
+                bool updateInQueue = queueVector.empty() ? false : std::binary_search(queueVector.begin(), queueVector.end(), updateTID);
+                if(updateInQueue)
+                    if(ask("Update detected.\nDo you want to remove the update from the queue too?"))
+                        queueVector.erase(std::remove(queueVector.begin(), queueVector.end(), updateTID), queueVector.end());
+            }
             addToQueueButton->set_label("Add to queue");
         }
     }

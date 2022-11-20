@@ -4,15 +4,23 @@
 #include <gtitles.h>
 #include <utils.h>
 
-static bool isAllowedInFilename(char c) {
-    return c >= ' ' && c <= '~' && c != '/' && c != '\\' && c != '"' && c != '*' && c != ':' && c != '<' && c != '>' && c != '?' && c != '|';
-}
-
-static void normalizeFilename(const char *input, char *output) {
-    char ret[255];
-    for (int i = 0; i < strlen(input); ++i)
-        ret[i] = isAllowedInFilename(input[i]) ? input[i] : '_';
-    sprintf(output, "%s", ret);
+static void normalizeFilename(const char* filename, char *out) {
+    const char keep[] = " ._";
+    size_t j = 0;
+    for (size_t i = 0; filename[i]; ++i) {
+        char c = filename[i];
+        if (c == '_') {
+            if (j && out[j - 1] == '_') continue; // Don't allow consecutive underscores
+            out[j++] = '_';
+        } else if (c == ' ') {
+            if (j && out[j - 1] == ' ') continue; // Don't allow consecutive spaces
+            out[j++] = ' ';
+        } else if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) {
+            out[j++] = c;
+        }
+    }
+    if (j > 0 && out[j - 1] == '_') j--; // Don't end with an underscore
+    out[j] = '\0';
 }
 
 bool getTitleNameFromTid(uint64_t tid, char *out) {

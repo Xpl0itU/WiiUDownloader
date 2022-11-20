@@ -172,8 +172,8 @@ static void progressDialog() {
     gtk_box_pack_start(GTK_BOX(main_box), progress_bar, FALSE, FALSE, 0);
     GtkWidget *button_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
     gtk_container_add(GTK_CONTAINER(main_box), button_box);
-    gtk_box_pack_start(GTK_BOX(button_box), pauseButton, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(button_box), cancelButton, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(button_box), cancelButton, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(button_box), pauseButton, FALSE, FALSE, 0);
 
     gtk_widget_show_all(window);
 }

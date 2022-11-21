@@ -140,7 +140,7 @@ bool generateTicket(const char *path, uint64_t titleID, const char *titleKey, ui
 
     // We support zero sections only
     ticket.header_version = 0x0001;
-    if(!isDLC(titleID))
+    if(!isDLC(ticket.tid))
         ticket.total_hdr_size = 0x00000014;
     else {
         ticket.total_hdr_size = 0x000000AC;
@@ -155,7 +155,7 @@ bool generateTicket(const char *path, uint64_t titleID, const char *titleKey, ui
 
     fwrite(&ticket, 1, sizeof(TICKET), tik);
 
-    if(isDLC(titleID)) {
+    if(isDLC(ticket.tid)) {
         TICKET_HEADER_SECTION section;
         memset(&section, 0x00, sizeof(TICKET_HEADER_SECTION));
 

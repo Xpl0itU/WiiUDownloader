@@ -286,7 +286,7 @@ void downloadTitle(const char *titleID, bool decrypt) {
     snprintf(output_path, sizeof(output_path), "%s/%s", output_dir, "title.tik");
     char titleKey[128];
     generateKey(titleID, titleKey);
-    generateTicket(output_path, titleID, titleKey, title_version);
+    generateTicket(output_path, strtoull(titleID, NULL, 16), titleKey, title_version);
 
     uint16_t content_count;
     memcpy(&content_count, &tmd_data.memory[478], 2);

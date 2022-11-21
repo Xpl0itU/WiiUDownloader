@@ -2,17 +2,39 @@
 #include <mbedtls/md5.h>
 #include <mbedtls/pkcs5.h>
 
+#include <titleInfo.h>
 #include <keygen.h>
 
 #include <stdlib.h>
 #include <string.h>
 
 #define KEYGEN_SECRET "fd040105060b111c2d49"
+#define isDLC(tid)    (getTidHighFromTid(tid) == TID_HIGH_DLC)
 
 static const uint8_t keygen_pw[] = {0x6d, 0x79, 0x70, 0x61, 0x73, 0x73};
 static const uint8_t commonKey[16] = {0xd7, 0xb0, 0x04, 0x02, 0x65, 0x9b, 0xa2, 0xab, 0xd2, 0xcb, 0x0d, 0xb2, 0x7f, 0xa2, 0xb6, 0x56};
 
-int char2int(char input) {
+static const uint8_t magic_header[10] = { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09 };
+
+static void rndBytes(char *out, size_t size) {
+    while (--size) {
+        *out++ = rand() % 256;
+    }
+}
+
+static void generateHeader(NUS_HEADER *out) {
+    memmove(out->magic_header, magic_header, 10);
+    memmove(out->app, "TEST01", strlen("TEST01"));
+    memmove(out->app_version, "v1.10", strlen("v1.10"));
+
+    memmove(out->file_type, "Ticket", strlen("Ticket"));
+
+    out->sig_type = 0x00010004;
+    out->meta_version = 0x01;
+    rndBytes(out->rand_area, sizeof(out->rand_area));
+}
+
+static int char2int(char input) {
     if (input >= '0' && input <= '9')
         return input - '0';
     if (input >= 'A' && input <= 'F')
@@ -23,7 +45,7 @@ int char2int(char input) {
     exit(1);
 }
 
-void hex2bytes(const char *input, uint8_t *output) {
+static void hex2bytes(const char *input, uint8_t *output) {
     int input_length = strlen(input);
     for (int i = 0; i < input_length; i += 2) {
         output[i / 2] = char2int(input[i]) * 16 + char2int(input[i + 1]);
@@ -95,4 +117,60 @@ bool generateKey(const char *tid, char *out) {
     sprintf(out, "%s", ret);
 
     return ret != NULL;
+}
+
+bool generateTicket(const char *path, uint64_t titleID, const char *titleKey, uint16_t titleVersion) {
+    TICKET ticket;
+    memset(&ticket, 0x00, sizeof(TICKET));
+
+    hex2bytes(titleKey, ticket.key);
+
+    generateHeader(&ticket.header);
+    rndBytes(&ticket.ecdsa_pubkey, sizeof(ticket.ecdsa_pubkey));
+    rndBytes(&ticket.ticket_id, sizeof(uint64_t));
+    ticket.ticket_id &= 0x0000FFFFFFFFFFFF;
+    ticket.ticket_id |= 0x0005000000000000;
+
+    memmove(ticket.issuer, "Root-CA00000003-XS0000000c", strlen("Root-CA00000003-XS0000000c"));
+
+    ticket.version = 0x01;
+    ticket.tid = titleID;
+    ticket.title_version = titleVersion;
+    ticket.property_mask = 0xFFFF;
+
+    // We support zero sections only
+    ticket.header_version = 0x0001;
+    if(!isDLC(titleID))
+        ticket.total_hdr_size = 0x00000014;
+    else {
+        ticket.total_hdr_size = 0x000000AC;
+        ticket.sect_hdr_offset = 0x00000014;
+        ticket.num_sect_headers = 0x0001;
+        ticket.num_sect_header_entry_size = 0x0014;
+    }
+
+    FILE *tik = fopen(path, "wb");
+    if(tik == 0)
+        return false;
+
+    fwrite(&ticket, 1, sizeof(TICKET), tik);
+
+    if(isDLC(titleID)) {
+        TICKET_HEADER_SECTION section;
+        memset(&section, 0x00, sizeof(TICKET_HEADER_SECTION));
+
+        section.unk01 = 0x00000028;
+        section.unk02 = 0x00000001;
+        section.unk03 = 0x00000084;
+        section.unk04 = 0x00000084;
+        section.unk05 = 0x0003;
+        for(int i = 0; i < 8; i++)
+            section.unk06[i] = 0xFFFFFFFF;
+
+        fwrite(&section, 1, sizeof(TICKET_HEADER_SECTION), tik);
+    }
+
+    fwrite(NULL, 0, 0, tik);
+    fclose(tik);
+    return true;
 }

@@ -57,9 +57,13 @@ static char *readable_fs(double size, char *buf) {
     return buf;
 }
 
+static size_t write_function(void *data, size_t size, size_t nmemb, void *userp) {
+   size_t written = fwrite(data, size, nmemb, userp);
+   return cancelled ? 0 : written;
+}
+
 static void cancel_button_clicked(GtkWidget *widget, gpointer data) {
     cancelled = true;
-    curl_global_cleanup();
 }
 
 static void pause_button_clicked(GtkWidget *widget, gpointer data) {
@@ -169,7 +173,7 @@ static int downloadFile(const char *download_url, const char *output_path) {
     curl_easy_setopt(handle, CURLOPT_FAILONERROR, 1L);
 
     // Download the tmd and save it in memory, as we need some data from it
-    curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, fwrite);
+    curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, write_function);
     curl_easy_setopt(handle, CURLOPT_URL, download_url);
     curl_easy_setopt(handle, CURLOPT_NOPROGRESS, 0L);
     curl_easy_setopt(handle, CURLOPT_XFERINFOFUNCTION, progress_func);

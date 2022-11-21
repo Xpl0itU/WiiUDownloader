@@ -19,14 +19,14 @@
 #include <curl/curl.h>
 #include <gtk/gtk.h>
 
-struct MemoryStruct {
-    uint8_t *memory;
-    size_t size;
-};
-
 struct PathFileStruct {
     char *file_path;
     FILE *file_pointer;
+};
+
+struct MemoryStruct {
+    uint8_t *memory;
+    size_t size;
 };
 
 static GtkWidget *progress_bar;
@@ -36,6 +36,10 @@ static char currentFile[255] = "None";
 static char *selected_dir = NULL;
 static bool cancelled = false;
 static bool paused = false;
+static size_t titleSize = 0;
+static size_t downloadedSize = 0;
+static size_t previousDownloadedSize = 0;
+static char totalSize[255];
 CURL *handle;
 
 static inline uint16_t bswap_16(uint16_t value) {
@@ -89,16 +93,18 @@ int progress_func(void *p,
 
     char downloadString[255];
     char downNow[255];
-    char downTotal[255];
-    readable_fs(dlnow, downNow);
-    readable_fs(dltotal, downTotal);
-    sprintf(downloadString, "Downloading %s (%s/%s)", currentFile, downNow, downTotal);
+    downloadedSize -= previousDownloadedSize;
+    downloadedSize += dlnow;
+    readable_fs(downloadedSize, downNow);
+    sprintf(downloadString, "Downloading %s (%s/%s)", currentFile, downNow, totalSize);
 
-    gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progress_bar), (double) dlnow / (double) dltotal);
+    gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progress_bar), (double) downloadedSize / (double) titleSize);
     gtk_progress_bar_set_text(GTK_PROGRESS_BAR(progress_bar), downloadString);
     // force redraw
     while (gtk_events_pending())
         gtk_main_iteration();
+    
+    previousDownloadedSize = dlnow;
     return 0;
 }
 
@@ -166,6 +172,7 @@ static void progressDialog() {
 }
 
 static int downloadFile(const char *download_url, const char *output_path) {
+    previousDownloadedSize = 0;
     FILE *file = fopen(output_path, "wb");
     if (file == NULL)
         return 1;
@@ -296,8 +303,15 @@ void downloadTitle(const char *titleID, bool decrypt) {
     memcpy(&content_count, &tmd_data.memory[478], 2);
     content_count = bswap_16(content_count);
 
-    // Add all needed curl handles to the multi handle
+    titleSize = 0;
+    downloadedSize = 0;
+    previousDownloadedSize = 0;
     progressDialog();
+    for(size_t i = 0; i < content_count; i++) {
+        titleSize += getContentSize(i, tmd_data.memory);
+    }
+    readable_fs(titleSize, totalSize);
+    printf("Total size: %s (%zu)\n", totalSize, titleSize);
     for (int i = 0; i < content_count; i++) {
         if (!cancelled) {
             int offset = 2820 + (48 * i);

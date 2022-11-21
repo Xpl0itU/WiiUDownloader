@@ -6,7 +6,6 @@
 #include <utils.h>
 
 static void normalizeFilename(const char* filename, char *out) {
-    const char keep[] = " ._";
     size_t j = 0;
     for (size_t i = 0; filename[i]; ++i) {
         char c = filename[i];

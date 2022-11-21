@@ -38,6 +38,8 @@ bool getTitleNameFromTid(uint64_t tid, char *out) {
 }
 
 bool getUpdateFromBaseGame(uint64_t titleID, uint64_t *out) {
+    if(isUpdate(titleID))
+        return false;
     uint64_t updateTID = titleID | 0x0000000E00000000;
     char name[255];
     if(getTitleNameFromTid(updateTID, name)) {

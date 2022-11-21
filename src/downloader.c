@@ -92,11 +92,16 @@ int progress_func(void *p,
     GtkProgressBar *progress_bar = (GtkProgressBar *) p;
 
     char downloadString[255];
+    char speedString[255];
     char downNow[255];
     downloadedSize -= previousDownloadedSize;
     downloadedSize += dlnow;
     readable_fs(downloadedSize, downNow);
-    sprintf(downloadString, "Downloading %s (%s/%s)", currentFile, downNow, totalSize);
+    double speed;
+    curl_easy_getinfo(handle, CURLINFO_SPEED_DOWNLOAD, &speed);
+    readable_fs(speed, speedString);
+    strcat(speedString, "/s");
+    sprintf(downloadString, "Downloading %s (%s/%s) (%s)", currentFile, downNow, totalSize, speedString);
 
     gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progress_bar), (double) downloadedSize / (double) titleSize);
     gtk_progress_bar_set_text(GTK_PROGRESS_BAR(progress_bar), downloadString);

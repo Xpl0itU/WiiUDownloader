@@ -34,7 +34,7 @@ static void generateHeader(NUS_HEADER *out) {
     rndBytes(out->rand_area, sizeof(out->rand_area));
 }
 
-int char2int(char input) {
+static int char2int(char input) {
     if (input >= '0' && input <= '9')
         return input - '0';
     if (input >= 'A' && input <= 'F')
@@ -45,7 +45,7 @@ int char2int(char input) {
     exit(1);
 }
 
-void hex2bytes(const char *input, uint8_t *output) {
+static void hex2bytes(const char *input, uint8_t *output) {
     int input_length = strlen(input);
     for (int i = 0; i < input_length; i += 2) {
         output[i / 2] = char2int(input[i]) * 16 + char2int(input[i + 1]);

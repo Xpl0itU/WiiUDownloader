@@ -131,6 +131,16 @@ static void downloadCert(const char *outputPath) {
     curl_easy_setopt(certHandle, CURLOPT_URL, "http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/000500101000400A/cetk");
 
     curl_easy_setopt(certHandle, CURLOPT_WRITEDATA, cetk);
+
+    curl_easy_setopt(certHandle, CURLOPT_SSL_VERIFYPEER, FALSE);
+    curl_easy_setopt(certHandle, CURLOPT_SSL_VERIFYHOST, FALSE);
+    curl_easy_setopt(certHandle, CURLOPT_ACCEPTTIMEOUT_MS, 5);
+    curl_easy_setopt(certHandle, CURLOPT_TCP_KEEPALIVE, 1L);
+    curl_easy_setopt(certHandle, CURLOPT_TCP_NODELAY, 1);
+    curl_easy_setopt(certHandle, CURLOPT_CONNECTTIMEOUT, 5);
+    curl_easy_setopt(certHandle, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
+    curl_easy_setopt(certHandle, CURLOPT_NOSIGNAL, 1);
+
     curl_easy_perform(certHandle);
     curl_easy_cleanup(certHandle);
     fclose(cetk);
@@ -187,6 +197,16 @@ static int downloadFile(const char *download_url, const char *output_path) {
     curl_easy_setopt(handle, CURLOPT_PROGRESSDATA, progress_bar);
 
     curl_easy_setopt(handle, CURLOPT_WRITEDATA, file);
+
+    curl_easy_setopt(handle, CURLOPT_SSL_VERIFYPEER, FALSE);
+    curl_easy_setopt(handle, CURLOPT_SSL_VERIFYHOST, FALSE);
+    curl_easy_setopt(handle, CURLOPT_ACCEPTTIMEOUT_MS, 5);
+    curl_easy_setopt(handle, CURLOPT_TCP_KEEPALIVE, 1L);
+    curl_easy_setopt(handle, CURLOPT_TCP_NODELAY, 1);
+    curl_easy_setopt(handle, CURLOPT_CONNECTTIMEOUT, 5);
+    curl_easy_setopt(handle, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
+    curl_easy_setopt(handle, CURLOPT_NOSIGNAL, 1);
+
     curl_easy_perform(handle);
     curl_easy_cleanup(handle);
     fclose(file);

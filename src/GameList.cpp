@@ -196,6 +196,7 @@ void GameList::on_button_selected(GdkEventButton *ev, TITLE_CATEGORY cat) {
     currentCategory = cat;
     infos = getTitleEntries(currentCategory);
     updateTitles(currentCategory, selectedRegion);
+    search_entry_changed();
     return;
 }
 
@@ -205,6 +206,7 @@ void GameList::on_region_selected(Gtk::ToggleButton *button, MCPRegion reg) {
     else
         selectedRegion = (MCPRegion) (selectedRegion & ~reg);
     updateTitles(currentCategory, selectedRegion);
+    search_entry_changed();
     return;
 }
 

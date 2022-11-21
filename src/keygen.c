@@ -2,8 +2,8 @@
 #include <mbedtls/md5.h>
 #include <mbedtls/pkcs5.h>
 
-#include <titleInfo.h>
 #include <keygen.h>
+#include <titleInfo.h>
 
 #include <stdlib.h>
 #include <string.h>
@@ -13,7 +13,7 @@
 static const uint8_t keygen_pw[] = {0x6d, 0x79, 0x70, 0x61, 0x73, 0x73};
 static const uint8_t commonKey[16] = {0xd7, 0xb0, 0x04, 0x02, 0x65, 0x9b, 0xa2, 0xab, 0xd2, 0xcb, 0x0d, 0xb2, 0x7f, 0xa2, 0xb6, 0x56};
 
-static const uint8_t magic_header[10] = { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09 };
+static const uint8_t magic_header[10] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09};
 
 static void rndBytes(char *out, size_t size) {
     while (--size) {
@@ -139,7 +139,7 @@ bool generateTicket(const char *path, uint64_t titleID, const char *titleKey, ui
 
     // We support zero sections only
     ticket.header_version = 0x0001;
-    if(!isDLC(ticket.tid))
+    if (!isDLC(ticket.tid))
         ticket.total_hdr_size = 0x00000014;
     else {
         ticket.total_hdr_size = 0x000000AC;
@@ -149,12 +149,12 @@ bool generateTicket(const char *path, uint64_t titleID, const char *titleKey, ui
     }
 
     FILE *tik = fopen(path, "wb");
-    if(tik == 0)
+    if (tik == 0)
         return false;
 
     fwrite(&ticket, 1, sizeof(TICKET), tik);
 
-    if(isDLC(ticket.tid)) {
+    if (isDLC(ticket.tid)) {
         TICKET_HEADER_SECTION section;
         memset(&section, 0x00, sizeof(TICKET_HEADER_SECTION));
 
@@ -163,7 +163,7 @@ bool generateTicket(const char *path, uint64_t titleID, const char *titleKey, ui
         section.unk03 = 0x00000084;
         section.unk04 = 0x00000084;
         section.unk05 = 0x0003;
-        for(int i = 0; i < 8; i++)
+        for (int i = 0; i < 8; i++)
             section.unk06[i] = 0xFFFFFFFF;
 
         fwrite(&section, 1, sizeof(TICKET_HEADER_SECTION), tik);

@@ -62,8 +62,8 @@ static char *readable_fs(double size, char *buf) {
 }
 
 static size_t write_function(void *data, size_t size, size_t nmemb, void *userp) {
-   size_t written = fwrite(data, size, nmemb, userp);
-   return cancelled ? 0 : written;
+    size_t written = fwrite(data, size, nmemb, userp);
+    return cancelled ? 0 : written;
 }
 
 static void cancel_button_clicked(GtkWidget *widget, gpointer data) {
@@ -103,7 +103,7 @@ int progress_func(void *p,
     // force redraw
     while (gtk_events_pending())
         gtk_main_iteration();
-    
+
     previousDownloadedSize = dlnow;
     return 0;
 }
@@ -307,7 +307,7 @@ void downloadTitle(const char *titleID, bool decrypt) {
     downloadedSize = 0;
     previousDownloadedSize = 0;
     progressDialog();
-    for(size_t i = 0; i < content_count; i++) {
+    for (size_t i = 0; i < content_count; i++) {
         titleSize += getContentSize(i, tmd_data.memory);
     }
     readable_fs(titleSize, totalSize);

@@ -29,8 +29,8 @@ typedef enum {
 } TID_HIGH;
 
 #define getTidHighFromTid(tid) ((uint32_t) (tid >> 32))
-#define isDLC(tid)    (getTidHighFromTid(tid) == TID_HIGH_DLC)
-#define isUpdate(tid) (getTidHighFromTid(tid) == TID_HIGH_UPDATE)
+#define isDLC(tid)             (getTidHighFromTid(tid) == TID_HIGH_DLC)
+#define isUpdate(tid)          (getTidHighFromTid(tid) == TID_HIGH_UPDATE)
 
 const char *getFormattedKind(uint64_t tid);
 const char *getFormattedRegion(MCPRegion region);

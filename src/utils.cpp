@@ -5,7 +5,7 @@
 #include <titleInfo.h>
 #include <utils.h>
 
-static void normalizeFilename(const char* filename, char *out) {
+static void normalizeFilename(const char *filename, char *out) {
     size_t j = 0;
     for (size_t i = 0; filename[i]; ++i) {
         char c = filename[i];
@@ -38,18 +38,18 @@ bool getTitleNameFromTid(uint64_t tid, char *out) {
 }
 
 bool getUpdateFromBaseGame(uint64_t titleID, uint64_t *out) {
-    if(isUpdate(titleID))
+    if (isUpdate(titleID))
         return false;
     uint64_t updateTID = titleID | 0x0000000E00000000;
     char name[255];
-    if(getTitleNameFromTid(updateTID, name)) {
+    if (getTitleNameFromTid(updateTID, name)) {
         *out = updateTID;
         return true;
     }
     return false;
 }
 
-static bool convertToUint64(const uint8_t buffer[], size_t size, uint64_t& value) {
+static bool convertToUint64(const uint8_t buffer[], size_t size, uint64_t &value) {
     if (size > sizeof(uint64_t)) {
         return false;
     }
@@ -63,9 +63,9 @@ static bool convertToUint64(const uint8_t buffer[], size_t size, uint64_t& value
 uint64_t getContentSize(int contentIndex, uint8_t *tmd) {
     uint contentDataLoc = 0xB04 + (0x30 * contentIndex);
 
-	uint8_t size[8] = { tmd[contentDataLoc + 0x8], tmd[contentDataLoc + 0x9], tmd[contentDataLoc + 0xA], tmd[contentDataLoc + 0xB],
-		tmd[contentDataLoc + 0xC], tmd[contentDataLoc + 0xD], tmd[contentDataLoc + 0xE], tmd[contentDataLoc + 0xF] };
+    uint8_t size[8] = {tmd[contentDataLoc + 0x8], tmd[contentDataLoc + 0x9], tmd[contentDataLoc + 0xA], tmd[contentDataLoc + 0xB],
+                       tmd[contentDataLoc + 0xC], tmd[contentDataLoc + 0xD], tmd[contentDataLoc + 0xE], tmd[contentDataLoc + 0xF]};
     uint64_t finalSize = 0;
     convertToUint64(size, 8, finalSize);
-	return finalSize;
+    return finalSize;
 }

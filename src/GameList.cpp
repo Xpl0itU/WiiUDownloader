@@ -1,5 +1,5 @@
-#include <utils.h>
 #include <GameList.h>
+#include <utils.h>
 
 #include <cstdlib>
 #include <downloader.h>
@@ -104,10 +104,10 @@ GameList::GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos) 
 GameList::~GameList() {
 }
 
-bool ask(Glib::ustring question){
-	Glib::ustring msg = Glib::ustring(question);
-	Gtk::MessageDialog dlg(msg, true, Gtk::MESSAGE_QUESTION, Gtk::BUTTONS_YES_NO, true);
-	return dlg.run() == Gtk::RESPONSE_YES;
+bool ask(Glib::ustring question) {
+    Glib::ustring msg = Glib::ustring(question);
+    Gtk::MessageDialog dlg(msg, true, Gtk::MESSAGE_QUESTION, Gtk::BUTTONS_YES_NO, true);
+    return dlg.run() == Gtk::RESPONSE_YES;
 }
 
 void GameList::search_entry_changed() {
@@ -174,17 +174,17 @@ void GameList::on_add_to_queue(GdkEventButton *ev) {
         if (row[columns.toQueue]) {
             queueVector.push_back(infos[row[columns.index]].tid);
             uint64_t updateTID = 0;
-            if(getUpdateFromBaseGame(infos[row[columns.index]].tid, &updateTID))
-                if(ask("Update detected.\nDo you want to add the update to the queue too?"))
+            if (getUpdateFromBaseGame(infos[row[columns.index]].tid, &updateTID))
+                if (ask("Update detected.\nDo you want to add the update to the queue too?"))
                     queueVector.push_back(updateTID);
             addToQueueButton->set_label("Remove from queue");
         } else {
             queueVector.erase(std::remove(queueVector.begin(), queueVector.end(), infos[row[columns.index]].tid), queueVector.end());
             uint64_t updateTID = 0;
-            if(getUpdateFromBaseGame(infos[row[columns.index]].tid, &updateTID)) {
+            if (getUpdateFromBaseGame(infos[row[columns.index]].tid, &updateTID)) {
                 bool updateInQueue = queueVector.empty() ? false : std::binary_search(queueVector.begin(), queueVector.end(), updateTID);
-                if(updateInQueue)
-                    if(ask("Update detected.\nDo you want to remove the update from the queue too?"))
+                if (updateInQueue)
+                    if (ask("Update detected.\nDo you want to remove the update from the queue too?"))
                         queueVector.erase(std::remove(queueVector.begin(), queueVector.end(), updateTID), queueVector.end());
             }
             addToQueueButton->set_label("Add to queue");

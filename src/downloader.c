@@ -240,7 +240,7 @@ void downloadTitle(const char *titleID, bool decrypt) {
     // initialize some useful variables
     cancelled = false;
     char *output_dir = malloc(1024);
-    char *folder_name = malloc(1024);
+    char folder_name[1024];
     getTitleNameFromTid(strtoull(titleID, NULL, 16), folder_name);
     strcpy(output_dir, folder_name);
     prepend(output_dir, "/");
@@ -248,7 +248,6 @@ void downloadTitle(const char *titleID, bool decrypt) {
         selected_dir = show_folder_select_dialog();
     if (selected_dir == NULL) {
         free(output_dir);
-        free(folder_name);
         return;
     }
     prepend(output_dir, selected_dir);
@@ -292,7 +291,6 @@ void downloadTitle(const char *titleID, bool decrypt) {
     FILE *tmd_file = fopen(output_path, "wb");
     if (!tmd_file) {
         free(output_dir);
-        free(folder_name);
         fprintf(stderr, "Error: The file \"%s\" couldn't be opened. Will exit now.\n", output_path);
         exit(EXIT_FAILURE);
     }
@@ -347,5 +345,4 @@ void downloadTitle(const char *titleID, bool decrypt) {
         cdecrypt(2, argv);
     }
     free(output_dir);
-    free(folder_name);
 }

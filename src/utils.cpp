@@ -61,7 +61,7 @@ static bool convertToUint64(const uint8_t buffer[], size_t size, uint64_t &value
 }
 
 uint64_t getContentSize(int contentIndex, uint8_t *tmd) {
-    uint contentDataLoc = 0xB04 + (0x30 * contentIndex);
+    uint64_t contentDataLoc = 0xB04 + (0x30 * contentIndex);
 
     uint8_t size[8] = {tmd[contentDataLoc + 0x8], tmd[contentDataLoc + 0x9], tmd[contentDataLoc + 0xA], tmd[contentDataLoc + 0xB],
                        tmd[contentDataLoc + 0xC], tmd[contentDataLoc + 0xD], tmd[contentDataLoc + 0xE], tmd[contentDataLoc + 0xF]};

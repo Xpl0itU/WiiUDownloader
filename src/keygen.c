@@ -24,7 +24,7 @@ static void rndBytes(char *out, size_t size) {
 
 static void generateHeader(NUS_HEADER *out) {
     memmove(out->magic_header, magic_header, 10);
-    memmove(out->app, "TEST01", strlen("TEST01"));
+    memmove(out->app, "WiiUDownloader", strlen("WiiUDownloader"));
     memmove(out->app_version, "v1.10", strlen("v1.10"));
 
     memmove(out->file_type, "Ticket", strlen("Ticket"));

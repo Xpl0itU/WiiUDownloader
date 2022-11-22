@@ -13,6 +13,7 @@
 #include <cdecrypt/cdecrypt.h>
 #include <downloader.h>
 #include <keygen.h>
+#include <tmd.h>
 #include <nfd.h>
 #include <utils.h>
 
@@ -25,7 +26,7 @@ struct PathFileStruct {
 };
 
 struct MemoryStruct {
-    uint8_t *memory;
+    TMD *memory;
     size_t size;
 };
 
@@ -290,15 +291,13 @@ void downloadTitle(const char *titleID, bool decrypt) {
     fclose(tmd_file);
     printf("Finished downloading \"%s\".\n", output_path);
 
-    uint16_t title_version;
-    memcpy(&title_version, &tmd_data.memory[476], 2);
+    uint16_t title_version = tmd_data.memory->num_contents;
     snprintf(output_path, sizeof(output_path), "%s/%s", output_dir, "title.tik");
     char titleKey[128];
     generateKey(titleID, titleKey);
     generateTicket(output_path, strtoull(titleID, NULL, 16), titleKey, title_version);
 
-    uint16_t content_count;
-    memcpy(&content_count, &tmd_data.memory[478], 2);
+    uint16_t content_count = tmd_data.memory->num_contents;
     content_count = bswap_16(content_count);
 
     titleSize = 0;
@@ -306,15 +305,14 @@ void downloadTitle(const char *titleID, bool decrypt) {
     previousDownloadedSize = 0;
     progressDialog();
     for (size_t i = 0; i < content_count; i++) {
-        titleSize += getContentSize(i, tmd_data.memory);
+        titleSize += tmd_data.memory->contents[i].size;
     }
     readable_fs(titleSize, totalSize);
     printf("Total size: %s (%zu)\n", totalSize, titleSize);
     for (int i = 0; i < content_count; i++) {
         if (!cancelled) {
             int offset = 2820 + (48 * i);
-            uint32_t id; // the id should usually be chronological, but we wanna be sure
-            memcpy(&id, &tmd_data.memory[offset], 4);
+            uint32_t id = tmd_data.memory->contents[i].cid; // the id should usually be chronological, but we wanna be sure
             id = bswap_32(id);
 
             // add a curl handle for the content file (.app file)
@@ -323,7 +321,7 @@ void downloadTitle(const char *titleID, bool decrypt) {
             sprintf(currentFile, "%08X.app", id);
             downloadFile(download_url, output_path);
 
-            if ((tmd_data.memory[offset + 7] & 0x2) == 2) {
+            if (tmd_data.memory->contents->type == TMD_CONTENT_TYPE_HASHED) {
                 // add a curl handle for the hash file (.h3 file)
                 snprintf(output_path, sizeof(output_path), "%s/%08X.h3", output_dir, id);
                 snprintf(download_url, 81, "%s/%08X.h3", base_url, id);

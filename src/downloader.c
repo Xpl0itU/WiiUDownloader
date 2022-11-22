@@ -26,7 +26,7 @@ struct PathFileStruct {
 };
 
 struct MemoryStruct {
-    TMD *memory;
+    uint8_t *memory;
     size_t size;
 };
 
@@ -49,6 +49,17 @@ static inline uint16_t bswap_16(uint16_t value) {
 
 static inline uint32_t bswap_32(uint32_t __x) {
     return __x >> 24 | __x >> 8 & 0xff00 | __x << 8 & 0xff0000 | __x << 24;
+}
+
+inline uint64_t bswap_64(uint64_t x) {
+     return (((x & 0xff00000000000000ull) >> 56)
+          | ((x & 0x00ff000000000000ull) >> 40)
+          | ((x & 0x0000ff0000000000ull) >> 24)
+          | ((x & 0x000000ff00000000ull) >> 8)
+          | ((x & 0x00000000ff000000ull) << 8)
+          | ((x & 0x0000000000ff0000ull) << 24)
+          | ((x & 0x000000000000ff00ull) << 40)
+          | ((x & 0x00000000000000ffull) << 56));
 }
 
 static char *readable_fs(double size, char *buf) {
@@ -271,10 +282,10 @@ void downloadTitle(const char *titleID, bool decrypt) {
     snprintf(download_url, 73, "%s/%s", base_url, "tmd");
     curl_easy_setopt(tmd_handle, CURLOPT_URL, download_url);
 
-    struct MemoryStruct tmd_data;
-    tmd_data.memory = malloc(0);
-    tmd_data.size = 0;
-    curl_easy_setopt(tmd_handle, CURLOPT_WRITEDATA, (void *) &tmd_data);
+    struct MemoryStruct tmd_mem;
+    tmd_mem.memory = malloc(0);
+    tmd_mem.size = 0;
+    curl_easy_setopt(tmd_handle, CURLOPT_WRITEDATA, (void *) &tmd_mem);
     curl_easy_perform(tmd_handle);
     curl_easy_cleanup(tmd_handle);
     // write out the tmd file
@@ -287,33 +298,33 @@ void downloadTitle(const char *titleID, bool decrypt) {
         fprintf(stderr, "Error: The file \"%s\" couldn't be opened. Will exit now.\n", output_path);
         exit(EXIT_FAILURE);
     }
-    fwrite(tmd_data.memory, 1, tmd_data.size, tmd_file);
+    fwrite(tmd_mem.memory, 1, tmd_mem.size, tmd_file);
     fclose(tmd_file);
     printf("Finished downloading \"%s\".\n", output_path);
 
-    uint16_t title_version = tmd_data.memory->num_contents;
+    TMD *tmd_data = (TMD*)tmd_mem.memory;
+
+    uint16_t title_version = tmd_data->title_version;
     snprintf(output_path, sizeof(output_path), "%s/%s", output_dir, "title.tik");
     char titleKey[128];
     generateKey(titleID, titleKey);
     generateTicket(output_path, strtoull(titleID, NULL, 16), titleKey, title_version);
 
-    uint16_t content_count = tmd_data.memory->num_contents;
-    content_count = bswap_16(content_count);
+    uint16_t content_count = bswap_16(tmd_data->num_contents);
 
     titleSize = 0;
     downloadedSize = 0;
     previousDownloadedSize = 0;
     progressDialog();
     for (size_t i = 0; i < content_count; i++) {
-        titleSize += tmd_data.memory->contents[i].size;
+        titleSize += bswap_64(tmd_data->contents[i].size);
     }
     readable_fs(titleSize, totalSize);
     printf("Total size: %s (%zu)\n", totalSize, titleSize);
     for (int i = 0; i < content_count; i++) {
         if (!cancelled) {
             int offset = 2820 + (48 * i);
-            uint32_t id = tmd_data.memory->contents[i].cid; // the id should usually be chronological, but we wanna be sure
-            id = bswap_32(id);
+            uint32_t id = bswap_32(tmd_data->contents[i].cid); // the id should usually be chronological, but we wanna be sure
 
             // add a curl handle for the content file (.app file)
             snprintf(output_path, sizeof(output_path), "%s/%08X.app", output_dir, id);
@@ -321,7 +332,7 @@ void downloadTitle(const char *titleID, bool decrypt) {
             sprintf(currentFile, "%08X.app", id);
             downloadFile(download_url, output_path);
 
-            if (tmd_data.memory->contents[i].type & TMD_CONTENT_TYPE_HASHED) {
+            if (tmd_data->contents[i].type & TMD_CONTENT_TYPE_HASHED) {
                 // add a curl handle for the hash file (.h3 file)
                 snprintf(output_path, sizeof(output_path), "%s/%08X.h3", output_dir, id);
                 snprintf(download_url, 81, "%s/%08X.h3", base_url, id);
@@ -330,7 +341,7 @@ void downloadTitle(const char *titleID, bool decrypt) {
             }
         }
     }
-    free(tmd_data.memory);
+    free(tmd_mem.memory);
 
     printf("Downloading all files for TitleID %s done...\n", titleID);
 

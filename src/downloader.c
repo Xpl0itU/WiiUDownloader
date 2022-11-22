@@ -321,7 +321,7 @@ void downloadTitle(const char *titleID, bool decrypt) {
             sprintf(currentFile, "%08X.app", id);
             downloadFile(download_url, output_path);
 
-            if (tmd_data.memory->contents->type == TMD_CONTENT_TYPE_HASHED) {
+            if (tmd_data.memory->contents[i].type & TMD_CONTENT_TYPE_HASHED) {
                 // add a curl handle for the hash file (.h3 file)
                 snprintf(output_path, sizeof(output_path), "%s/%08X.h3", output_dir, id);
                 snprintf(download_url, 81, "%s/%08X.h3", base_url, id);

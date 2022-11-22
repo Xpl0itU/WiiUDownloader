@@ -124,33 +124,6 @@ static size_t WriteDataToMemory(void *contents, size_t size, size_t nmemb, void 
     return realsize;
 }
 
-static void downloadCert(const char *outputPath) {
-    FILE *cetk = fopen(outputPath, "wb");
-    if (cetk == NULL)
-        return;
-    CURL *certHandle = curl_easy_init();
-    curl_easy_setopt(certHandle, CURLOPT_FAILONERROR, 1L);
-
-    // Download the tmd and save it in memory, as we need some data from it
-    curl_easy_setopt(certHandle, CURLOPT_WRITEFUNCTION, fwrite);
-    curl_easy_setopt(certHandle, CURLOPT_URL, "http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/000500101000400A/cetk");
-
-    curl_easy_setopt(certHandle, CURLOPT_WRITEDATA, cetk);
-
-    curl_easy_setopt(certHandle, CURLOPT_SSL_VERIFYPEER, FALSE);
-    curl_easy_setopt(certHandle, CURLOPT_SSL_VERIFYHOST, FALSE);
-    curl_easy_setopt(certHandle, CURLOPT_ACCEPTTIMEOUT_MS, 5);
-    curl_easy_setopt(certHandle, CURLOPT_TCP_KEEPALIVE, 1L);
-    curl_easy_setopt(certHandle, CURLOPT_TCP_NODELAY, 1);
-    curl_easy_setopt(certHandle, CURLOPT_CONNECTTIMEOUT, 5);
-    curl_easy_setopt(certHandle, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
-    curl_easy_setopt(certHandle, CURLOPT_NOSIGNAL, 1);
-
-    curl_easy_perform(certHandle);
-    curl_easy_cleanup(certHandle);
-    fclose(cetk);
-}
-
 static void progressDialog() {
     GtkWidget *cancelButton = gtk_button_new();
     GtkWidget *pauseButton = gtk_button_new();
@@ -305,7 +278,7 @@ void downloadTitle(const char *titleID, bool decrypt) {
     curl_easy_cleanup(tmd_handle);
     // write out the tmd file
     snprintf(output_path, sizeof(output_path), "%s/%s", output_dir, "title.cert");
-    downloadCert(output_path);
+    generateCert(output_path);
     snprintf(output_path, sizeof(output_path), "%s/%s", output_dir, "title.tmd");
     FILE *tmd_file = fopen(output_path, "wb");
     if (!tmd_file) {

@@ -21,12 +21,15 @@ static void rndBytes(char *out, size_t size) {
     }
 }
 
-static void generateHeader(NUS_HEADER *out) {
+static void generateHeader(bool isTicket, NUS_HEADER *out) {
     memmove(out->magic_header, magic_header, 10);
     memmove(out->app, "WiiUDownloader", strlen("WiiUDownloader"));
-    memmove(out->app_version, "v1.10", strlen("v1.10"));
+    memmove(out->app_version, "v1.11", strlen("v1.11"));
 
-    memmove(out->file_type, "Ticket", strlen("Ticket"));
+    if(isTicket)
+        memmove(out->file_type, "Ticket", strlen("Ticket"));
+    else
+        memmove(out->file_type, "Certificate", strlen("Certificate"));
 
     out->sig_type = 0x00010004;
     out->meta_version = 0x01;
@@ -124,7 +127,7 @@ bool generateTicket(const char *path, uint64_t titleID, const char *titleKey, ui
 
     hex2bytes(titleKey, ticket.key);
 
-    generateHeader(&ticket.header);
+    generateHeader(true, &ticket.header);
     rndBytes(&ticket.ecdsa_pubkey, sizeof(ticket.ecdsa_pubkey));
     rndBytes(&ticket.ticket_id, sizeof(uint64_t));
     ticket.ticket_id &= 0x0000FFFFFFFFFFFF;
@@ -149,7 +152,7 @@ bool generateTicket(const char *path, uint64_t titleID, const char *titleKey, ui
     }
 
     FILE *tik = fopen(path, "wb");
-    if (tik == 0)
+    if (tik == NULL)
         return false;
 
     fwrite(&ticket, 1, sizeof(TICKET), tik);
@@ -171,5 +174,47 @@ bool generateTicket(const char *path, uint64_t titleID, const char *titleKey, ui
 
     fwrite(NULL, 0, 0, tik);
     fclose(tik);
+    return true;
+}
+
+bool generateCert(const char *path) {
+    CETK cetk;
+    memset(&cetk, 0x00, sizeof(CETK));
+
+    generateHeader(false, &cetk.header);
+
+    memmove(cetk.cert1.issuer, "Root-CA00000003", strlen("Root-CA00000003"));
+    memmove(cetk.cert1.type, "CP0000000b", strlen("CP0000000b"));
+
+    memmove(cetk.cert2.issuer, "Root", strlen("Root"));
+    memmove(cetk.cert2.type, "CA00000003", strlen("CA00000003"));
+
+    memmove(cetk.cert3.issuer, "Root-CA00000003", strlen("Root-CA00000003"));
+    memmove(cetk.cert3.type, "XS0000000c", strlen("XS0000000c"));
+
+    rndBytes(&cetk.cert1.sig, sizeof(cetk.cert1.sig));
+    rndBytes(&cetk.cert1.cert, sizeof(cetk.cert1.cert));
+    rndBytes(&cetk.cert2.sig, sizeof(cetk.cert2.sig));
+    rndBytes(&cetk.cert2.cert, sizeof(cetk.cert2.cert));
+    rndBytes(&cetk.cert3.sig, sizeof(cetk.cert3.sig));
+
+    cetk.cert1.version = 0x01;
+    cetk.cert1.unknown_01 = 0x00010001;
+    cetk.cert1.unknown_02 = 0x00010003;
+
+    cetk.cert2.version = 0x01;
+    cetk.cert2.unknown_01 = 0x00010001;
+    cetk.cert2.unknown_02 = 0x00010004;
+
+    cetk.cert3.version = 0x01;
+    cetk.cert3.unknown_01 = 0x00010001;
+
+    FILE *cert = fopen(path, "wb");
+    if(cert == NULL)
+        return false;
+
+    fwrite(&cetk, 1, sizeof(CETK), cert);
+    fwrite(NULL, 0, 0, cert);
+    fclose(cert);
     return true;
 }

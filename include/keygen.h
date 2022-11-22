@@ -78,8 +78,56 @@ typedef struct __attribute__((__packed__)) {
     uint32_t header_flags;
 } TICKET;
 
+typedef struct __attribute__((__packed__)) {
+    char issuer[0x40];
+    PADDING(3);
+    uint8_t version;
+    char type[0x40];
+    uint8_t sig[0x100];
+    PADDING(4);
+    uint32_t unknown_01;
+    PADDING(0x34);
+    uint32_t unknown_02;
+    uint8_t cert[0x200];
+    PADDING(0x3C);
+} CA3_PPKI_CERT;
+
+typedef struct __attribute__((__packed__)) {
+    char issuer[0x40];
+    PADDING(3);
+    uint8_t version;
+    char type[0x40];
+    uint8_t sig[0x100];
+    PADDING(4);
+    uint32_t unknown_01;
+    PADDING(0x34);
+    uint32_t unknown_02;
+    uint8_t cert[0x100];
+    PADDING(0x3C);
+} XSC_PPKI_CERT;
+
+typedef struct __attribute__((__packed__)) {
+    char issuer[0x40];
+    PADDING(3);
+    uint8_t version;
+    char type[0x40];
+    uint8_t sig[0x100];
+    PADDING(4);
+    uint32_t unknown_01;
+    PADDING(0x34);
+} CP8_PPKI_CERT;
+
+typedef struct __attribute__((__packed__)) {
+    NUS_HEADER header;
+
+    CA3_PPKI_CERT cert1;
+    XSC_PPKI_CERT cert2;
+    CP8_PPKI_CERT cert3;
+} CETK;
+
 bool generateKey(const char *tid, char *out);
 bool generateTicket(const char *path, uint64_t titleID, const char *titleKey, uint16_t titleVersion);
+bool generateCert(const char *path);
 void hex(uint64_t i, int digits, char *out);
 
 #ifdef __cplusplus

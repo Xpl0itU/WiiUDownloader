@@ -176,7 +176,6 @@ static int downloadFile(const char *download_url, const char *output_path, struc
     FILE *file = fopen(output_path, "wb");
     if (file == NULL)
         return 1;
-    progress->handle = curl_easy_init();
     curl_easy_setopt(progress->handle, CURLOPT_FAILONERROR, 1L);
 
     curl_easy_setopt(progress->handle, CURLOPT_WRITEFUNCTION, write_function);
@@ -319,6 +318,7 @@ void downloadTitle(const char *titleID, const char *name, bool decrypt, bool *ca
     downloadedSize = 0;
     previousDownloadedSize = 0;
     struct CURLProgress *progress = (struct CURLProgress *) malloc(sizeof(struct CURLProgress));
+    progress->handle = curl_easy_init();
     progressDialog(progress);
     gtk_label_set_text(GTK_LABEL(gameLabel), currentTitle);
     for (size_t i = 0; i < content_count; i++) {

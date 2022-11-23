@@ -27,7 +27,7 @@ bool getTitleNameFromTid(uint64_t tid, char *out) {
     const TitleEntry *entries = getTitleEntries(TITLE_CATEGORY_ALL);
     const TitleEntry *found = std::find_if(entries, entries + getTitleEntriesSize(TITLE_CATEGORY_ALL), [&](const TitleEntry &e) { return e.tid == tid; });
     if (found != entries + getTitleEntriesSize(TITLE_CATEGORY_ALL)) {
-        char name[255];
+        char name[1024];
         normalizeFilename(found->name, name);
         sprintf(out, "%s [%s] [%016llx]", name, getFormattedKind(tid), found->tid);
         return true;

@@ -179,7 +179,6 @@ static int downloadFile(const char *download_url, const char *output_path, struc
     progress->handle = curl_easy_init();
     curl_easy_setopt(progress->handle, CURLOPT_FAILONERROR, 1L);
 
-    // Download the tmd and save it in memory, as we need some data from it
     curl_easy_setopt(progress->handle, CURLOPT_WRITEFUNCTION, write_function);
     curl_easy_setopt(progress->handle, CURLOPT_URL, download_url);
     curl_easy_setopt(progress->handle, CURLOPT_NOPROGRESS, 0L);
@@ -198,7 +197,6 @@ static int downloadFile(const char *download_url, const char *output_path, struc
     curl_easy_setopt(progress->handle, CURLOPT_NOSIGNAL, 1);
 
     curl_easy_perform(progress->handle);
-    curl_easy_cleanup(progress->handle);
     fclose(file);
     return 0;
 }
@@ -354,6 +352,7 @@ void downloadTitle(const char *titleID, const char *name, bool decrypt, bool *ca
 
     // cleanup curl stuff
     gtk_widget_destroy(GTK_WIDGET(window));
+    curl_easy_cleanup(progress->handle);
     curl_global_cleanup();
     if (decrypt && !cancelled) {
         char *argv[2] = {"WiiUDownloader", dirname(output_path)};

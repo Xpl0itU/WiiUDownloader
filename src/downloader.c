@@ -100,7 +100,7 @@ int progress_func(void *p,
         dlnow = 1;
     GtkProgressBar *progress_bar = (GtkProgressBar *) p;
 
-    char downloadString[255];
+    char downloadString[1024];
     char speedString[255];
     char downNow[255];
     downloadedSize -= previousDownloadedSize;

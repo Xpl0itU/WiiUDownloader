@@ -102,6 +102,7 @@ GameList::GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos) 
 }
 
 GameList::~GameList() {
+    free(cancelQueue);
 }
 
 bool ask(Glib::ustring question) {
@@ -145,11 +146,13 @@ void GameList::on_download_queue(GdkEventButton *ev) {
     if (queueVector.empty())
         return;
     gameListWindow->set_sensitive(false);
+    *cancelQueue = false;
     for (auto queuedItem : queueVector) {
         char tid[128];
         sprintf(tid, "%016llx", queuedItem);
-        downloadTitle(tid, decryptContents);
+        downloadTitle(tid, decryptContents, cancelQueue);
     }
+    *cancelQueue = false;
     queueVector.clear();
     updateTitles(currentCategory, selectedRegion);
     gameListWindow->set_sensitive(true);
@@ -218,7 +221,9 @@ void GameList::on_gamelist_row_activated(const Gtk::TreePath &treePath, Gtk::Tre
         gameListWindow->set_sensitive(false);
         char selectedTID[128];
         sprintf(selectedTID, "%016llx", infos[row[columns.index]].tid);
-        downloadTitle(selectedTID, decryptContents);
+        *cancelQueue = false;
+        downloadTitle(selectedTID, decryptContents, cancelQueue);
+        *cancelQueue = false;
         gameListWindow->set_sensitive(true);
     }
 }

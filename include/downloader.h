@@ -6,7 +6,7 @@
 extern "C" {
 #endif
 
-void downloadTitle(const char *titleID, bool decrypt);
+void downloadTitle(const char *titleID, bool decrypt, bool *cancelQueue);
 
 #ifdef __cplusplus
 }

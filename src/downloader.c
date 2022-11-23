@@ -41,6 +41,7 @@ static size_t titleSize = 0;
 static size_t downloadedSize = 0;
 static size_t previousDownloadedSize = 0;
 static char totalSize[255];
+static bool *queueCancelled;
 CURL *handle;
 
 static inline uint16_t bswap_16(uint16_t value) {
@@ -80,6 +81,7 @@ static size_t write_function(void *data, size_t size, size_t nmemb, void *userp)
 
 static void cancel_button_clicked(GtkWidget *widget, gpointer data) {
     cancelled = true;
+    *queueCancelled = true;
 }
 
 static void pause_button_clicked(GtkWidget *widget, gpointer data) {
@@ -240,9 +242,13 @@ static char *dirname(char *path) {
     return parent;
 }
 
-void downloadTitle(const char *titleID, bool decrypt) {
+void downloadTitle(const char *titleID, bool decrypt, bool *cancelQueue) {
     // initialize some useful variables
     cancelled = false;
+    queueCancelled = cancelQueue;
+    if(*queueCancelled) {
+        return;
+    }
     char *output_dir = malloc(1024);
     char folder_name[1024];
     getTitleNameFromTid(strtoull(titleID, NULL, 16), folder_name);

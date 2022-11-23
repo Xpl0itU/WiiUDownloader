@@ -65,6 +65,8 @@ private:
     ModelColumns columns;
     const TitleEntry *infos;
 
+    bool *cancelQueue = (bool *)malloc(1);
+
     Glib::RefPtr<Gtk::TreeModelFilter> m_refTreeModelFilter;
     Gtk::SearchBar *searchBar = nullptr;
     Gtk::SearchEntry *searchEntry = nullptr;

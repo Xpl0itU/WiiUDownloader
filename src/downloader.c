@@ -32,8 +32,10 @@ struct MemoryStruct {
 
 static GtkWidget *progress_bar;
 static GtkWidget *window;
+static GtkLabel *gameLabel;
 
 static char currentFile[255] = "None";
+static char currentTitle[1024] = "None";
 static char *selected_dir = NULL;
 static bool cancelled = false;
 static bool paused = false;
@@ -132,9 +134,10 @@ static size_t WriteDataToMemory(void *contents, size_t size, size_t nmemb, void 
 }
 
 static void progressDialog() {
+    gtk_init(NULL, NULL);
     GtkWidget *cancelButton = gtk_button_new();
     GtkWidget *pauseButton = gtk_button_new();
-    gtk_init(NULL, NULL);
+    gameLabel = gtk_label_new(currentTitle);
 
     //Create window
     window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
@@ -154,9 +157,12 @@ static void progressDialog() {
     gtk_button_set_label(GTK_BUTTON(pauseButton), "Pause");
     g_signal_connect(pauseButton, "clicked", G_CALLBACK(pause_button_clicked), NULL);
 
+    gtk_label_set_text(GTK_LABEL(gameLabel), currentTitle);
+
     //Create container for the window
     GtkWidget *main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     gtk_container_add(GTK_CONTAINER(window), main_box);
+    gtk_box_pack_start(GTK_BOX(main_box), gameLabel, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(main_box), progress_bar, FALSE, FALSE, 0);
     GtkWidget *button_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
     gtk_container_add(GTK_CONTAINER(main_box), button_box);
@@ -235,10 +241,11 @@ static char *dirname(char *path) {
     return parent;
 }
 
-void downloadTitle(const char *titleID, bool decrypt, bool *cancelQueue) {
+void downloadTitle(const char *titleID, const char *name, bool decrypt, bool *cancelQueue) {
     // initialize some useful variables
     cancelled = false;
     queueCancelled = cancelQueue;
+    strcpy(currentTitle, name);
     if (*queueCancelled) {
         return;
     }
@@ -315,6 +322,7 @@ void downloadTitle(const char *titleID, bool decrypt, bool *cancelQueue) {
     downloadedSize = 0;
     previousDownloadedSize = 0;
     progressDialog();
+    gtk_label_set_text(GTK_LABEL(gameLabel), currentTitle);
     for (size_t i = 0; i < content_count; i++) {
         titleSize += bswap_64(tmd_data->contents[i].size);
     }

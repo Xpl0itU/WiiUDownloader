@@ -172,7 +172,6 @@ bool generateTicket(const char *path, uint64_t titleID, const char *titleKey, ui
         fwrite(&section, 1, sizeof(TICKET_HEADER_SECTION), tik);
     }
 
-    fwrite(NULL, 0, 0, tik);
     fclose(tik);
     return true;
 }
@@ -214,7 +213,6 @@ bool generateCert(const char *path) {
         return false;
 
     fwrite(&cetk, 1, sizeof(CETK), cert);
-    fwrite(NULL, 0, 0, cert);
     fclose(cert);
     return true;
 }

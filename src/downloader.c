@@ -32,7 +32,7 @@ struct MemoryStruct {
 
 static GtkWidget *progress_bar;
 static GtkWidget *window;
-static GtkLabel *gameLabel;
+static GtkWidget *gameLabel;
 
 static char currentFile[255] = "None";
 static char currentTitle[1024] = "None";

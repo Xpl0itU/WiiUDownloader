@@ -48,24 +48,3 @@ bool getUpdateFromBaseGame(uint64_t titleID, uint64_t *out) {
     }
     return false;
 }
-
-static bool convertToUint64(const uint8_t buffer[], size_t size, uint64_t &value) {
-    if (size > sizeof(uint64_t)) {
-        return false;
-    }
-    value = 0;
-    for (size_t i = 0; i < size; i++) {
-        value = (value << 8) | buffer[i];
-    }
-    return true;
-}
-
-uint64_t getContentSize(int contentIndex, uint8_t *tmd) {
-    uint64_t contentDataLoc = 0xB04 + (0x30 * contentIndex);
-
-    uint8_t size[8] = {tmd[contentDataLoc + 0x8], tmd[contentDataLoc + 0x9], tmd[contentDataLoc + 0xA], tmd[contentDataLoc + 0xB],
-                       tmd[contentDataLoc + 0xC], tmd[contentDataLoc + 0xD], tmd[contentDataLoc + 0xE], tmd[contentDataLoc + 0xF]};
-    uint64_t finalSize = 0;
-    convertToUint64(size, 8, finalSize);
-    return finalSize;
-}

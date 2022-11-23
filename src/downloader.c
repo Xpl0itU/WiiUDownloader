@@ -13,8 +13,8 @@
 #include <cdecrypt/cdecrypt.h>
 #include <downloader.h>
 #include <keygen.h>
-#include <tmd.h>
 #include <nfd.h>
+#include <tmd.h>
 #include <utils.h>
 
 #include <curl/curl.h>
@@ -53,14 +53,7 @@ static inline uint32_t bswap_32(uint32_t __x) {
 }
 
 inline uint64_t bswap_64(uint64_t x) {
-     return (((x & 0xff00000000000000ull) >> 56)
-          | ((x & 0x00ff000000000000ull) >> 40)
-          | ((x & 0x0000ff0000000000ull) >> 24)
-          | ((x & 0x000000ff00000000ull) >> 8)
-          | ((x & 0x00000000ff000000ull) << 8)
-          | ((x & 0x0000000000ff0000ull) << 24)
-          | ((x & 0x000000000000ff00ull) << 40)
-          | ((x & 0x00000000000000ffull) << 56));
+    return (((x & 0xff00000000000000ull) >> 56) | ((x & 0x00ff000000000000ull) >> 40) | ((x & 0x0000ff0000000000ull) >> 24) | ((x & 0x000000ff00000000ull) >> 8) | ((x & 0x00000000ff000000ull) << 8) | ((x & 0x0000000000ff0000ull) << 24) | ((x & 0x000000000000ff00ull) << 40) | ((x & 0x00000000000000ffull) << 56));
 }
 
 static char *readable_fs(double size, char *buf) {
@@ -246,7 +239,7 @@ void downloadTitle(const char *titleID, bool decrypt, bool *cancelQueue) {
     // initialize some useful variables
     cancelled = false;
     queueCancelled = cancelQueue;
-    if(*queueCancelled) {
+    if (*queueCancelled) {
         return;
     }
     char *output_dir = malloc(1024);
@@ -308,7 +301,7 @@ void downloadTitle(const char *titleID, bool decrypt, bool *cancelQueue) {
     fclose(tmd_file);
     printf("Finished downloading \"%s\".\n", output_path);
 
-    TMD *tmd_data = (TMD*)tmd_mem.memory;
+    TMD *tmd_data = (TMD *) tmd_mem.memory;
 
     uint16_t title_version = tmd_data->title_version;
     snprintf(output_path, sizeof(output_path), "%s/%s", output_dir, "title.tik");

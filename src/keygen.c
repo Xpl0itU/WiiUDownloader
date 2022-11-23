@@ -26,7 +26,7 @@ static void generateHeader(bool isTicket, NUS_HEADER *out) {
     memmove(out->app, "WiiUDownloader", strlen("WiiUDownloader"));
     memmove(out->app_version, "v1.11", strlen("v1.11"));
 
-    if(isTicket)
+    if (isTicket)
         memmove(out->file_type, "Ticket", strlen("Ticket"));
     else
         memmove(out->file_type, "Certificate", strlen("Certificate"));
@@ -209,7 +209,7 @@ bool generateCert(const char *path) {
     cetk.cert3.unknown_01 = 0x00010001;
 
     FILE *cert = fopen(path, "wb");
-    if(cert == NULL)
+    if (cert == NULL)
         return false;
 
     fwrite(&cetk, 1, sizeof(CETK), cert);

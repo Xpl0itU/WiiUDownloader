@@ -106,8 +106,7 @@ GameList::~GameList() {
 }
 
 bool ask(Glib::ustring question) {
-    Glib::ustring msg = Glib::ustring(question);
-    Gtk::MessageDialog dlg(msg, true, Gtk::MESSAGE_QUESTION, Gtk::BUTTONS_YES_NO, true);
+    Gtk::MessageDialog dlg(question, true, Gtk::MESSAGE_QUESTION, Gtk::BUTTONS_YES_NO, true);
     return dlg.run() == Gtk::RESPONSE_YES;
 }
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <gtkmm.h>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -73,7 +74,7 @@ private:
 
     bool decryptContents = false;
 
-    std::vector<uint64_t> queueVector = {};
+    std::map<uint64_t, const char *> queueMap = {};
 
     TITLE_CATEGORY currentCategory = TITLE_CATEGORY_GAME;
     Glib::RefPtr<Gtk::ListStore> treeModel;

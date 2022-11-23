@@ -15,7 +15,7 @@ void GameList::updateTitles(TITLE_CATEGORY cat, MCPRegion reg) {
         hex(infos[i].tid, 16, id);
         Gtk::TreeModel::Row row = *(treeModel->append());
         row[columns.index] = i;
-        row[columns.toQueue] = queueVector.empty() ? false : std::binary_search(queueVector.begin(), queueVector.end(), infos[i].tid);
+        row[columns.toQueue] = queueMap.empty() ? false : queueMap.find(infos[i].tid) != queueMap.end();
         row[columns.name] = infos[i].name;
         row[columns.region] = Glib::ustring::format(getFormattedRegion((MCPRegion) infos[i].region));
         row[columns.kind] = Glib::ustring::format(getFormattedKind(infos[i].tid));
@@ -142,17 +142,17 @@ void GameList::on_decrypt_selected(Gtk::ToggleButton *button) {
 }
 
 void GameList::on_download_queue(GdkEventButton *ev) {
-    if (queueVector.empty())
+    if (queueMap.empty())
         return;
     gameListWindow->set_sensitive(false);
     *cancelQueue = false;
-    for (auto queuedItem : queueVector) {
+    for (auto queuedItem : queueMap) {
         char tid[128];
-        sprintf(tid, "%016llx", queuedItem);
+        sprintf(tid, "%016llx", queuedItem.first);
         downloadTitle(tid, decryptContents, cancelQueue);
     }
     *cancelQueue = false;
-    queueVector.clear();
+    queueMap.clear();
     updateTitles(currentCategory, selectedRegion);
     gameListWindow->set_sensitive(true);
 }
@@ -175,20 +175,20 @@ void GameList::on_add_to_queue(GdkEventButton *ev) {
     if (row) {
         row[columns.toQueue] = !row[columns.toQueue];
         if (row[columns.toQueue]) {
-            queueVector.push_back(infos[row[columns.index]].tid);
+            queueMap.emplace(std::pair(infos[row[columns.index]].tid, infos[row[columns.index]].name));
             uint64_t updateTID = 0;
             if (getUpdateFromBaseGame(infos[row[columns.index]].tid, &updateTID))
                 if (ask("Update detected.\nDo you want to add the update to the queue too?"))
-                    queueVector.push_back(updateTID);
+                    queueMap.emplace(std::pair(updateTID, infos[row[columns.index]].name));
             addToQueueButton->set_label("Remove from queue");
         } else {
-            queueVector.erase(std::remove(queueVector.begin(), queueVector.end(), infos[row[columns.index]].tid), queueVector.end());
+            queueMap.erase(infos[row[columns.index]].tid);
             uint64_t updateTID = 0;
             if (getUpdateFromBaseGame(infos[row[columns.index]].tid, &updateTID)) {
-                bool updateInQueue = queueVector.empty() ? false : std::binary_search(queueVector.begin(), queueVector.end(), updateTID);
+                bool updateInQueue = queueMap.empty() ? false : queueMap.find(updateTID) != queueMap.end();
                 if (updateInQueue)
                     if (ask("Update detected.\nDo you want to remove the update from the queue too?"))
-                        queueVector.erase(std::remove(queueVector.begin(), queueVector.end(), updateTID), queueVector.end());
+                        queueMap.erase(updateTID);
             }
             addToQueueButton->set_label("Add to queue");
         }

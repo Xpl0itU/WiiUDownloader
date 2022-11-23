@@ -360,4 +360,5 @@ void downloadTitle(const char *titleID, const char *name, bool decrypt, bool *ca
         cdecrypt(2, argv);
     }
     free(output_dir);
+    free(progress);
 }

@@ -195,6 +195,10 @@ static int downloadFile(const char *download_url, const char *output_path, struc
     curl_easy_setopt(progress->handle, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
     curl_easy_setopt(progress->handle, CURLOPT_NOSIGNAL, 1);
 
+    curl_easy_setopt(progress->handle, CURLOPT_TCP_KEEPALIVE, 1L);
+    curl_easy_setopt(progress->handle, CURLOPT_TCP_KEEPIDLE, 120L);
+    curl_easy_setopt(progress->handle, CURLOPT_TCP_KEEPINTVL, 60L);
+
     curl_easy_perform(progress->handle);
     fclose(file);
     return 0;

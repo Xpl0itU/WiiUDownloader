@@ -151,6 +151,7 @@ void GameList::on_download_queue(GdkEventButton *ev) {
         downloadTitle(tid, decryptContents);
     }
     queueVector.clear();
+    updateTitles(currentCategory, selectedRegion);
     gameListWindow->set_sensitive(true);
 }
 

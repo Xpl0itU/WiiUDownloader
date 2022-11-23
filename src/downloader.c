@@ -25,7 +25,11 @@ struct MemoryStruct {
     size_t size;
 };
 
-static GtkWidget *progress_bar;
+struct CURLProgress {
+    GtkWidget *progress_bar;
+    CURL *handle;
+};
+
 static GtkWidget *window;
 static GtkWidget *gameLabel;
 
@@ -39,7 +43,6 @@ static size_t downloadedSize = 0;
 static size_t previousDownloadedSize = 0;
 static char totalSize[255];
 static bool *queueCancelled;
-CURL *handle;
 
 static inline uint16_t bswap_16(uint16_t value) {
     return (uint16_t) ((0x00FF & (value >> 8)) | (0xFF00 & (value << 8)));
@@ -75,11 +78,12 @@ static void cancel_button_clicked(GtkWidget *widget, gpointer data) {
 }
 
 static void pause_button_clicked(GtkWidget *widget, gpointer data) {
+    struct CURLProgress *progress = (struct CURLProgress *) data;
     if (paused) {
-        curl_easy_pause(handle, CURLPAUSE_CONT);
+        curl_easy_pause(progress->handle, CURLPAUSE_CONT);
         gtk_button_set_label(GTK_BUTTON(widget), "Pause");
     } else {
-        curl_easy_pause(handle, CURLPAUSE_ALL);
+        curl_easy_pause(progress->handle, CURLPAUSE_ALL);
         gtk_button_set_label(GTK_BUTTON(widget), "Resume");
     }
     paused = !paused;
@@ -93,7 +97,7 @@ int progress_func(void *p,
         dltotal = 1;
     if (dlnow == 0)
         dlnow = 1;
-    GtkProgressBar *progress_bar = (GtkProgressBar *) p;
+    struct CURLProgress *progress = (struct CURLProgress *) p;
 
     char downloadString[1024];
     char speedString[255];
@@ -102,13 +106,13 @@ int progress_func(void *p,
     downloadedSize += dlnow;
     readable_fs(downloadedSize, downNow);
     double speed;
-    curl_easy_getinfo(handle, CURLINFO_SPEED_DOWNLOAD, &speed);
+    curl_easy_getinfo(progress->handle, CURLINFO_SPEED_DOWNLOAD, &speed);
     readable_fs(speed, speedString);
     strcat(speedString, "/s");
     sprintf(downloadString, "Downloading %s (%s/%s) (%s)", currentFile, downNow, totalSize, speedString);
 
-    gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progress_bar), (double) downloadedSize / (double) titleSize);
-    gtk_progress_bar_set_text(GTK_PROGRESS_BAR(progress_bar), downloadString);
+    gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progress->progress_bar), (double) downloadedSize / (double) titleSize);
+    gtk_progress_bar_set_text(GTK_PROGRESS_BAR(progress->progress_bar), downloadString);
     // force redraw
     while (gtk_events_pending())
         gtk_main_iteration();
@@ -128,7 +132,7 @@ static size_t WriteDataToMemory(void *contents, size_t size, size_t nmemb, void 
     return realsize;
 }
 
-static void progressDialog() {
+static void progressDialog(struct CURLProgress *progress) {
     gtk_init(NULL, NULL);
     GtkWidget *cancelButton = gtk_button_new();
     GtkWidget *pauseButton = gtk_button_new();
@@ -142,15 +146,15 @@ static void progressDialog() {
     gtk_window_set_modal(GTK_WINDOW(window), TRUE);
 
     //Create progress bar
-    progress_bar = gtk_progress_bar_new();
-    gtk_progress_bar_set_show_text(GTK_PROGRESS_BAR(progress_bar), TRUE);
-    gtk_progress_bar_set_text(GTK_PROGRESS_BAR(progress_bar), "Downloading");
+    progress->progress_bar = gtk_progress_bar_new();
+    gtk_progress_bar_set_show_text(GTK_PROGRESS_BAR(progress->progress_bar), TRUE);
+    gtk_progress_bar_set_text(GTK_PROGRESS_BAR(progress->progress_bar), "Downloading");
 
     gtk_button_set_label(GTK_BUTTON(cancelButton), "Cancel");
     g_signal_connect(cancelButton, "clicked", G_CALLBACK(cancel_button_clicked), NULL);
 
     gtk_button_set_label(GTK_BUTTON(pauseButton), "Pause");
-    g_signal_connect(pauseButton, "clicked", G_CALLBACK(pause_button_clicked), NULL);
+    g_signal_connect(pauseButton, "clicked", G_CALLBACK(pause_button_clicked), progress);
 
     gtk_label_set_text(GTK_LABEL(gameLabel), currentTitle);
 
@@ -158,7 +162,7 @@ static void progressDialog() {
     GtkWidget *main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     gtk_container_add(GTK_CONTAINER(window), main_box);
     gtk_box_pack_start(GTK_BOX(main_box), gameLabel, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(main_box), progress_bar, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(main_box), progress->progress_bar, FALSE, FALSE, 0);
     GtkWidget *button_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
     gtk_container_add(GTK_CONTAINER(main_box), button_box);
     gtk_box_pack_end(GTK_BOX(button_box), cancelButton, FALSE, FALSE, 0);
@@ -167,34 +171,34 @@ static void progressDialog() {
     gtk_widget_show_all(window);
 }
 
-static int downloadFile(const char *download_url, const char *output_path) {
+static int downloadFile(const char *download_url, const char *output_path, struct CURLProgress *progress) {
     previousDownloadedSize = 0;
     FILE *file = fopen(output_path, "wb");
     if (file == NULL)
         return 1;
-    handle = curl_easy_init();
-    curl_easy_setopt(handle, CURLOPT_FAILONERROR, 1L);
+    progress->handle = curl_easy_init();
+    curl_easy_setopt(progress->handle, CURLOPT_FAILONERROR, 1L);
 
     // Download the tmd and save it in memory, as we need some data from it
-    curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, write_function);
-    curl_easy_setopt(handle, CURLOPT_URL, download_url);
-    curl_easy_setopt(handle, CURLOPT_NOPROGRESS, 0L);
-    curl_easy_setopt(handle, CURLOPT_XFERINFOFUNCTION, progress_func);
-    curl_easy_setopt(handle, CURLOPT_PROGRESSDATA, progress_bar);
+    curl_easy_setopt(progress->handle, CURLOPT_WRITEFUNCTION, write_function);
+    curl_easy_setopt(progress->handle, CURLOPT_URL, download_url);
+    curl_easy_setopt(progress->handle, CURLOPT_NOPROGRESS, 0L);
+    curl_easy_setopt(progress->handle, CURLOPT_XFERINFOFUNCTION, progress_func);
+    curl_easy_setopt(progress->handle, CURLOPT_PROGRESSDATA, progress);
 
-    curl_easy_setopt(handle, CURLOPT_WRITEDATA, file);
+    curl_easy_setopt(progress->handle, CURLOPT_WRITEDATA, file);
 
-    curl_easy_setopt(handle, CURLOPT_SSL_VERIFYPEER, FALSE);
-    curl_easy_setopt(handle, CURLOPT_SSL_VERIFYHOST, FALSE);
-    curl_easy_setopt(handle, CURLOPT_ACCEPTTIMEOUT_MS, 5);
-    curl_easy_setopt(handle, CURLOPT_TCP_KEEPALIVE, 1L);
-    curl_easy_setopt(handle, CURLOPT_TCP_NODELAY, 1);
-    curl_easy_setopt(handle, CURLOPT_CONNECTTIMEOUT, 5);
-    curl_easy_setopt(handle, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
-    curl_easy_setopt(handle, CURLOPT_NOSIGNAL, 1);
+    curl_easy_setopt(progress->handle, CURLOPT_SSL_VERIFYPEER, FALSE);
+    curl_easy_setopt(progress->handle, CURLOPT_SSL_VERIFYHOST, FALSE);
+    curl_easy_setopt(progress->handle, CURLOPT_ACCEPTTIMEOUT_MS, 5);
+    curl_easy_setopt(progress->handle, CURLOPT_TCP_KEEPALIVE, 1L);
+    curl_easy_setopt(progress->handle, CURLOPT_TCP_NODELAY, 1);
+    curl_easy_setopt(progress->handle, CURLOPT_CONNECTTIMEOUT, 5);
+    curl_easy_setopt(progress->handle, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
+    curl_easy_setopt(progress->handle, CURLOPT_NOSIGNAL, 1);
 
-    curl_easy_perform(handle);
-    curl_easy_cleanup(handle);
+    curl_easy_perform(progress->handle);
+    curl_easy_cleanup(progress->handle);
     fclose(file);
     return 0;
 }
@@ -316,7 +320,8 @@ void downloadTitle(const char *titleID, const char *name, bool decrypt, bool *ca
     titleSize = 0;
     downloadedSize = 0;
     previousDownloadedSize = 0;
-    progressDialog();
+    struct CURLProgress *progress = (struct CURLProgress *) malloc(sizeof(struct CURLProgress));
+    progressDialog(progress);
     gtk_label_set_text(GTK_LABEL(gameLabel), currentTitle);
     for (size_t i = 0; i < content_count; i++) {
         titleSize += bswap_64(tmd_data->contents[i].size);
@@ -332,14 +337,14 @@ void downloadTitle(const char *titleID, const char *name, bool decrypt, bool *ca
             snprintf(output_path, sizeof(output_path), "%s/%08X.app", output_dir, id);
             snprintf(download_url, 78, "%s/%08X", base_url, id);
             sprintf(currentFile, "%08X.app", id);
-            downloadFile(download_url, output_path);
+            downloadFile(download_url, output_path, progress);
 
             if (tmd_data->contents[i].type & TMD_CONTENT_TYPE_HASHED) {
                 // add a curl handle for the hash file (.h3 file)
                 snprintf(output_path, sizeof(output_path), "%s/%08X.h3", output_dir, id);
                 snprintf(download_url, 81, "%s/%08X.h3", base_url, id);
                 sprintf(currentFile, "%08X.h3", id);
-                downloadFile(download_url, output_path);
+                downloadFile(download_url, output_path, progress);
             }
         }
     }

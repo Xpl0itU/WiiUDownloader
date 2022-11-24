@@ -1,3 +1,4 @@
+#include "utils.h"
 #include <mbedtls/aes.h>
 #include <mbedtls/md5.h>
 #include <mbedtls/pkcs5.h>
@@ -15,6 +16,18 @@ static const uint8_t commonKey[16] = {0xd7, 0xb0, 0x04, 0x02, 0x65, 0x9b, 0xa2, 
 
 static const uint8_t magic_header[10] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09};
 
+uint8_t *byteswap_array(uint8_t *in, uint32_t len) {
+    uint8_t *out = in;
+    if (out && len) {
+        while (len) {
+            *in = BSWAP_8(*in);
+            len--;
+            in++;
+        }
+    }
+    return out;
+}
+
 static void rndBytes(char *out, size_t size) {
     while (--size) {
         *out++ = rand() % 256;
@@ -31,8 +44,8 @@ static void generateHeader(bool isTicket, NUS_HEADER *out) {
     else
         memmove(out->file_type, "Certificate", strlen("Certificate"));
 
-    out->sig_type = 0x00010004;
-    out->meta_version = 0x01;
+    out->sig_type = bswap_32(0x00010004);
+    out->meta_version = BSWAP_8(0x01);
     rndBytes(out->rand_area, sizeof(out->rand_area));
 }
 
@@ -127,28 +140,31 @@ bool generateTicket(const char *path, uint64_t titleID, const char *titleKey, ui
 
     hex2bytes(titleKey, ticket.key);
 
+    memcpy(ticket.key, byteswap_array(ticket.key, 0x10), 0x10);
+
     generateHeader(true, &ticket.header);
     rndBytes(&ticket.ecdsa_pubkey, sizeof(ticket.ecdsa_pubkey));
     rndBytes(&ticket.ticket_id, sizeof(uint64_t));
     ticket.ticket_id &= 0x0000FFFFFFFFFFFF;
     ticket.ticket_id |= 0x0005000000000000;
+    ticket.ticket_id = bswap_64(ticket.ticket_id);
 
     memmove(ticket.issuer, "Root-CA00000003-XS0000000c", strlen("Root-CA00000003-XS0000000c"));
 
-    ticket.version = 0x01;
-    ticket.tid = titleID;
-    ticket.title_version = titleVersion;
-    ticket.property_mask = 0xFFFF;
+    ticket.version = BSWAP_8(0x01);
+    ticket.tid = bswap_64(titleID);
+    ticket.title_version = bswap_16(titleVersion);
+    ticket.property_mask = bswap_16(0xFFFF);
 
     // We support zero sections only
-    ticket.header_version = 0x0001;
+    ticket.header_version = bswap_16(0x0001);
     if (!isDLC(ticket.tid))
-        ticket.total_hdr_size = 0x00000014;
+        ticket.total_hdr_size = bswap_32(0x00000014);
     else {
-        ticket.total_hdr_size = 0x000000AC;
-        ticket.sect_hdr_offset = 0x00000014;
-        ticket.num_sect_headers = 0x0001;
-        ticket.num_sect_header_entry_size = 0x0014;
+        ticket.total_hdr_size = bswap_32(0x000000AC);
+        ticket.sect_hdr_offset = bswap_32(0x00000014);
+        ticket.num_sect_headers = bswap_16(0x0001);
+        ticket.num_sect_header_entry_size = bswap_16(0x0014);
     }
 
     FILE *tik = fopen(path, "wb");
@@ -157,17 +173,17 @@ bool generateTicket(const char *path, uint64_t titleID, const char *titleKey, ui
 
     fwrite(&ticket, 1, sizeof(TICKET), tik);
 
-    if (isDLC(ticket.tid)) {
+    if (isDLC(titleID)) {
         TICKET_HEADER_SECTION section;
         memset(&section, 0x00, sizeof(TICKET_HEADER_SECTION));
 
-        section.unk01 = 0x00000028;
-        section.unk02 = 0x00000001;
-        section.unk03 = 0x00000084;
-        section.unk04 = 0x00000084;
-        section.unk05 = 0x0003;
+        section.unk01 = bswap_32(0x00000028);
+        section.unk02 = bswap_32(0x00000001);
+        section.unk03 = bswap_32(0x00000084);
+        section.unk04 = bswap_32(0x00000084);
+        section.unk05 = bswap_16(0x0003);
         for (int i = 0; i < 8; i++)
-            section.unk06[i] = 0xFFFFFFFF;
+            section.unk06[i] = bswap_32(0xFFFFFFFF);
 
         fwrite(&section, 1, sizeof(TICKET_HEADER_SECTION), tik);
     }
@@ -197,16 +213,16 @@ bool generateCert(const char *path) {
     rndBytes(&cetk.cert2.cert, sizeof(cetk.cert2.cert));
     rndBytes(&cetk.cert3.sig, sizeof(cetk.cert3.sig));
 
-    cetk.cert1.version = 0x01;
-    cetk.cert1.unknown_01 = 0x00010001;
-    cetk.cert1.unknown_02 = 0x00010003;
+    cetk.cert1.version = BSWAP_8(0x01);
+    cetk.cert1.unknown_01 = bswap_32(0x00010001);
+    cetk.cert1.unknown_02 = bswap_32(0x00010003);
 
-    cetk.cert2.version = 0x01;
-    cetk.cert2.unknown_01 = 0x00010001;
-    cetk.cert2.unknown_02 = 0x00010004;
+    cetk.cert2.version = BSWAP_8(0x01);
+    cetk.cert2.unknown_01 = bswap_32(0x00010001);
+    cetk.cert2.unknown_02 = bswap_32(0x00010004);
 
-    cetk.cert3.version = 0x01;
-    cetk.cert3.unknown_01 = 0x00010001;
+    cetk.cert3.version = BSWAP_8(0x01);
+    cetk.cert3.unknown_01 = bswap_32(0x00010001);
 
     FILE *cert = fopen(path, "wb");
     if (cert == NULL)

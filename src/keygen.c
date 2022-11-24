@@ -17,15 +17,15 @@ static const uint8_t commonKey[16] = {0xd7, 0xb0, 0x04, 0x02, 0x65, 0x9b, 0xa2, 
 static const uint8_t magic_header[10] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09};
 
 uint8_t *byteswap_array(uint8_t *in, uint32_t len) {
-	uint8_t *out = in;
-	if (out && len) {
-		while(len) {
-			*in = BSWAP_8(*in);
-			len--;
-			in++;
-		}
-	}
-	return out;
+    uint8_t *out = in;
+    if (out && len) {
+        while (len) {
+            *in = BSWAP_8(*in);
+            len--;
+            in++;
+        }
+    }
+    return out;
 }
 
 static void rndBytes(char *out, size_t size) {

@@ -11,6 +11,8 @@ extern "C" {
 bool getTitleNameFromTid(uint64_t tid, char *out);
 bool getUpdateFromBaseGame(uint64_t titleID, uint64_t *out);
 
+#define	BSWAP_8(x)	((x) & 0xff)
+
 inline uint16_t bswap_16(uint16_t value) {
     return (uint16_t) ((0x00FF & (value >> 8)) | (0xFF00 & (value << 8)));
 }

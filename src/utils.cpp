@@ -31,14 +31,13 @@ bool getTitleNameFromTid(uint64_t tid, char *out) {
         normalizeFilename(found->name, name);
         sprintf(out, "%s [%s] [%016llx]", name, getFormattedKind(tid), found->tid);
         return true;
-    } else {
-        sprintf(out, "Unknown");
     }
+    sprintf(out, "Unknown");
     return false;
 }
 
 bool getUpdateFromBaseGame(uint64_t titleID, uint64_t *out) {
-    if (isUpdate(titleID))
+    if (!isGame(titleID))
         return false;
     uint64_t updateTID = titleID | 0x0000000E00000000;
     char name[255];

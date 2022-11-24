@@ -295,7 +295,7 @@ void downloadTitle(const char *titleID, const char *name, bool decrypt, bool *ca
 
     TMD *tmd_data = (TMD *) tmd_mem.memory;
 
-    uint16_t title_version = tmd_data->title_version;
+    uint16_t title_version = bswap_16(tmd_data->title_version);
     snprintf(output_path, sizeof(output_path), "%s/%s", output_dir, "title.tik");
     char titleKey[128];
     generateKey(titleID, titleKey);

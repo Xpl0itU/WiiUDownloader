@@ -27,11 +27,11 @@ struct MemoryStruct {
 
 struct CURLProgress {
     GtkWidget *progress_bar;
+    GtkWidget *gameLabel;
     CURL *handle;
 };
 
 static GtkWidget *window;
-static GtkWidget *gameLabel;
 
 static char currentFile[255] = "None";
 static char currentTitle[1024] = "None";
@@ -124,7 +124,7 @@ static void progressDialog(struct CURLProgress *progress) {
     gtk_init(NULL, NULL);
     GtkWidget *cancelButton = gtk_button_new();
     GtkWidget *pauseButton = gtk_button_new();
-    gameLabel = gtk_label_new(currentTitle);
+    progress->gameLabel = gtk_label_new(currentTitle);
 
     //Create window
     window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
@@ -144,12 +144,12 @@ static void progressDialog(struct CURLProgress *progress) {
     gtk_button_set_label(GTK_BUTTON(pauseButton), "Pause");
     g_signal_connect(pauseButton, "clicked", G_CALLBACK(pause_button_clicked), progress);
 
-    gtk_label_set_text(GTK_LABEL(gameLabel), currentTitle);
+    gtk_label_set_text(GTK_LABEL(progress->gameLabel), currentTitle);
 
     //Create container for the window
     GtkWidget *main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     gtk_container_add(GTK_CONTAINER(window), main_box);
-    gtk_box_pack_start(GTK_BOX(main_box), gameLabel, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(main_box), progress->gameLabel, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(main_box), progress->progress_bar, FALSE, FALSE, 0);
     GtkWidget *button_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
     gtk_container_add(GTK_CONTAINER(main_box), button_box);
@@ -312,7 +312,6 @@ void downloadTitle(const char *titleID, const char *name, bool decrypt, bool *ca
     struct CURLProgress *progress = (struct CURLProgress *) malloc(sizeof(struct CURLProgress));
     progress->handle = curl_easy_init();
     progressDialog(progress);
-    gtk_label_set_text(GTK_LABEL(gameLabel), currentTitle);
     for (size_t i = 0; i < content_count; i++) {
         titleSize += bswap_64(tmd_data->contents[i].size);
     }

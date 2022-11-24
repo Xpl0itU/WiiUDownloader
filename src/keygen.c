@@ -143,8 +143,8 @@ bool generateTicket(const char *path, uint64_t titleID, const char *titleKey, ui
     memcpy(ticket.key, byteswap_array(ticket.key, 0x10), 0x10);
 
     generateHeader(true, &ticket.header);
-    rndBytes(&ticket.ecdsa_pubkey, sizeof(ticket.ecdsa_pubkey));
-    rndBytes(&ticket.ticket_id, sizeof(uint64_t));
+    rndBytes((char *)&ticket.ecdsa_pubkey, sizeof(ticket.ecdsa_pubkey));
+    rndBytes((char *)&ticket.ticket_id, sizeof(uint64_t));
     ticket.ticket_id &= 0x0000FFFFFFFFFFFF;
     ticket.ticket_id |= 0x0005000000000000;
     ticket.ticket_id = bswap_64(ticket.ticket_id);
@@ -207,11 +207,11 @@ bool generateCert(const char *path) {
     memmove(cetk.cert3.issuer, "Root-CA00000003", strlen("Root-CA00000003"));
     memmove(cetk.cert3.type, "XS0000000c", strlen("XS0000000c"));
 
-    rndBytes(&cetk.cert1.sig, sizeof(cetk.cert1.sig));
-    rndBytes(&cetk.cert1.cert, sizeof(cetk.cert1.cert));
-    rndBytes(&cetk.cert2.sig, sizeof(cetk.cert2.sig));
-    rndBytes(&cetk.cert2.cert, sizeof(cetk.cert2.cert));
-    rndBytes(&cetk.cert3.sig, sizeof(cetk.cert3.sig));
+    rndBytes((char *)&cetk.cert1.sig, sizeof(cetk.cert1.sig));
+    rndBytes((char *)&cetk.cert1.cert, sizeof(cetk.cert1.cert));
+    rndBytes((char *)&cetk.cert2.sig, sizeof(cetk.cert2.sig));
+    rndBytes((char *)&cetk.cert2.cert, sizeof(cetk.cert2.cert));
+    rndBytes((char *)&cetk.cert3.sig, sizeof(cetk.cert3.sig));
 
     cetk.cert1.version = BSWAP_8(0x01);
     cetk.cert1.unknown_01 = bswap_32(0x00010001);

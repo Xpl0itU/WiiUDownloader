@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.11
+Name=WiiUDownloader
+Comment=Allows to download encrypted wiiu files from nintendo's official servers
+Exec=/usr/local/bin/WiiUDownloader
+Path=/usr/local/bin
+Terminal=false
+Type=Application
+Categories=Utility;

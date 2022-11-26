@@ -7,10 +7,8 @@ depends=('mbedtls' 'gtkmm3' 'curl')
 makedepends=('cmake')
 
 build() {
-    mkdir -p "../build"
-    cd "../build"
-    cmake ..
-    make
+    cd ".."
+    python3 build.py
 }
 
 package() {

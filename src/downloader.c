@@ -199,7 +199,7 @@ static int downloadFile(const char *download_url, const char *output_path, struc
     long httpCode = 0;
     curl_easy_getinfo(progress->handle, CURLINFO_RESPONSE_CODE, &httpCode);
 
-    if(httpCode != 200 || curlCode != CURLE_OK) {
+    if(httpCode != 200 || curlCode != CURLE_OK && curlCode != CURLE_WRITE_ERROR) {
         fclose(file);
         return 1;
     }
@@ -298,8 +298,6 @@ void downloadTitle(const char *titleID, const char *name, bool decrypt, bool *ca
     CURLcode tmdCode = curl_easy_perform(tmd_handle);
     long httpCode = 0;
     curl_easy_getinfo(tmd_handle, CURLINFO_RESPONSE_CODE, &httpCode);
-
-    fprintf(stderr, "httpCode: %li\n", httpCode);
 
     if(httpCode != 200 || tmdCode != CURLE_OK) {
         showError("Error downloading ticket.\nPlease check your internet connection\nOr your router might be blocking the NUS server");

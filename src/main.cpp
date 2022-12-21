@@ -3,9 +3,18 @@
 
 #include <fcntl.h>
 
+#ifdef _WIN32
+    #include <windows.h>
+#endif
+
 #include <GameList.h>
 
 int main(int argc, char *argv[]) {
+#ifdef _WIN32
+    FreeConsole();
+    if (AttachConsole(ATTACH_PARENT_PROCESS))
+        AllocConsole();
+#endif
     close(STDOUT_FILENO);
     close(STDERR_FILENO);
 

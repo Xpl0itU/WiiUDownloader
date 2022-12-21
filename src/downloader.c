@@ -120,6 +120,13 @@ static size_t WriteDataToMemory(void *contents, size_t size, size_t nmemb, void 
     return realsize;
 }
 
+static void showError(const char *text) {
+    GtkWidget *dlg = gtk_message_dialog_new(NULL, GTK_DIALOG_MODAL, GTK_MESSAGE_ERROR,
+                                            GTK_BUTTONS_OK, text);
+    gtk_dialog_run(GTK_DIALOG(dlg));
+    gtk_widget_destroy(dlg);
+}
+
 static void progressDialog(struct CURLProgress *progress) {
     gtk_init(NULL, NULL);
     GtkWidget *cancelButton = gtk_button_new();
@@ -184,8 +191,19 @@ static int downloadFile(const char *download_url, const char *output_path, struc
     curl_easy_setopt(progress->handle, CURLOPT_TCP_KEEPALIVE, 1L);
     curl_easy_setopt(progress->handle, CURLOPT_TCP_KEEPIDLE, 120L);
     curl_easy_setopt(progress->handle, CURLOPT_TCP_KEEPINTVL, 60L);
+    
+    curl_easy_setopt(progress->handle, CURLOPT_FAILONERROR, 1L);
 
-    curl_easy_perform(progress->handle);
+    CURLcode curlCode = curl_easy_perform(progress->handle);
+
+    long httpCode = 0;
+    curl_easy_getinfo(progress->handle, CURLINFO_RESPONSE_CODE, &httpCode);
+
+    if(httpCode != 200 || curlCode != CURLE_OK) {
+        fclose(file);
+        return 1;
+    }
+
     fclose(file);
     return 0;
 }
@@ -277,7 +295,17 @@ void downloadTitle(const char *titleID, const char *name, bool decrypt, bool *ca
     tmd_mem.memory = malloc(0);
     tmd_mem.size = 0;
     curl_easy_setopt(tmd_handle, CURLOPT_WRITEDATA, (void *) &tmd_mem);
-    curl_easy_perform(tmd_handle);
+    CURLcode tmdCode = curl_easy_perform(tmd_handle);
+    long httpCode = 0;
+    curl_easy_getinfo(tmd_handle, CURLINFO_RESPONSE_CODE, &httpCode);
+
+    fprintf(stderr, "httpCode: %li\n", httpCode);
+
+    if(httpCode != 200 || tmdCode != CURLE_OK) {
+        showError("Error downloading ticket.\nPlease check your internet connection\nOr your router might be blocking the NUS server");
+        *queueCancelled = true;
+        cancelled = true;
+    }
     curl_easy_cleanup(tmd_handle);
     // write out the tmd file
     snprintf(output_path, sizeof(output_path), "%s/%s", output_dir, "title.cert");
@@ -319,17 +347,25 @@ void downloadTitle(const char *titleID, const char *name, bool decrypt, bool *ca
             uint32_t id = bswap_32(tmd_data->contents[i].cid); // the id should usually be chronological, but we wanna be sure
 
             // add a curl handle for the content file (.app file)
-            snprintf(output_path, sizeof(output_path), "%s/%08X.app", output_dir, id);
-            snprintf(download_url, 78, "%s/%08X", base_url, id);
-            sprintf(progress->currentFile, "%08X.app", id);
-            downloadFile(download_url, output_path, progress);
+            snprintf(output_path, sizeof(output_path), "%s/%08x.app", output_dir, id);
+            snprintf(download_url, 78, "%s/%08x", base_url, id);
+            sprintf(progress->currentFile, "%08x.app", id);
+            if(downloadFile(download_url, output_path, progress) != 0) {
+                showError("Error downloading file\nPlease check your internet connection\nOr your router might be blocking the NUS server");
+                cancelled = true;
+                break;
+            }
 
             if (bswap_16(tmd_data->contents[i].type) & TMD_CONTENT_TYPE_HASHED) {
                 // add a curl handle for the hash file (.h3 file)
-                snprintf(output_path, sizeof(output_path), "%s/%08X.h3", output_dir, id);
-                snprintf(download_url, 81, "%s/%08X.h3", base_url, id);
-                sprintf(progress->currentFile, "%08X.h3", id);
-                downloadFile(download_url, output_path, progress);
+                snprintf(output_path, sizeof(output_path), "%s/%08x.h3", output_dir, id);
+                snprintf(download_url, 81, "%s/%08x.h3", base_url, id);
+                sprintf(progress->currentFile, "%08x.h3", id);
+                if(downloadFile(download_url, output_path, progress) != 0) {
+                    showError("Error downloading file\nPlease check your internet connection\nOr your router might be blocking the NUS server");
+                    cancelled = true;
+                    break;
+                }
             }
         }
     }

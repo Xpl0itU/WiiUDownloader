@@ -21,3 +21,9 @@ jobs:
         run: |
           echo 'Running in MSYS2!'
           python3 build.py
+      - name: Upload Windows Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: WiiUDownloader-Windows
+          path: WiiUDownloader.exe
+          if-no-files-found: warn

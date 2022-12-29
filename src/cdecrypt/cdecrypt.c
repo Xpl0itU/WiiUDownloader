@@ -258,10 +258,7 @@ static bool extract_file_hash(FILE *src, uint64_t part_data_offset, uint64_t fil
         if (write_size > size)
             write_size = size;
 
-        if (fread(enc, sizeof(char), BLOCK_SIZE, src) != BLOCK_SIZE) {
-            fprintf(stderr, "ERROR: Could not read %d bytes from '%s'\n", BLOCK_SIZE, path);
-            goto out;
-        }
+        fread(enc, sizeof(char), BLOCK_SIZE, src);
 
         memset(iv, 0, sizeof(iv));
         iv[1] = (uint8_t) content_id;
@@ -343,10 +340,7 @@ static bool extract_file(FILE *src, uint64_t part_data_offset, uint64_t file_off
         if (write_size > size)
             write_size = size;
 
-        if (fread(enc, sizeof(char), BLOCK_SIZE, src) != BLOCK_SIZE) {
-            fprintf(stderr, "ERROR: Could not read %d bytes from '%s'\n", BLOCK_SIZE, path);
-            goto out;
-        }
+        fread(enc, sizeof(char), BLOCK_SIZE, src);
 
         aes_crypt_cbc(&ctx, AES_DECRYPT, BLOCK_SIZE, iv, (const uint8_t *) (enc), (uint8_t *) dec);
 

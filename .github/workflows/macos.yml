@@ -11,7 +11,6 @@ jobs:
           submodules: 'recursive'
       - name: Install Dependencies
         run: |
-          brew update
           brew install dylibbundler mbedtls curl gtkmm3 cmake
       - name: Build
         run: |

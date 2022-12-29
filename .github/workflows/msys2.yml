@@ -25,5 +25,5 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: WiiUDownloader-Windows
-          path: build/dist
+          path: build/WiiUDownloader.exe
           if-no-files-found: warn

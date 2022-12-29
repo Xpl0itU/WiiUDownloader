@@ -27,7 +27,7 @@ os.system("cmake ..")
 os.system("cmake --build .")
 if os.name == 'nt':
     os.makedirs("dist/lib/gdk-pixbuf-2.0")
-    os.system("ldd build/WiiUDownloader.exe | grep '\/mingw.*\.dll' -o | xargs -I{} cp "{}" ./dist")
+    os.system("""ldd build/WiiUDownloader.exe | grep '\/mingw.*\.dll' -o | xargs -I{} cp "{}" ./dist""")
     shutil.copy("/mingw64/lib/gdk-pixbuf-2.0", "dist/lib/gdk-pixbuf-2.0")
     os.makedirs("dist/share/icons")
     shutil.copytree("/mingw64/share/icons/", "dist/share/icons/")

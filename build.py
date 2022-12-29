@@ -1,6 +1,7 @@
 #!/bin/env python
 
 import os
+import shutil
 import urllib.request
 
 # Don't edit below this line
@@ -24,3 +25,12 @@ except:
 os.chdir("build")
 os.system("cmake ..")
 os.system("cmake --build .")
+if os.name == 'nt':
+    os.makedirs("dist/lib/gdk-pixbuf-2.0")
+    os.system("ldd build/WiiUDownloader.exe | grep '\/mingw.*\.dll' -o | xargs -I{} cp "{}" ./dist")
+    shutil.copy("/mingw64/lib/gdk-pixbuf-2.0", "dist/lib/gdk-pixbuf-2.0")
+    os.makedirs("dist/share/icons")
+    shutil.copytree("/mingw64/share/icons/", "dist/share/icons/")
+    os.makedirs("dist/share/glib-2.0/schemas/")
+    shutil.copytree("/mingw64/share/glib-2.0/schemas/", "dist/share/glib-2.0/schemas/")
+    os.system("glib-compile-schemas.exe build/dist/share/glib-2.0/schemas/")

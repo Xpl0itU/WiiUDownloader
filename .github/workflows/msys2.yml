@@ -21,14 +21,6 @@ jobs:
         run: |
           echo 'Running in MSYS2!'
           python3 build.py
-          mkdir -p build/dist/lib/gdk-pixbuf-2.0
-          ldd build/WiiUDownloader.exe | grep '\/mingw.*\.dll' -o | xargs -I{} cp "{}" ./dist
-          cp -r /mingw64/lib/gdk-pixbuf-2.0 build/dist/lib/gdk-pixbuf-2.0
-          mkdir -p build/dist/share/icons
-          cp -r /mingw64/share/icons/* build/dist/share/icons/
-          mkdir -p build/dist/share/glib-2.0/schemas/
-          cp /mingw64/share/glib-2.0/schemas/* build/dist/share/glib-2.0/schemas/
-          glib-compile-schemas.exe build/dist/share/glib-2.0/schemas/
       - name: Upload Windows Artifact
         uses: actions/upload-artifact@v3
         with:

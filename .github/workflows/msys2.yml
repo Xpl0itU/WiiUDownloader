@@ -21,4 +21,4 @@ jobs:
         run: |
           echo 'Running in MSYS2!'
           python3 build.py
-          make
+          ninja

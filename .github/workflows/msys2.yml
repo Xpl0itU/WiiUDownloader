@@ -21,5 +21,3 @@ jobs:
         run: |
           echo 'Running in MSYS2!'
           python3 build.py
-          cd D:/a/WiiUDownloader/WiiUDownloader/build
-          ninja

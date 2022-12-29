@@ -23,4 +23,4 @@ except:
     pass
 os.chdir("build")
 os.system("cmake ..")
-os.system("make")
+os.system("cmake --build .")

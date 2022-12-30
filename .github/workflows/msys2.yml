@@ -27,7 +27,8 @@ jobs:
           mkdir dist/share/glib-2.0
           mkdir dist/share/glib-2.0/schemas/
           echo 'before ntldd'
-          ntldd build/WiiUDownloader.exe | grep " => .*mingw.*\.dll" -o | xargs -I{} cp -v "{}" ./dist
+          for ff in $(${MSYSTEM_PREFIX}/bin/ntldd -R build/WiiUDownloader.exe  | tr '\\' '/' | grep -io "$(cygpath -m ${MSYSTEM_PREFIX}).\+\.dll" | sort -u); do
+            cp $(cygpath -u "$ff") dist/
           echo 'after ntldd'
           cp -r /mingw64/lib/gdk-pixbuf-2.0 ./dist/lib/gdk-pixbuf-2.0
           cp -r /mingw64/share/icons/* ./dist/share/icons/

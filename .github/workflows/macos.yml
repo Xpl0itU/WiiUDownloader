@@ -15,9 +15,9 @@ jobs:
       - name: Build
         run: |
           python3 build.py
-          mkdir build/dist
-          cp build/WiiUDownloader build/dist/WiiUDownloader
-          dylibbundler -od -b -x build/dist/WiiUDownloader -d build/dist
+          mkdir dist
+          cp WiiUDownloader dist/WiiUDownloader
+          dylibbundler -od -b -x dist/WiiUDownloader -d dist
       - name: Upload macOS Artifact
         uses: actions/upload-artifact@v3
         with:

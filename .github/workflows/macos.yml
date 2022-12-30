@@ -15,12 +15,14 @@ jobs:
       - name: Build
         run: |
           python3 build.py
-          mkdir dist
-          cp WiiUDownloader dist/WiiUDownloader
-          dylibbundler -od -b -x dist/WiiUDownloader -d dist
+          mkdir build/libs
+          dylibbundler -od -b -x build/WiiUDownloader -d build/libs
+          mkdir -p dist/libs
+          mv build/WiiUDownloader dist/WiiUDownloader
+          cp -r build/libs/* dist/libs/
       - name: Upload macOS Artifact
         uses: actions/upload-artifact@v3
         with:
           name: WiiUDownloader-macOS-Universal
-          path: build/dist/
+          path: dist/
           if-no-files-found: warn

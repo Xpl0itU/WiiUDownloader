@@ -22,10 +22,9 @@ jobs:
         run: |
           python3 build.py
           DEPLOY_GTK_VERSION=3 linuxdeploy-x86_64.AppImage --plugin=gtk --output=appimage --create-desktop-file --executable=build/WiiUDownloader --appdir dist --icon-file WiiUDownloader.png
-          ls -la dist
       - name: Upload Linux Artifact
         uses: actions/upload-artifact@v3
         with:
           name: WiiUDownloader-Linux
-          path: dist/WiiUDownloader-*.AppImage
+          path: WiiUDownloader-*.AppImage
           if-no-files-found: warn

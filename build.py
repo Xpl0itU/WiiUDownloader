@@ -1,7 +1,6 @@
 #!/bin/env python
 
 import os
-import shutil
 import urllib.request
 
 # Don't edit below this line

@@ -20,12 +20,15 @@ jobs:
       - name: Build
         run: |
           python3 build.py
-          pwd
-          mkdir -p dist/lib
-          mkdir -p dist/share/icons/
-          mkdir -p dist/share/glib-2.0/schemas/
-          ls -la /mingw64
+          mkdir dist
+          mkdir dist/lib
+          mkdir dist/share
+          mkdir dist/share/icons
+          mkdir dist/share/glib-2.0
+          mkdir dist/share/glib-2.0/schemas/
+          echo 'before ldd'
           ldd build/WiiUDownloader.exe | grep '\/mingw.*\.dll' -o | xargs -I{} cp "{}" ./dist
+          echo 'after ldd'
           cp -r /mingw64/lib/gdk-pixbuf-2.0 ./dist/lib/gdk-pixbuf-2.0
           cp -r /mingw64/share/icons/* ./dist/share/icons/
           cp /mingw64/share/glib-2.0/schemas/* dist/share/glib-2.0/schemas/

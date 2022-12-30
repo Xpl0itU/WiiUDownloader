@@ -11,13 +11,16 @@ jobs:
           submodules: 'recursive'
       - name: Install Dependencies
         run: |
-          brew install mbedtls curl gtkmm3 cmake
+          brew install dylibbundler mbedtls curl gtkmm3 cmake
       - name: Build
         run: |
           python3 build.py
+          mkdir build/dist
+          cp build/WiiUDownloader build/dist/WiiUDownloader
+          dylibbundler -od -b -x build/dist/WiiUDownloader -d build/dist
       - name: Upload macOS Artifact
         uses: actions/upload-artifact@v3
         with:
           name: WiiUDownloader-macOS-Universal
-          path: build/WiiUDownloader
+          path: build/dist/
           if-no-files-found: warn

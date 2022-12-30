@@ -1,5 +1,5 @@
 name: MSYS2
-on: [push, pull_request]
+on: push
 
 jobs:
   msys2-ucrt64:

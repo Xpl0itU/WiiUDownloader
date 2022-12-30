@@ -5,9 +5,9 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Check out repository code
-      uses: actions/checkout@v3
-      with:
-        submodules: 'recursive'
+        uses: actions/checkout@v3
+        with:
+          submodules: 'recursive'
       - name: Install Requirements
         run: |
           export DEBIAN_FRONTED=noninteractive

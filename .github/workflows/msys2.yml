@@ -16,7 +16,7 @@ jobs:
           msystem: UCRT64
           release: true
           update: true
-          install: git mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-python mingw-w64-ucrt-x86_64-mbedtls mingw-w64-ucrt-x86_64-curl mingw-w64-ucrt-x86_64-gtkmm3 mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-make mingw-w64-ucrt-x86_64-gtk3
+          install: git mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-python mingw-w64-ucrt-x86_64-mbedtls mingw-w64-ucrt-x86_64-curl mingw-w64-ucrt-x86_64-gtkmm3 mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-make mingw-w64-ucrt-x86_64-gtk3 mingw-w64-ucrt-x86_64-ntldd-git
       - name: Build
         run: |
           python3 build.py
@@ -26,9 +26,9 @@ jobs:
           mkdir dist/share/icons
           mkdir dist/share/glib-2.0
           mkdir dist/share/glib-2.0/schemas/
-          echo 'before ldd'
-          ldd build/WiiUDownloader.exe | grep '\/mingw.*\.dll' -o | xargs -I{} cp -v "{}" ./dist
-          echo 'after ldd'
+          echo 'before ntldd'
+          ntldd build/WiiUDownloader.exe | grep " => .*mingw.*\.dll" -o | xargs -I{} cp -v "{}" ./dist
+          echo 'after ntldd'
           cp -r /mingw64/lib/gdk-pixbuf-2.0 ./dist/lib/gdk-pixbuf-2.0
           cp -r /mingw64/share/icons/* ./dist/share/icons/
           cp /mingw64/share/glib-2.0/schemas/* dist/share/glib-2.0/schemas/

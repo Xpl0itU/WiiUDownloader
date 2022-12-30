@@ -31,9 +31,9 @@ jobs:
             cp $(cygpath -u "$ff") dist/
           done
           echo 'after ntldd'
-          cp -r /mingw64/lib/gdk-pixbuf-2.0 ./dist/lib/gdk-pixbuf-2.0
-          cp -r /mingw64/share/icons/* ./dist/share/icons/
-          cp /mingw64/share/glib-2.0/schemas/* dist/share/glib-2.0/schemas/
+          cp -r /ucrt64/lib/gdk-pixbuf-2.0 ./dist/lib/gdk-pixbuf-2.0
+          cp -r /ucrt64/share/icons/* ./dist/share/icons/
+          cp /ucrt64/share/glib-2.0/schemas/* dist/share/glib-2.0/schemas/
           glib-compile-schemas.exe dist/share/glib-2.0/schemas/
           cp build/WiiUDownloader.exe dist/WiiUDownloader.exe
       - name: Upload Windows Artifact

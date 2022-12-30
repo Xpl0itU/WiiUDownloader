@@ -16,7 +16,7 @@ jobs:
         run: |
           python3 build.py
           mkdir build/lib
-          dylibbundler -od -b -x build/WiiUDownloader -d build/lib -p @executable_path/../Resources/lib
+          dylibbundler -od -b -x build/WiiUDownloader -d build/lib -p @executable_path/lib
           mkdir -p dist/lib
           mv build/WiiUDownloader dist/WiiUDownloader
           cp -r build/lib/* dist/lib/

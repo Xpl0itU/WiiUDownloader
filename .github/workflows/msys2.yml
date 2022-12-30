@@ -19,7 +19,6 @@ jobs:
           install: git mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-python mingw-w64-ucrt-x86_64-mbedtls mingw-w64-ucrt-x86_64-curl mingw-w64-ucrt-x86_64-gtkmm3 mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-make
       - name: CI-Build
         run: |
-          echo 'Running in MSYS2!'
           python3 build.py
       - name: Upload Windows Artifact
         uses: actions/upload-artifact@v3

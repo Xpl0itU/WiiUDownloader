@@ -16,13 +16,27 @@ jobs:
           msystem: UCRT64
           release: true
           update: true
-          install: git mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-python mingw-w64-ucrt-x86_64-mbedtls mingw-w64-ucrt-x86_64-curl mingw-w64-ucrt-x86_64-gtkmm3 mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-make
+          install: git mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-python mingw-w64-ucrt-x86_64-mbedtls mingw-w64-ucrt-x86_64-curl mingw-w64-ucrt-x86_64-gtkmm3 mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-make mingw-w64-ucrt-x86_64-gtk3 mingw-w64-ucrt-x86_64-ntldd-git
       - name: Build
         run: |
           python3 build.py
+          mkdir dist
+          mkdir dist/lib
+          mkdir dist/share
+          mkdir dist/share/icons
+          mkdir dist/share/glib-2.0
+          mkdir dist/share/glib-2.0/schemas/
+          for ff in $(${MSYSTEM_PREFIX}/bin/ntldd -R build/WiiUDownloader.exe  | tr '\\' '/' | grep -io "$(cygpath -m ${MSYSTEM_PREFIX}).\+\.dll" | sort -u); do
+            cp $(cygpath -u "$ff") dist/
+          done
+          cp -r /ucrt64/lib/gdk-pixbuf-2.0 ./dist/lib/gdk-pixbuf-2.0
+          cp -r /ucrt64/share/icons/* ./dist/share/icons/
+          cp /ucrt64/share/glib-2.0/schemas/* dist/share/glib-2.0/schemas/
+          glib-compile-schemas.exe dist/share/glib-2.0/schemas/
+          cp build/WiiUDownloader.exe dist/WiiUDownloader.exe
       - name: Upload Windows Artifact
         uses: actions/upload-artifact@v3
         with:
           name: WiiUDownloader-Windows
-          path: build/WiiUDownloader.exe
+          path: dist/
           if-no-files-found: warn

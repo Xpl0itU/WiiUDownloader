@@ -1,0 +1,28 @@
+name: macOS
+on: push
+
+jobs:
+  build:
+    runs-on: macos-11
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v3
+        with:
+          submodules: 'recursive'
+      - name: Install Dependencies
+        run: |
+          brew install dylibbundler mbedtls curl gtkmm3 cmake
+      - name: Build
+        run: |
+          python3 build.py
+          mkdir build/lib
+          dylibbundler -od -b -x build/WiiUDownloader -d build/lib -p @executable_path/../Resources/lib
+          mkdir -p dist/lib
+          mv build/WiiUDownloader dist/WiiUDownloader
+          cp -r build/lib/* dist/lib/
+      - name: Upload macOS Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: WiiUDownloader-macOS-Universal
+          path: dist/
+          if-no-files-found: warn

@@ -1,6 +1,7 @@
 #!/bin/env python
 
 import os
+import shutil
 import urllib.request
 
 # Don't edit below this line
@@ -23,4 +24,4 @@ except:
     pass
 os.chdir("build")
 os.system("cmake ..")
-os.system("make")
+os.system("cmake --build .")

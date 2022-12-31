@@ -9,14 +9,11 @@ jobs:
         uses: actions/checkout@v3
         with:
           submodules: 'recursive'
-      - name: Install Dependencies
-        run: |
-          brew install dylibbundler mbedtls curl gtkmm3 cmake
       - name: Setup JHBuild
         run: |
           mkdir ~/jhbuild
           cd ~/jhbuild
-          git clone --depth=1 git://git.gnome.org/jhbuild
+          git clone --depth=1 gitlab.gnome.org/jhbuild
           cd ~/jhbuild/jhbuild
           ./autogen.sh --simple-install
           make
@@ -25,6 +22,9 @@ jobs:
           jhbuild build python3
           jhbuild run pip3 install pygments
           jhbuild build meta-gtk-osx-bootstrap meta-gtk-osx-gtk3 gtksourceview3
+      - name: Install Dependencies
+        run: |
+          brew install dylibbundler mbedtls curl gtkmm3 cmake
       - name: Get and compile gtk-mac-bundler
         run: |
           git clone https://gitlab.gnome.org/GNOME/gtk-mac-bundler

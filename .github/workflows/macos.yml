@@ -18,6 +18,7 @@ jobs:
           ./autogen.sh --simple-install
           make
           make install DISABLE_GETTEXT=1
+          export PATH=$PATH:~/.local/bin
           jhbuild bootstrap-gtk-osx
           jhbuild build python3
           jhbuild run pip3 install pygments

@@ -13,16 +13,14 @@ jobs:
         run: |
           bash <(curl -s https://gitlab.gnome.org/GNOME/gtk-osx/raw/master/gtk-osx-setup.sh)
           export PATH=$PATH:~/.new_local/bin
-          ls -la
           jhbuild bootstrap-gtk-osx
-          jhbuild build python3
-          jhbuild run pip3 install pygments
           jhbuild build meta-gtk-osx-bootstrap meta-gtk-osx-gtk3 gtksourceview3
       - name: Install Dependencies
         run: |
           brew install dylibbundler mbedtls curl gtkmm3 cmake
       - name: Get and compile gtk-mac-bundler
         run: |
+          export PATH=$PATH:~/.new_local/bin
           git clone https://gitlab.gnome.org/GNOME/gtk-mac-bundler
           export DEVROOT=$(pwd)/devroot
           export XDG_CONFIG_HOME=$DEVROOT/config
@@ -30,6 +28,7 @@ jobs:
           make -C gtk-mac-bundler install
       - name: Build
         run: |
+          export PATH=$PATH:~/.new_local/bin
           python3 build.py
           mkdir build/lib
           dylibbundler -od -b -x build/WiiUDownloader -d build/lib -p @executable_path/lib

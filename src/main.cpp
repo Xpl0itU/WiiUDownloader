@@ -28,6 +28,8 @@ int main(int argc, char *argv[]) {
 
     GameList *list = new GameList(builder, getTitleEntries(TITLE_CATEGORY_GAME));
 
+    list->getWindow()->set_title("WiiUDownloader");
+
     app->run(*list->getWindow());
 
     delete list->getWindow();

@@ -11,14 +11,9 @@ jobs:
           submodules: 'recursive'
       - name: Setup JHBuild
         run: |
-          mkdir ~/jhbuild
-          cd ~/jhbuild
-          git clone --depth=1 https://gitlab.gnome.org/GNOME/jhbuild.git
-          cd ~/jhbuild/jhbuild
-          ./autogen.sh --simple-install
-          make
-          make install DISABLE_GETTEXT=1
+          bash <(curl -s https://gitlab.gnome.org/GNOME/gtk-osx/raw/master/gtk-osx-setup.sh)
           export PATH=$PATH:~/.local/bin
+          ls -la
           jhbuild bootstrap-gtk-osx
           jhbuild build python3
           jhbuild run pip3 install pygments

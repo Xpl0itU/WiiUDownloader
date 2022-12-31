@@ -14,19 +14,17 @@ jobs:
           brew install dylibbundler mbedtls curl gtkmm3 cmake
       - name: Setup JHBuild
         run: |
-          cd $HOME
-          mkdir -p ~/.config && mv ~/project/jhbuildrc-gtk-osx-gimp ~/.config/jhbuildrc-custom
-          curl https://gitlab.gnome.org/samm-git/gtk-osx/raw/gimp/gtk-osx-setup.sh > gtk-osx-setup.sh
-          chmod +x gtk-osx-setup.sh
-          echo 'export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH:$HOME/.new_local/bin"' >> ~/.profile
-          echo 'export ARCHFLAGS="-arch x86_64 -arch arm64"' >> ~/.profile
-          source ~/.profile
-          PIPENV_YES=1 ./gtk-osx-setup.sh
-          $HOME/.new_local/bin/jhbuild bootstrap-gtk-osx
-          $HOME/.new_local/bin/jhbuild build python3
-          $HOME/.new_local/bin/jhbuild run pip3 install pygments
-          $HOME/.new_local/bin/jhbuild build meta-gtk-osx-bootstrap meta-gtk-osx-gtk3 gtksourceview3
-          cat ~/.profile
+          mkdir ~/jhbuild
+          cd ~/jhbuild
+          git clone --depth=1 git://git.gnome.org/jhbuild
+          cd ~/jhbuild/jhbuild
+          ./autogen.sh --simple-install
+          make
+          make install DISABLE_GETTEXT=1
+          jhbuild bootstrap-gtk-osx
+          jhbuild build python3
+          jhbuild run pip3 install pygments
+          jhbuild build meta-gtk-osx-bootstrap meta-gtk-osx-gtk3 gtksourceview3
       - name: Get and compile gtk-mac-bundler
         run: |
           git clone https://gitlab.gnome.org/GNOME/gtk-mac-bundler

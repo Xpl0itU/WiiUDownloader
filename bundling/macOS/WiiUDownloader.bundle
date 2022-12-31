@@ -1,0 +1,50 @@
+<?xml version="1.0" standalone="no"?> <!--*- mode: xml -*-->
+<app-bundle>
+
+  <meta>
+    <!-- Where to pick up the GTK+ installation, icon themes,
+         etc. Note that "${env:JHBUILD_PREFIX}" is evaluated to the
+         value of the environment variable JHBUILD_PREFIX. You can
+         define additional prefixes and refer to them in paths
+         throughout this file on the form "${prefix:name}". This is
+         useful for installing certain libraries or even the
+         application itself separately. Note that JHBUILD_PREFIX is
+         defined by jhbuild, so it you are not using jhbuild you can
+         either define your own or just hardcode the path here.
+    -->
+    <prefix name="default">${env:JHBUILD_PREFIX}</prefix>
+
+    <!-- Comment this out to keep the install names in binaries -->
+    <run-install-name-tool/>
+
+    <!-- Not implemented: Optional runtime, could be python or mono
+         for example.
+    -->
+    <!-- runtime copy="yes">/usr/bin/python</runtime -->
+    <!-- Indicate the active gtk version to use. This is needed only
+         for gtk+-3.0 projects. -->
+    <gtk>gtk+-3.0</gtk>
+  </meta>
+
+  <!-- The special macro "${project}" refers to the directory where
+       this bundle file is located. The application name and bundle
+       identifier are taken from the plist file.
+  -->
+  <plist>bundling/macOS/Info.plist</plist>
+
+  <main-binary>dist/WiiUDownloader</main-binary>
+
+  <data dest="${bundle}/Contents/MacOS/lib">
+        dist/lib
+  </data>
+
+
+  <!-- Copy icons. Note that the .icns file is an Apple format which
+       contains up to 4 sizes of icon. You can use
+       /Developer/Applications/Utilities/Icon Composer.app to import
+       artwork and create the file. >
+  <data dest="${bundle}/Contents/Resources">
+    data/WiiUDownloader.png
+  </data -->
+
+  </app-bundle>

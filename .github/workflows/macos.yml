@@ -12,6 +12,13 @@ jobs:
       - name: Install Dependencies
         run: |
           brew install dylibbundler mbedtls curl gtkmm3 cmake
+      - name: Get and compile gtk-mac-bundler
+        run: |
+          git clone https://gitlab.gnome.org/GNOME/gtk-mac-bundler
+          export DEVROOT=$(pwd)/devroot
+          export XDG_CONFIG_HOME=$DEVROOT/config
+          export PIP_CONFIG_DIR=$XDG_CONFIG_HOME/pip
+          make -C gtk-mac-bundler install
       - name: Build
         run: |
           python3 build.py
@@ -20,9 +27,12 @@ jobs:
           mkdir -p dist/lib
           mv build/WiiUDownloader dist/WiiUDownloader
           cp -r build/lib/* dist/lib/
+      - name: Package
+        run: |
+          export PATH=$PREFIX/bin:~/.local/bin:$PATH
+          gtk-mac-bundler bundling/macOS/WiiUDownloader.bundle
       - name: Upload macOS Artifact
         uses: actions/upload-artifact@v3
         with:
           name: WiiUDownloader-macOS-Universal
-          path: dist/
-          if-no-files-found: warn
+          path: WiiUDownloader.app

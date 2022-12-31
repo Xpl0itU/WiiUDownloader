@@ -24,7 +24,7 @@ int main(int argc, char *argv[]) {
     dup2(log, STDERR_FILENO);
 
     Glib::RefPtr<Gtk::Application> app = Gtk::Application::create(argc, argv, "org.gtkmm.example");
-    Glib::RefPtr<Gtk::Builder> builder = Gtk::Builder::create_from_resource("/data/wiiudownloader.ui");
+    Glib::RefPtr<Gtk::Builder> builder = Gtk::Builder::create_from_resource("/wiiudownloader/data/wiiudownloader.ui");
 
     GameList *list = new GameList(builder, getTitleEntries(TITLE_CATEGORY_GAME));
 

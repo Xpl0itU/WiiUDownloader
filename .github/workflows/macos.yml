@@ -27,9 +27,6 @@ jobs:
           mkdir -p dist/lib
           mv build/WiiUDownloader dist/WiiUDownloader
           cp -r build/lib/* dist/lib/
-      - restore_cache:
-            keys:
-              - jhbuild-v12
       - run:
           name: Setup JHBuild
           command: |
@@ -46,12 +43,6 @@ jobs:
             $HOME/.new_local/bin/jhbuild run pip3 install pygments
             $HOME/.new_local/bin/jhbuild build meta-gtk-osx-bootstrap meta-gtk-osx-gtk3 gtksourceview3
             cat ~/.profile
-      - save_cache:
-          paths:
-            - ~/.new_local
-            - ~/gtk
-            - ~/.config
-          key: jhbuild-v12
       - name: Package
         run: |
           export PATH=$PREFIX/bin:~/.local/bin:~/.new_local/bin:$PATH

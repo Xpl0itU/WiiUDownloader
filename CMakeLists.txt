@@ -24,7 +24,7 @@ endif()
 
 include(GResource)
 gresource(${CMAKE_CURRENT_SOURCE_DIR}
-            wiiudownloader.gresource.xml
+            data/wiiudownloader.gresource.xml
             ${CMAKE_CURRENT_SOURCE_DIR}/src
             RESOURCE_FILE)
 

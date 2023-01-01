@@ -14,6 +14,8 @@
     -->
     <prefix name="default">${env:GTK_PREFIX}</prefix>
 
+    <destination overwrite="yes">${env:PWD}</destination>
+
     <!-- Comment this out to keep the install names in binaries -->
     <!-- run-install-name-tool-->
 

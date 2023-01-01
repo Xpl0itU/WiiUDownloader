@@ -15,7 +15,7 @@ jobs:
           xcode-version: '13.0'
       - name: Install Dependencies
         run: |
-          cp $(xcrun --find otool-classic) /Applications/Xcode_13.0.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin
+          cp $(xcrun --find otool-classic) /Applications/Xcode_13.0.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/otool
           brew install mbedtls curl gtkmm3 cmake
       - name: Build
         run: |

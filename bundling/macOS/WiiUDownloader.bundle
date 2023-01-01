@@ -34,7 +34,9 @@
   -->
   <plist>${env:PWD}/bundling/macOS/Info.plist</plist>
 
-  <main-binary>${env:PWD}/dist/WiiUDownloader</main-binary>
+  <main-binary dest="${bundle}/Contents/MacOS/WiiUDownloader">
+     ${env:PWD}/dist/WiiUDownloader
+  </main-binary>
 
   <data dest="${bundle}/Contents/MacOS/lib">
         ${env:PWD}/dist/lib

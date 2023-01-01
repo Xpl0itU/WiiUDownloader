@@ -9,18 +9,9 @@ jobs:
         uses: actions/checkout@v3
         with:
           submodules: 'recursive'
-      - uses: actions/checkout@v3
-        with:
-          repository: GNOME/gtk-mac-bundler
-          ref: master
-          path: gtk-mac-bundler
-      - name: Install build environment
-        run: |
-          cd gtk-mac-bundler
-          make bindir=/usr/local/bin install
       - name: Install Dependencies
         run: |
-          brew install dylibbundler mbedtls curl gtkmm3 cmake
+          brew install mbedtls curl gtkmm3 cmake
       - name: Build
         run: |
           python3 build.py
@@ -28,9 +19,7 @@ jobs:
           mv build/WiiUDownloader dist/WiiUDownloader
       - name: Package
         run: |
-          gtk-mac-bundler bundling/macOS/WiiUDownloader.bundle
-          mkdir out
-          cp -r WiiUDownloader.app out/WiiUDownloader.app
+          python3 create_bundle.py
       - name: Upload macOS Artifact
         uses: actions/upload-artifact@v3
         with:

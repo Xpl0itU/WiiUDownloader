@@ -29,8 +29,10 @@ jobs:
       - name: Package
         run: |
           gtk-mac-bundler bundling/macOS/WiiUDownloader.bundle
+          mkdir out
+          mv -r WiiUDownloader.app out/WiiUDownloader.app
       - name: Upload macOS Artifact
         uses: actions/upload-artifact@v3
         with:
           name: WiiUDownloader-macOS-Universal
-          path: WiiUDownloader.app
+          path: out

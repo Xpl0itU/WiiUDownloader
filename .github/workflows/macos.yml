@@ -11,7 +11,7 @@ jobs:
           submodules: 'recursive'
       - uses: actions/checkout@v3
         with:
-          repository: gnome/gtk-mac-bundler
+          repository: Xpl0itU/gtk-mac-bundler
           ref: master
           path: gtk-mac-bundler
       - name: Install build environment
@@ -20,7 +20,7 @@ jobs:
           make bindir=/usr/local/bin install
       - name: Install Dependencies
         run: |
-          brew install mbedtls curl gtkmm3 cmake
+          brew install dylibbundler mbedtls curl gtkmm3 cmake
       - name: Build
         run: |
           python3 build.py

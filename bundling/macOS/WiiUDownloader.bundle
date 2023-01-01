@@ -30,12 +30,12 @@
        this bundle file is located. The application name and bundle
        identifier are taken from the plist file.
   -->
-  <plist>bundling/macOS/Info.plist</plist>
+  <plist>${env:PWD}/bundling/macOS/Info.plist</plist>
 
-  <main-binary>dist/WiiUDownloader</main-binary>
+  <main-binary>${env:PWD}/dist/WiiUDownloader</main-binary>
 
   <data dest="${bundle}/Contents/MacOS/lib">
-        dist/lib
+        ${env:PWD}/dist/lib
   </data>
 
 

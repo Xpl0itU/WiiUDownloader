@@ -31,7 +31,6 @@ jobs:
           cp -r build/lib/* dist/lib/
       - name: Package
         run: |
-          export GTK_PREFIX=$(brew --prefix gtk+3)
           gtk-mac-bundler bundling/macOS/WiiUDownloader.bundle
       - name: Upload macOS Artifact
         uses: actions/upload-artifact@v3

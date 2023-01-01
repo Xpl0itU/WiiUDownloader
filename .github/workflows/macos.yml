@@ -11,13 +11,12 @@ jobs:
           submodules: 'recursive'
       - name: Install Dependencies
         run: |
-          brew install mbedtls curl gtkmm3 cmake
+          brew install dylibbundler mbedtls curl gtkmm3 cmake
       - name: Build
         run: |
           python3 build.py
       - name: Package
         run: |
-          otool -L build/WiiUDownloader
           python3 create_bundle.py
       - name: Upload macOS Artifact
         uses: actions/upload-artifact@v3

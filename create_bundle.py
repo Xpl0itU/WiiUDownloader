@@ -3,7 +3,7 @@ import shutil
 import subprocess
 
 # Set the paths to the executable and Info.plist
-executable_path = 'dist/WiiUDownloader'
+executable_path = 'build/WiiUDownloader'
 info_plist_path = 'bundling/macOS/Info.plist'
 
 # Set the path to the .app bundle

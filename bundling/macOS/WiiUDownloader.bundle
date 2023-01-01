@@ -12,12 +12,12 @@
          defined by jhbuild, so it you are not using jhbuild you can
          either define your own or just hardcode the path here.
     -->
-    <prefix name="default">${env:GTK_PREFIX}</prefix>
+    <prefix name="default">/usr/local</prefix>
 
     <destination overwrite="yes">${env:PWD}</destination>
 
     <!-- Comment this out to keep the install names in binaries -->
-    <!-- run-install-name-tool-->
+    <run-install-name-tool/>
 
     <!-- Not implemented: Optional runtime, could be python or mono
          for example.

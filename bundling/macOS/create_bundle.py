@@ -1,6 +1,5 @@
 import os
 import shutil
-import subprocess
 
 # Set the paths to the executable and Info.plist
 executable_path = 'build/WiiUDownloader'

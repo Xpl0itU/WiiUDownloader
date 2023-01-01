@@ -18,9 +18,9 @@ jobs:
       - name: Package
         run: |
           python3 bundling/macOS/create_bundle.py
-          hdiutil create -volname WiiUDownloader -srcfolder out -ov -format UDZO WiiUDownloader.dmg
+          hdiutil create -volname WiiUDownloader -srcfolder out -ov -format UDZO WiiUDownloader-macOS-Universal.dmg
       - name: Upload macOS Artifact
         uses: actions/upload-artifact@v3
         with:
           name: WiiUDownloader-macOS-Universal
-          path: WiiUDownloader.dmg
+          path: WiiUDownloader-macOS-Universal.dmg

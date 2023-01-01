@@ -11,8 +11,8 @@ jobs:
           submodules: 'recursive'
       - uses: actions/checkout@v3
         with:
-          repository: fredowski/gtk-mac-bundler
-          ref: homebrew
+          repository: gnome/gtk-mac-bundler
+          ref: master
           path: gtk-mac-bundler
       - name: Install build environment
         run: |

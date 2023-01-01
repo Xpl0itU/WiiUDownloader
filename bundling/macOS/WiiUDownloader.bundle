@@ -38,10 +38,6 @@
      ${env:PWD}/dist/WiiUDownloader
   </main-binary>
 
-  <data dest="${bundle}/Contents/MacOS/lib">
-        ${env:PWD}/dist/lib
-  </data>
-
 
   <!-- Copy icons. Note that the .icns file is an Apple format which
        contains up to 4 sizes of icon. You can use

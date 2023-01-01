@@ -20,7 +20,7 @@ jobs:
           make bindir=/usr/local/bin install
       - name: Install Dependencies
         run: |
-          brew install mbedtls curl gtkmm3 cmake
+          brew install dylibbundler mbedtls curl gtkmm3 cmake
       - name: Build
         run: |
           python3 build.py
@@ -29,6 +29,9 @@ jobs:
       - name: Package
         run: |
           gtk-mac-bundler bundling/macOS/WiiUDownloader.bundle
+          mkdir WiiUDownloader.app/Contents/MacOS/lib
+          dylibbundler -od -b -x WiiUDownloader.app/Contents/MacOS/WiiUDownloader -d WiiUDownloader.app/Contents/MacOS/lib -p @executable_path/lib
+          rm -rf WiiUDownloader.app/Contents/Resources/*
       - name: Upload macOS Artifact
         uses: actions/upload-artifact@v3
         with:

@@ -12,7 +12,7 @@
          defined by jhbuild, so it you are not using jhbuild you can
          either define your own or just hardcode the path here.
     -->
-    <!--prefix name="default">${env:GTK_PREFIX}</prefix -->
+    <prefix name="default">${env:GTK_PREFIX}</prefix>
 
     <destination overwrite="yes">${env:PWD}</destination>
 

@@ -15,6 +15,7 @@ jobs:
           xcode-version: '13.0'
       - name: Install Dependencies
         run: |
+          cp $(xcrun --find otool-classic) /Applications/Xcode_13.0.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin
           brew install mbedtls curl gtkmm3 cmake
       - name: Build
         run: |
@@ -23,7 +24,6 @@ jobs:
           mv build/WiiUDownloader dist/WiiUDownloader
       - name: Package
         run: |
-          cp $(xcrun --find otool-classic) /Applications/Xcode_13.0.app/Contents/Developer/usr/bin
           python3 create_bundle.py
       - name: Upload macOS Artifact
         uses: actions/upload-artifact@v3

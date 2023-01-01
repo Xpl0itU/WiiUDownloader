@@ -1,10 +1,11 @@
-#include "utils.h"
 #include <mbedtls/aes.h>
 #include <mbedtls/md5.h>
 #include <mbedtls/pkcs5.h>
 
 #include <keygen.h>
 #include <titleInfo.h>
+#include <utils.h>
+#include <version.h>
 
 #include <stdlib.h>
 #include <string.h>
@@ -37,7 +38,7 @@ static void rndBytes(char *out, size_t size) {
 static void generateHeader(bool isTicket, NUS_HEADER *out) {
     memmove(out->magic_header, magic_header, 10);
     memmove(out->app, "WiiUDownloader", strlen("WiiUDownloader"));
-    memmove(out->app_version, "v1.12", strlen("v1.12"));
+    memmove(out->app_version, "v"VERSION, strlen("v"VERSION));
 
     if (isTicket)
         memmove(out->file_type, "Ticket", strlen("Ticket"));

@@ -12,10 +12,10 @@
          defined by jhbuild, so it you are not using jhbuild you can
          either define your own or just hardcode the path here.
     -->
-    <prefix name="default">${env:JHBUILD_PREFIX}</prefix>
+    <prefix name="default">${env:GTK_PREFIX}</prefix>
 
     <!-- Comment this out to keep the install names in binaries -->
-    <run-install-name-tool/>
+    <!-- run-install-name-tool-->
 
     <!-- Not implemented: Optional runtime, could be python or mono
          for example.

@@ -11,7 +11,7 @@ jobs:
           submodules: 'recursive'
       - name: Setup JHBuild
         run: |
-          bash <(curl -s https://gitlab.gnome.org/GNOME/gtk-osx/raw/master/gtk-osx-setup.sh)
+          bash <(curl -s https://gitlab.gnome.org/samm-git/gtk-osx/raw/gimp/gtk-osx-setup.sh)
           export PATH=$PATH:~/.new_local/bin
           jhbuild bootstrap-gtk-osx
           jhbuild build meta-gtk-osx-bootstrap meta-gtk-osx-gtk3 gtksourceview3

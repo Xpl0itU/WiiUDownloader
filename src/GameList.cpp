@@ -6,8 +6,6 @@
 #include <downloader.h>
 #include <iostream>
 
-#include <nfd.h>
-
 void GameList::updateTitles(TITLE_CATEGORY cat, MCPRegion reg) {
     treeModel = Gtk::ListStore::create(columns);
     treeView->set_model(treeModel);

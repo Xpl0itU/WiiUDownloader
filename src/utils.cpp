@@ -5,6 +5,9 @@
 #include <titleInfo.h>
 #include <utils.h>
 
+#include <gtkmm.h>
+#include <nfd.h>
+
 static void normalizeFilename(const char *filename, char *out) {
     size_t j = 0;
     for (size_t i = 0; filename[i]; ++i) {
@@ -46,4 +49,44 @@ bool getUpdateFromBaseGame(uint64_t titleID, uint64_t *out) {
         return true;
     }
     return false;
+}
+
+void showError(const char *text) {
+    Gtk::MessageDialog dlg(text, false, Gtk::MESSAGE_ERROR, Gtk::BUTTONS_OK);
+    dlg.run();
+}
+
+bool ask(const char *question) {
+    Gtk::MessageDialog dlg(question, true, Gtk::MESSAGE_QUESTION, Gtk::BUTTONS_YES_NO, true);
+    return dlg.run() == Gtk::RESPONSE_YES;
+}
+
+char *dirname(char *path) {
+    int len = strlen(path);
+    int last = len - 1;
+    char *parent = (char *) malloc(sizeof(char) * (len + 1));
+    strcpy(parent, path);
+    parent[len] = '\0';
+
+    while (last >= 0) {
+        if (parent[last] == '/') {
+            parent[last] = '\0';
+            break;
+        }
+        last--;
+    }
+    return parent;
+}
+
+char *show_folder_select_dialog() {
+    NFD_Init();
+
+    nfdchar_t *outPath = NULL;
+
+    nfdresult_t result = NFD_PickFolder(&outPath, NULL);
+
+    // Quit NFD
+    NFD_Quit();
+
+    return outPath;
 }

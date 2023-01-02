@@ -1,9 +1,12 @@
 #include <GameList.h>
+#include <cdecrypt/cdecrypt.h>
 #include <utils.h>
 
 #include <cstdlib>
 #include <downloader.h>
 #include <iostream>
+
+#include <nfd.h>
 
 void GameList::updateTitles(TITLE_CATEGORY cat, MCPRegion reg) {
     treeModel = Gtk::ListStore::create(columns);
@@ -73,6 +76,10 @@ GameList::GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos) 
     treeView->signal_row_activated().connect(sigc::mem_fun(*this, &GameList::on_gamelist_row_activated));
     treeView->get_selection()->signal_changed().connect(sigc::mem_fun(*this, &GameList::on_selection_changed));
 
+    Gtk::ImageMenuItem* decryptMenuButton = nullptr;
+    builder->get_widget("decryptMenuButton", decryptMenuButton);
+    decryptMenuButton->signal_activate().connect(sigc::mem_fun(*this, &GameList::on_decrypt_menu_click));
+    
     updateTitles(currentCategory, selectedRegion);
 
     Gtk::CellRendererToggle *renderer = Gtk::manage(new Gtk::CellRendererToggle());
@@ -103,11 +110,6 @@ GameList::GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos) 
 
 GameList::~GameList() {
     free(cancelQueue);
-}
-
-bool ask(Glib::ustring question) {
-    Gtk::MessageDialog dlg(question, true, Gtk::MESSAGE_QUESTION, Gtk::BUTTONS_YES_NO, true);
-    return dlg.run() == Gtk::RESPONSE_YES;
 }
 
 void GameList::search_entry_changed() {
@@ -243,4 +245,14 @@ bool GameList::on_search_equal(const Glib::RefPtr<Gtk::TreeModel> &model, int co
         }
     }
     return true;
+}
+
+void GameList::on_decrypt_menu_click() {
+    char *selectedPath = show_folder_select_dialog();
+    if (selectedPath == NULL)
+        return;
+
+    char *argv[2] = {(char *)"WiiUDownloader", selectedPath};
+    if(cdecrypt(2, argv) != 0)
+        showError("Error: There was a problem decrypting the files.\nThe path specified for the download might be too long.\nPlease try downloading the files to a shorter path and try again.");
 }

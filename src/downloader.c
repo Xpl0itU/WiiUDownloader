@@ -120,13 +120,6 @@ static size_t WriteDataToMemory(void *contents, size_t size, size_t nmemb, void 
     return realsize;
 }
 
-static void showError(const char *text) {
-    GtkWidget *dlg = gtk_message_dialog_new(NULL, GTK_DIALOG_MODAL, GTK_MESSAGE_ERROR,
-                                            GTK_BUTTONS_OK, text);
-    gtk_dialog_run(GTK_DIALOG(dlg));
-    gtk_widget_destroy(dlg);
-}
-
 static void progressDialog(struct CURLProgress *progress) {
     gtk_init(NULL, NULL);
     GtkWidget *cancelButton = gtk_button_new();
@@ -208,41 +201,10 @@ static int downloadFile(const char *download_url, const char *output_path, struc
     return 0;
 }
 
-// function to return the path of the selected folder
-static char *show_folder_select_dialog() {
-    NFD_Init();
-
-    nfdchar_t *outPath = NULL;
-
-    nfdresult_t result = NFD_PickFolder(&outPath, NULL);
-
-    // Quit NFD
-    NFD_Quit();
-
-    return outPath;
-}
-
 static void prepend(char *s, const char *t) {
     size_t len = strlen(t);
     memmove(s + len, s, strlen(s) + 1);
     memcpy(s, t, len);
-}
-
-static char *dirname(char *path) {
-    int len = strlen(path);
-    int last = len - 1;
-    char *parent = malloc(sizeof(char) * (len + 1));
-    strcpy(parent, path);
-    parent[len] = '\0';
-
-    while (last >= 0) {
-        if (parent[last] == '/') {
-            parent[last] = '\0';
-            break;
-        }
-        last--;
-    }
-    return parent;
 }
 
 void downloadTitle(const char *titleID, const char *name, bool decrypt, bool *cancelQueue) {

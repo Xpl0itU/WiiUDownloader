@@ -10,7 +10,6 @@ Allows to download encrypted wiiu files from Nintendo's official servers
 - Allows for decryption of titles after download
 
 ## TODO
-- Better file downloading UI with info about the current title being downloaded and stuff
 - Better queue management and overall UI
 
 ## Thanks to:

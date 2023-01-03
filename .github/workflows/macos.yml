@@ -11,14 +11,23 @@ jobs:
           submodules: 'recursive'
       - name: Install Dependencies
         run: |
-          brew install dylibbundler mbedtls curl gtkmm3 cmake
+          brew install create-dmg dylibbundler mbedtls curl gtkmm3 cmake
       - name: Build
         run: |
           python3 build.py
       - name: Package
         run: |
           python3 bundling/macOS/create_bundle.py
-          hdiutil create -volname WiiUDownloader -srcfolder out -ov -format UDZO WiiUDownloader-macOS-Universal.dmg
+          create-dmg \
+            --volname "WiiUDownloader" \
+            --window-pos 200 120 \
+            --window-size 800 400 \
+            --icon-size 100 \
+            --icon "WiiUDownloader.app" 200 190 \
+            --hide-extension "WiiUDownloader.app" \
+            --app-drop-link 600 185 \
+            "WiiUDownloader-macOS-Universal.dmg" \
+            "out/"
       - name: Upload macOS Artifact
         uses: actions/upload-artifact@v3
         with:

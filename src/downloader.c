@@ -184,7 +184,7 @@ static int downloadFile(const char *download_url, const char *output_path, struc
     curl_easy_setopt(progress->handle, CURLOPT_TCP_KEEPALIVE, 1L);
     curl_easy_setopt(progress->handle, CURLOPT_TCP_KEEPIDLE, 120L);
     curl_easy_setopt(progress->handle, CURLOPT_TCP_KEEPINTVL, 60L);
-    
+
     curl_easy_setopt(progress->handle, CURLOPT_FAILONERROR, 1L);
 
     CURLcode curlCode = curl_easy_perform(progress->handle);
@@ -192,7 +192,7 @@ static int downloadFile(const char *download_url, const char *output_path, struc
     long httpCode = 0;
     curl_easy_getinfo(progress->handle, CURLINFO_RESPONSE_CODE, &httpCode);
 
-    if(httpCode != 200 || curlCode != CURLE_OK && curlCode != CURLE_WRITE_ERROR) {
+    if (httpCode != 200 || curlCode != CURLE_OK && curlCode != CURLE_WRITE_ERROR) {
         fclose(file);
         return 1;
     }
@@ -261,7 +261,7 @@ void downloadTitle(const char *titleID, const char *name, bool decrypt, bool *ca
     long httpCode = 0;
     curl_easy_getinfo(tmd_handle, CURLINFO_RESPONSE_CODE, &httpCode);
 
-    if(httpCode != 200 || tmdCode != CURLE_OK) {
+    if (httpCode != 200 || tmdCode != CURLE_OK) {
         showError("Error downloading ticket.\nPlease check your internet connection\nOr your router might be blocking the NUS server");
         *queueCancelled = true;
         cancelled = true;
@@ -310,7 +310,7 @@ void downloadTitle(const char *titleID, const char *name, bool decrypt, bool *ca
             snprintf(output_path, sizeof(output_path), "%s/%08x.app", output_dir, id);
             snprintf(download_url, 78, "%s/%08x", base_url, id);
             sprintf(progress->currentFile, "%08x.app", id);
-            if(downloadFile(download_url, output_path, progress) != 0) {
+            if (downloadFile(download_url, output_path, progress) != 0) {
                 showError("Error downloading file\nPlease check your internet connection\nOr your router might be blocking the NUS server");
                 cancelled = true;
                 break;
@@ -321,7 +321,7 @@ void downloadTitle(const char *titleID, const char *name, bool decrypt, bool *ca
                 snprintf(output_path, sizeof(output_path), "%s/%08x.h3", output_dir, id);
                 snprintf(download_url, 81, "%s/%08x.h3", base_url, id);
                 sprintf(progress->currentFile, "%08x.h3", id);
-                if(downloadFile(download_url, output_path, progress) != 0) {
+                if (downloadFile(download_url, output_path, progress) != 0) {
                     showError("Error downloading file\nPlease check your internet connection\nOr your router might be blocking the NUS server");
                     cancelled = true;
                     break;
@@ -339,7 +339,7 @@ void downloadTitle(const char *titleID, const char *name, bool decrypt, bool *ca
     curl_global_cleanup();
     if (decrypt && !cancelled) {
         char *argv[2] = {"WiiUDownloader", dirname(output_path)};
-        if(cdecrypt(2, argv) != 0)
+        if (cdecrypt(2, argv) != 0)
             showError("Error: There was a problem decrypting the files.\nThe path specified for the download might be too long.\nPlease try downloading the files to a shorter path and try again.");
     }
     free(output_dir);

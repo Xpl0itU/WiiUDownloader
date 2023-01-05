@@ -74,10 +74,10 @@ GameList::GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos) 
     treeView->signal_row_activated().connect(sigc::mem_fun(*this, &GameList::on_gamelist_row_activated));
     treeView->get_selection()->signal_changed().connect(sigc::mem_fun(*this, &GameList::on_selection_changed));
 
-    Gtk::ImageMenuItem* decryptMenuButton = nullptr;
+    Gtk::ImageMenuItem *decryptMenuButton = nullptr;
     builder->get_widget("decryptMenuButton", decryptMenuButton);
     decryptMenuButton->signal_activate().connect(sigc::mem_fun(*this, &GameList::on_decrypt_menu_click));
-    
+
     updateTitles(currentCategory, selectedRegion);
 
     Gtk::CellRendererToggle *renderer = Gtk::manage(new Gtk::CellRendererToggle());
@@ -250,7 +250,7 @@ void GameList::on_decrypt_menu_click() {
     if (selectedPath == NULL)
         return;
 
-    char *argv[2] = {(char *)"WiiUDownloader", selectedPath};
-    if(cdecrypt(2, argv) != 0)
+    char *argv[2] = {(char *) "WiiUDownloader", selectedPath};
+    if (cdecrypt(2, argv) != 0)
         showError("Error: There was a problem decrypting the files.\nThe path specified for the download might be too long.\nPlease try downloading the files to a shorter path and try again.");
 }

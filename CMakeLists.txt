@@ -18,8 +18,12 @@ add_subdirectory(nativefiledialog-extended)
 execute_process(COMMAND uname OUTPUT_VARIABLE uname)
 if(uname MATCHES "^MSYS" OR uname MATCHES "^MINGW")
   link_libraries(nfd ole32 uuid shell32)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_GNU_SOURCE -UNDEBUG -DAES_ROM_TABLES -fvisibility=hidden -Ofast -fno-strict-aliasing -pipe -mwindows")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GNU_SOURCE -UNDEBUG -DAES_ROM_TABLES -fvisibility=hidden -Ofast -fno-strict-aliasing -pipe -std=c++20 -mwindows")
 else()
   link_libraries(nfd)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_GNU_SOURCE -UNDEBUG -DAES_ROM_TABLES -fvisibility=hidden -Ofast -fno-strict-aliasing -pipe")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GNU_SOURCE -UNDEBUG -DAES_ROM_TABLES -fvisibility=hidden -Ofast -fno-strict-aliasing -pipe -std=c++20")
 endif()
 
 include(GResource)
@@ -47,9 +51,6 @@ file(GLOB SOURCES
     src/*.c
     src/cdecrypt/*.c
 )
-
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_GNU_SOURCE -UNDEBUG -DAES_ROM_TABLES -fvisibility=hidden -Ofast -fno-strict-aliasing -pipe")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GNU_SOURCE -UNDEBUG -DAES_ROM_TABLES -fvisibility=hidden -Ofast -fno-strict-aliasing -pipe -std=c++20")
 
 add_executable(${CMAKE_PROJECT_NAME}
                 ${SOURCES}

@@ -262,7 +262,7 @@ void downloadTitle(const char *titleID, const char *name, bool decrypt, bool *ca
     curl_easy_getinfo(tmd_handle, CURLINFO_RESPONSE_CODE, &httpCode);
 
     if (httpCode != 200 || tmdCode != CURLE_OK) {
-        showError("Error downloading ticket.\nPlease check your internet connection\nOr your router might be blocking the NUS server");
+        showError("Error downloading title metadata.\nPlease check your internet connection\nOr your router might be blocking the NUS server");
         *queueCancelled = true;
         cancelled = true;
     }
@@ -287,7 +287,6 @@ void downloadTitle(const char *titleID, const char *name, bool decrypt, bool *ca
     snprintf(output_path, sizeof(output_path), "%s/%s", output_dir, "title.tik");
     char titleKey[128];
     generateKey(titleID, titleKey);
-    generateTicket(output_path, strtoull(titleID, NULL, 16), titleKey, title_version);
 
     uint16_t content_count = bswap_16(tmd_data->num_contents);
 
@@ -301,6 +300,10 @@ void downloadTitle(const char *titleID, const char *name, bool decrypt, bool *ca
     }
     readable_fs(progress->titleSize, progress->totalSize);
     printf("Total size: %s (%zu)\n", progress->totalSize, progress->titleSize);
+    snprintf(output_path, sizeof(output_path), "%s/%s", output_dir, "title.tik");
+    snprintf(download_url, 74, "%s/%s", base_url, "cetk");
+    if(downloadFile(download_url, output_path, progress) != 0)
+        generateTicket(output_path, strtoull(titleID, NULL, 16), titleKey, title_version);
     for (int i = 0; i < content_count; i++) {
         if (!cancelled) {
             int offset = 2820 + (48 * i);

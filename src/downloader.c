@@ -159,9 +159,31 @@ static void progressDialog(struct CURLProgress *progress) {
 
 static int downloadFile(const char *download_url, const char *output_path, struct CURLProgress *progress) {
     progress->previousDownloadedSize = 0;
-    FILE *file = fopen(output_path, "wb");
+    FILE *file = fopen(output_path, "rb");
+    if (file != NULL) {
+        fseek(file, 0, SEEK_END);
+        long fileSize = ftell(file);
+        fclose(file);
+        double remoteFileSize;
+        curl_easy_setopt(progress->handle, CURLOPT_URL, download_url);
+        curl_easy_setopt(progress->handle, CURLOPT_NOBODY, 1L);
+        curl_easy_setopt(progress->handle, CURLOPT_HEADER, 1L);
+        CURLcode curlCode = curl_easy_perform(progress->handle);
+        if (curlCode == CURLE_OK) {
+            curl_easy_getinfo(progress->handle, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &remoteFileSize);
+            if(fileSize == remoteFileSize){
+                printf("The file already exists and has the same size, skipping the download...\n");
+                return 0;
+            }
+        }
+    }
+    curl_easy_setopt(progress->handle, CURLOPT_NOBODY, 0L);
+    curl_easy_setopt(progress->handle, CURLOPT_HEADER, 0L);
+
+    file = fopen(output_path, "wb");
     if (file == NULL)
         return 1;
+
     curl_easy_setopt(progress->handle, CURLOPT_FAILONERROR, 1L);
 
     curl_easy_setopt(progress->handle, CURLOPT_WRITEFUNCTION, write_function);

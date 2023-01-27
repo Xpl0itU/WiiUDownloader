@@ -114,7 +114,9 @@ bool generateKey(const char *tid, char *out) {
     mbedtls_md5(bh, bhl, md5sum);
 
     uint8_t key[16];
-    if (mbedtls_pkcs5_pbkdf2_hmac_ext(MBEDTLS_MD_SHA1, (const unsigned char *) keygen_pw, sizeof(keygen_pw), md5sum, 16, 20, 16, key) != 0)
+    mbedtls_md_context_t ctx;
+    mbedtls_md_setup(&ctx, mbedtls_md_info_from_type(MBEDTLS_MD_SHA1), 1);
+    if (mbedtls_pkcs5_pbkdf2_hmac(&ctx, (const unsigned char *) keygen_pw, sizeof(keygen_pw), md5sum, 16, 20, 16, key) != 0)
         return false;
 
     uint8_t iv[16];

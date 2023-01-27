@@ -47,7 +47,7 @@ static void generateHeader(bool isTicket, NUS_HEADER *out) {
 
     out->sig_type = bswap_32(0x00010004);
     out->meta_version = BSWAP_8(0x01);
-    rndBytes(out->rand_area, sizeof(out->rand_area));
+    rndBytes((char *)out->rand_area, sizeof(out->rand_area));
 }
 
 static int char2int(char input) {
@@ -72,7 +72,7 @@ static bool encryptAES(void *data, int data_len, const unsigned char *key, unsig
     mbedtls_aes_context ctx;
     mbedtls_aes_init(&ctx);
     mbedtls_aes_setkey_enc(&ctx, key, 128);
-    bool ret = mbedtls_aes_crypt_cbc(&ctx, MBEDTLS_AES_ENCRYPT, data_len, iv, data, encrypted) == 0;
+    bool ret = mbedtls_aes_crypt_cbc(&ctx, MBEDTLS_AES_ENCRYPT, data_len, iv, (const unsigned char *)data, (unsigned char *)encrypted) == 0;
     /*
      * We're not calling mbedtls_aes_free() as at the time of writing
      * all it does is overwriting the mbedtls_aes_context struct with
@@ -93,11 +93,11 @@ void hex(uint64_t i, int digits, char *out) {
 }
 
 bool generateKey(const char *tid, char *out) {
-    char *ret = malloc(33);
-    if (ret == NULL)
+    char *ret = (char *)malloc(33);
+    if (ret == nullptr)
         return false;
 
-    char *tmp = tid;
+    char *tmp = const_cast<char *>(tid);
     while (tmp[0] == '0' && tmp[1] == '0')
         tmp += 2;
 
@@ -114,9 +114,7 @@ bool generateKey(const char *tid, char *out) {
     mbedtls_md5(bh, bhl, md5sum);
 
     uint8_t key[16];
-    mbedtls_md_context_t ctx;
-    mbedtls_md_setup(&ctx, mbedtls_md_info_from_type(MBEDTLS_MD_SHA1), 1);
-    if (mbedtls_pkcs5_pbkdf2_hmac(&ctx, (const unsigned char *) keygen_pw, sizeof(keygen_pw), md5sum, 16, 20, 16, key) != 0)
+    if (mbedtls_pkcs5_pbkdf2_hmac_ext(MBEDTLS_MD_SHA1, (const unsigned char *) keygen_pw, sizeof(keygen_pw), md5sum, 16, 20, 16, key) != 0)
         return false;
 
     uint8_t iv[16];
@@ -132,7 +130,7 @@ bool generateKey(const char *tid, char *out) {
 
     sprintf(out, "%s", ret);
 
-    return ret != NULL;
+    return ret != nullptr;
 }
 
 bool generateTicket(const char *path, uint64_t titleID, const char *titleKey, uint16_t titleVersion) {
@@ -169,7 +167,7 @@ bool generateTicket(const char *path, uint64_t titleID, const char *titleKey, ui
     }
 
     FILE *tik = fopen(path, "wb");
-    if (tik == NULL)
+    if (tik == nullptr)
         return false;
 
     fwrite(&ticket, 1, sizeof(TICKET), tik);
@@ -226,7 +224,7 @@ bool generateCert(const char *path) {
     cetk.cert3.unknown_01 = bswap_32(0x00010001);
 
     FILE *cert = fopen(path, "wb");
-    if (cert == NULL)
+    if (cert == nullptr)
         return false;
 
     fwrite(&cetk, 1, sizeof(CETK), cert);

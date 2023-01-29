@@ -14,6 +14,7 @@ void showError(const char *text);
 bool ask(const char *question);
 char *dirname(char *path);
 char *show_folder_select_dialog();
+void removeFiles(const char *path);
 
 #define BSWAP_8(x) ((x) &0xff)
 

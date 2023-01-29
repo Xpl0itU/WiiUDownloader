@@ -42,6 +42,7 @@ public:
     void on_selection_changed();
     void on_download_queue(GdkEventButton *ev);
     void on_decrypt_selected(Gtk::ToggleButton *button);
+    void on_delete_encrypted_selected(Gtk::ToggleButton *button);
     bool on_search_equal(const Glib::RefPtr<Gtk::TreeModel> &model, int column, const Glib::ustring &key, const Gtk::TreeModel::iterator &iter);
     void search_entry_changed();
     void on_decrypt_menu_click();
@@ -62,6 +63,7 @@ private:
     Gtk::CheckButton *usaButton = nullptr;
     Gtk::CheckButton *europeButton = nullptr;
     Gtk::CheckButton *decryptContentsButton = nullptr;
+    Gtk::CheckButton *deleteEncryptedContentsButton = nullptr;
     Gtk::Button *addToQueueButton = nullptr;
     Gtk::Button *downloadQueueButton = nullptr;
     ModelColumns columns;
@@ -74,6 +76,7 @@ private:
     Gtk::SearchEntry *searchEntry = nullptr;
 
     bool decryptContents = false;
+    bool deleteEncryptedContents = false;
 
     std::map<uint64_t, const char *> queueMap = {};
 

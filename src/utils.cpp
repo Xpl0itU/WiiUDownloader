@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <gtitles.h>
 #include <titleInfo.h>
 #include <utils.h>
@@ -89,4 +90,12 @@ char *show_folder_select_dialog() {
     NFD_Quit();
 
     return outPath;
+}
+
+void removeFiles(const char *path) {
+    for(const auto & entry : std::filesystem::directory_iterator(path)) {
+        if(entry.is_regular_file()) {
+            std::filesystem::remove(entry.path());
+        }
+    }
 }

@@ -66,6 +66,9 @@ GameList::GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos) 
     decryptContentsButton->signal_toggled().connect_notify(sigc::bind(sigc::mem_fun(*this, &GameList::on_decrypt_selected), decryptContentsButton));
     decryptContentsButton->set_active(TRUE);
 
+    builder->get_widget("deleteEncryptedContentsButton", deleteEncryptedContentsButton);
+    deleteEncryptedContentsButton->signal_toggled().connect_notify(sigc::bind(sigc::mem_fun(*this, &GameList::on_delete_encrypted_selected), deleteEncryptedContentsButton));
+
     builder->get_widget("searchBar", searchBar);
     builder->get_widget("searchEntry", searchEntry);
     searchEntry->signal_changed().connect(sigc::mem_fun(*this, &GameList::search_entry_changed));
@@ -138,7 +141,14 @@ void GameList::search_entry_changed() {
 
 void GameList::on_decrypt_selected(Gtk::ToggleButton *button) {
     decryptContents = !decryptContents;
-    return;
+    if(decryptContents)
+        deleteEncryptedContentsButton->set_sensitive(TRUE);
+    else
+        deleteEncryptedContentsButton->set_sensitive(FALSE);
+}
+
+void GameList::on_delete_encrypted_selected(Gtk::ToggleButton *button) {
+    deleteEncryptedContents = !deleteEncryptedContents;
 }
 
 void GameList::on_download_queue(GdkEventButton *ev) {
@@ -149,7 +159,7 @@ void GameList::on_download_queue(GdkEventButton *ev) {
     for (auto queuedItem : queueMap) {
         char tid[128];
         sprintf(tid, "%016llx", queuedItem.first);
-        downloadTitle(tid, queuedItem.second, decryptContents, cancelQueue);
+        downloadTitle(tid, queuedItem.second, decryptContents, cancelQueue, deleteEncryptedContents);
     }
     *cancelQueue = false;
     queueMap.clear();
@@ -221,7 +231,7 @@ void GameList::on_gamelist_row_activated(const Gtk::TreePath &treePath, Gtk::Tre
         char selectedTID[128];
         sprintf(selectedTID, "%016llx", infos[row[columns.index]].tid);
         *cancelQueue = false;
-        downloadTitle(selectedTID, infos[row[columns.index]].name, decryptContents, cancelQueue);
+        downloadTitle(selectedTID, infos[row[columns.index]].name, decryptContents, cancelQueue, deleteEncryptedContents);
         *cancelQueue = false;
         gameListWindow->set_sensitive(true);
     }

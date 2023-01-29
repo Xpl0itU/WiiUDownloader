@@ -229,7 +229,7 @@ static void prepend(char *s, const char *t) {
     memcpy(s, t, len);
 }
 
-void downloadTitle(const char *titleID, const char *name, bool decrypt, bool *cancelQueue) {
+void downloadTitle(const char *titleID, const char *name, bool decrypt, bool *cancelQueue, bool deleteEncryptedContents) {
     // initialize some useful variables
     cancelled = false;
     queueCancelled = cancelQueue;
@@ -367,6 +367,8 @@ void downloadTitle(const char *titleID, const char *name, bool decrypt, bool *ca
         if (cdecrypt(2, argv) != 0)
             showError("Error: There was a problem decrypting the files.\nThe path specified for the download might be too long.\nPlease try downloading the files to a shorter path and try again.");
     }
+    if(deleteEncryptedContents)
+        removeFiles(dirname(output_path));
     free(output_dir);
     free(progress);
 }

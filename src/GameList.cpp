@@ -64,10 +64,10 @@ GameList::GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos) 
 
     builder->get_widget("decryptContentsButton", decryptContentsButton);
     decryptContentsButton->signal_toggled().connect_notify(sigc::bind(sigc::mem_fun(*this, &GameList::on_decrypt_selected), decryptContentsButton));
-    decryptContentsButton->set_active(TRUE);
 
     builder->get_widget("deleteEncryptedContentsButton", deleteEncryptedContentsButton);
     deleteEncryptedContentsButton->signal_toggled().connect_notify(sigc::bind(sigc::mem_fun(*this, &GameList::on_delete_encrypted_selected), deleteEncryptedContentsButton));
+    deleteEncryptedContentsButton->set_sensitive(FALSE);
 
     builder->get_widget("searchBar", searchBar);
     builder->get_widget("searchEntry", searchEntry);
@@ -141,10 +141,13 @@ void GameList::search_entry_changed() {
 
 void GameList::on_decrypt_selected(Gtk::ToggleButton *button) {
     decryptContents = !decryptContents;
-    if(decryptContents)
+    if(button->get_active())
         deleteEncryptedContentsButton->set_sensitive(TRUE);
-    else
+    else {
         deleteEncryptedContentsButton->set_sensitive(FALSE);
+        deleteEncryptedContentsButton->set_active(FALSE);
+        deleteEncryptedContents = false;
+    }
 }
 
 void GameList::on_delete_encrypted_selected(Gtk::ToggleButton *button) {
@@ -210,7 +213,6 @@ void GameList::on_button_selected(GdkEventButton *ev, TITLE_CATEGORY cat) {
     infos = getTitleEntries(currentCategory);
     updateTitles(currentCategory, selectedRegion);
     search_entry_changed();
-    return;
 }
 
 void GameList::on_region_selected(Gtk::ToggleButton *button, MCPRegion reg) {
@@ -220,7 +222,6 @@ void GameList::on_region_selected(Gtk::ToggleButton *button, MCPRegion reg) {
         selectedRegion = (MCPRegion) (selectedRegion & ~reg);
     updateTitles(currentCategory, selectedRegion);
     search_entry_changed();
-    return;
 }
 
 void GameList::on_gamelist_row_activated(const Gtk::TreePath &treePath, Gtk::TreeViewColumn *const &column) {

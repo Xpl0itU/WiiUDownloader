@@ -164,7 +164,7 @@
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="shadow-type">in</property>
-            <property name="min-content-height">600</property>
+            <property name="min-content-height">550</property>
             <child>
               <object class="GtkTreeView" id="gameTree">
                 <property name="visible">True</property>
@@ -283,8 +283,7 @@
                 </child>
                 <child>
                   <object class="GtkCheckButton" id="deleteEncryptedContentsButton">
-                    <property name="label" translatable="yes">Delete encrypted contents
-after decryption</property>
+                    <property name="label" translatable="yes">Delete encrypted contents after decryption</property>
                     <property name="visible">True</property>
                     <property name="can-focus">True</property>
                     <property name="receives-default">False</property>
@@ -300,7 +299,7 @@ after decryption</property>
               <packing>
                 <property name="expand">True</property>
                 <property name="fill">True</property>
-                <property name="position">4</property>
+                <property name="position">5</property>
                 <property name="secondary">True</property>
               </packing>
             </child>

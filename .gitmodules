@@ -3,5 +3,4 @@
 	url = https://github.com/btzy/nativefiledialog-extended
 [submodule "AppImageUpdate"]
 	path = AppImageUpdate
-	url = https://github.com/AppImageCommunity/AppImageUpdate
-	branch = 20a6450f095abc0eb6992b77ab9e6f6f5adc9220
+	url = https://github.com/Seren541/libappimage

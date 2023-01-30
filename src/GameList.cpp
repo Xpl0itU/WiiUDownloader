@@ -81,8 +81,6 @@ GameList::GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos) 
     builder->get_widget("decryptMenuButton", decryptMenuButton);
     decryptMenuButton->signal_activate().connect(sigc::mem_fun(*this, &GameList::on_decrypt_menu_click));
 
-
-
     updateTitles(currentCategory, selectedRegion);
 
     Gtk::CellRendererToggle *renderer = Gtk::manage(new Gtk::CellRendererToggle());

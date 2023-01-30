@@ -28,7 +28,7 @@ endif()
 
 if(UNIX AND NOT APPLE)
   add_subdirectory(AppImageUpdate)
-  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE libappimageupdate)
+  link_libraries(libappimageupdate)
 endif()
 
 include(GResource)

@@ -229,6 +229,11 @@ void checkAndDownloadLatestVersion() {
 #include <thread>
 #include <utils.h>
 
+namespace appimage::update
+{
+    class Updater;
+}
+
 static int checkUpdatable(const char *appname) {
     appimage::update::Updater updater(appname, true);
     std::string test;

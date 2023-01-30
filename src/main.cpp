@@ -1,13 +1,11 @@
 #include <gtkmm.h>
-#include <iostream>
 
 #include <fcntl.h>
 
 #ifdef _WIN32
 #include <windows.h>
-#endif
-
 #include <updater.h>
+#endif
 
 #include <GameList.h>
 
@@ -28,7 +26,9 @@ int main(int argc, char *argv[]) {
     Glib::RefPtr<Gtk::Application> app = Gtk::Application::create(argc, argv, "org.gtkmm.example");
     Glib::RefPtr<Gtk::Builder> builder = Gtk::Builder::create_from_resource("/wiiudownloader/data/wiiudownloader.ui");
 
+#ifdef _WIN32
     checkAndDownloadLatestVersion();
+#endif
 
     GameList *list = new GameList(builder, getTitleEntries(TITLE_CATEGORY_GAME));
 

@@ -17,7 +17,7 @@ endif()
 add_subdirectory(nativefiledialog-extended)
 execute_process(COMMAND uname OUTPUT_VARIABLE uname)
 if(uname MATCHES "^MSYS" OR uname MATCHES "^MINGW")
-  link_libraries(nfd ole32 uuid shell32)
+  link_libraries(nfd ole32 uuid shell32 zip)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_GNU_SOURCE -UNDEBUG -DAES_ROM_TABLES -fvisibility=hidden -Ofast -fno-strict-aliasing -pipe -mwindows")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GNU_SOURCE -UNDEBUG -DAES_ROM_TABLES -fvisibility=hidden -Ofast -fno-strict-aliasing -pipe -std=c++20 -mwindows")
 else()
@@ -50,6 +50,7 @@ file(GLOB SOURCES
     src/*.cpp
     src/*.c
     src/cdecrypt/*.c
+    src/miniz/*.c
 )
 
 add_executable(${CMAKE_PROJECT_NAME}

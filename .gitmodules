@@ -1,6 +1,6 @@
 [submodule "nativefiledialog-extended"]
 	path = nativefiledialog-extended
 	url = https://github.com/btzy/nativefiledialog-extended
-[submodule "AppImageUpdate"]
-	path = AppImageUpdate
+[submodule "libappimage"]
+	path = libappimage
 	url = https://github.com/Seren541/libappimage

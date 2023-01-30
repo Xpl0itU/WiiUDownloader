@@ -29,7 +29,7 @@ else()
 endif()
 
 if(UNIX AND NOT APPLE)
-  add_subdirectory(AppImageUpdate)
+  add_subdirectory(libappimage)
   link_libraries(libappimageupdate)
 endif()
 

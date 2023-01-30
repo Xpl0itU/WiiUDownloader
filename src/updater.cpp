@@ -194,13 +194,25 @@ static std::string fetchLatestVersion() {
     return version;
 }
 
+bool fileExists(const std::string &filename) {
+    std::ifstream file(filename);
+    return file.good();
+}
+
 void checkAndDownloadLatestVersion() {
+    if(fileExists("WiiUDownloader.exe_old"))
+        remove("WiiUDownloader.exe_old");
     std::string latestVersion = fetchLatestVersion();
     if(!latestVersion.empty()) {
         latestVersion = latestVersion.substr(1, latestVersion.length() - 1);
         if(compareVersion(VERSION, latestVersion) == -1) {
             if(ask("A new update has been released, do you want to update?")) {
-                downloadNewestVersion();
+                if(downloadNewestVersion() != 0) {
+                    showError("Error while updating!");
+                } else {
+                    showError("Updated successfully, WiiUDownloader will now close\nReopen it manually");
+                    exit(0);
+                }
             }
         }
     }

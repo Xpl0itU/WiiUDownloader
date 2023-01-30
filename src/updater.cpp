@@ -260,7 +260,7 @@ static int updateAppimage(const char *appname) {
         // error handling is performed later
         while (!updater.isDone()) {
             // sleep for e.g., 100ms, to prevent 100% CPU usage
-            std::this_thread::sleep_for(chrono::milliseconds(100));
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
             double progress;
             // as with all methods, check for error

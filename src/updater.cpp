@@ -229,13 +229,10 @@ void checkAndDownloadLatestVersion() {
 #include <thread>
 #include <utils.h>
 
-namespace appimage::update
-{
-    class Updater;
-}
+using namespace appimage::update;
 
 static int checkUpdatable(const char *appname) {
-    appimage::update::Updater updater(appname, true);
+    Updater updater(appname, true);
     std::string test;
     updater.describeAppImage(test);
     if (test.find("Assembled ZSync URL") != std::string::npos)
@@ -244,7 +241,7 @@ static int checkUpdatable(const char *appname) {
 }
 
 static int updateAppimage(const char *appname) {
-    appimage::update::Updater updater(appname, true);
+    Updater updater(appname, true);
 
     bool updateAvailable;
     updater.checkForChanges(updateAvailable);

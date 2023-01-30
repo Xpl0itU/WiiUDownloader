@@ -81,6 +81,8 @@ GameList::GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos) 
     builder->get_widget("decryptMenuButton", decryptMenuButton);
     decryptMenuButton->signal_activate().connect(sigc::mem_fun(*this, &GameList::on_decrypt_menu_click));
 
+
+
     updateTitles(currentCategory, selectedRegion);
 
     Gtk::CellRendererToggle *renderer = Gtk::manage(new Gtk::CellRendererToggle());
@@ -258,7 +260,7 @@ bool GameList::on_search_equal(const Glib::RefPtr<Gtk::TreeModel> &model, int co
 
 void GameList::on_decrypt_menu_click() {
     char *selectedPath = show_folder_select_dialog();
-    if (selectedPath == NULL)
+    if (selectedPath == nullptr)
         return;
 
     char *argv[2] = {(char *) "WiiUDownloader", selectedPath};

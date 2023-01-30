@@ -219,3 +219,85 @@ void checkAndDownloadLatestVersion() {
 }
 
 #endif // _WIN32
+
+#ifdef __linux__
+#include <updater.h>
+#include <appimage/update.h>
+#include <iostream>
+#include <string>
+#include <cstring>
+#include <thread>
+#include <utils.h>
+
+static int checkUpdatable(const char *appname) {
+    appimage::update::Updater updater(appname, true);
+    std::string test;
+    updater.describeAppImage(test);
+    if (test.find("Assembled ZSync URL") != std::string::npos)
+        return 1;
+    return 0;
+}
+
+static int updateAppimage(const char *appname) {
+    appimage::update::Updater updater(appname, true);
+
+    bool updateAvailable;
+    updater.checkForChanges(updateAvailable);
+
+    if (!updateAvailable) {
+        // log status messages before exiting
+        printf("No updates found.\n");
+
+        // return error state
+        return 1;
+    }
+
+    if (updateAvailable && ask("A new update has been released, do you want to update?")) {
+        printf("Update availble! Updating %s.\n", appname);
+        updater.start();
+
+        // isDone() returns true as soon as the update has finished
+        // error handling is performed later
+        while (!updater.isDone()) {
+            // sleep for e.g., 100ms, to prevent 100% CPU usage
+            std::this_thread::sleep_for(chrono::milliseconds(100));
+
+            double progress;
+            // as with all methods, check for error
+            if (!updater.progress(progress)) {
+                showError("Error while updating! Error 1");
+                // return error state
+                return -1;
+            }
+
+            // fetch all status messages
+            // this is basically the same as before
+            std::string nextMessage;
+            while (updater.nextStatusMessage(nextMessage))
+                ;
+            if (updater.hasError()) {
+                showError("Error while updating! Error 2");
+                // return error state
+                return -1;
+            }
+        }
+        char temp[300];
+        strcpy(temp, appname);
+        strcat(temp, ".zs-old");
+        remove(temp);
+    }
+
+    printf("%s successfully updated!\n", appname);
+    return 0;
+}
+
+void checkAndDownloadLatestVersion() {
+    if(checkUpdatable("WiiUDownloader-Linux-x86_64.AppImage")) {
+        int updateStatus = updateAppimage("WiiUDownloader-Linux-x86_64.AppImage");
+        if(updateStatus == 0) { // Update completed successfully
+            showError("Updated successfully, WiiUDownloader will now close\nReopen it manually");
+            exit(0);
+        }
+    }
+}
+#endif // __linux__

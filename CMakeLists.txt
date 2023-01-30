@@ -26,6 +26,11 @@ else()
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GNU_SOURCE -UNDEBUG -DAES_ROM_TABLES -fvisibility=hidden -Ofast -fno-strict-aliasing -pipe -std=c++20")
 endif()
 
+if(UNIX AND NOT APPLE)
+  add_subdirectory(AppImageUpdate)
+  link_libraries(libappimageupdate)
+endif()
+
 include(GResource)
 gresource(${CMAKE_CURRENT_SOURCE_DIR}
             data/wiiudownloader.gresource.xml

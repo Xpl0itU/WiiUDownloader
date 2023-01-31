@@ -61,7 +61,7 @@ static bool launchExecutable(const wchar_t* executable)
 }
 
 void checkAndEnableLongPaths() {
-    if (isLongPathsEnabled()) {
+    if (!isLongPathsEnabled()) {
         if (ask("Long Paths are disabled, this could cause some issues\nwhile downloading or decrypting\nEnable Long Paths?")) {
             if(launchExecutable(L"regFixLongPaths.exe"))
                 showError("Successfully enabled Long Paths!");

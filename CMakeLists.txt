@@ -15,7 +15,6 @@ if (PKG_CONFIG_FOUND)
     add_definitions(${GTKMM_CFLAGS} ${GTKMM_CFLAGS_OTHER})
   endif()
 endif()
-
 add_subdirectory(nativefiledialog-extended)
 execute_process(COMMAND uname OUTPUT_VARIABLE uname)
 if(uname MATCHES "^MSYS" OR uname MATCHES "^MINGW")
@@ -67,6 +66,9 @@ include_directories(
 add_executable(${CMAKE_PROJECT_NAME}
                 ${SOURCES}
                 ${RESOURCE_FILE})
+
+add_subdirectory(regFixLongPaths)
+add_dependencies(${CMAKE_PROJECT_NAME} regFixLongPaths)
 
 target_link_libraries(${CMAKE_PROJECT_NAME}
     ${GTKMM_LIBRARIES}

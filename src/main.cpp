@@ -3,6 +3,7 @@
 #include <fcntl.h>
 
 #ifdef _WIN32
+#include <registry.h>
 #include <windows.h>
 #endif
 
@@ -32,6 +33,10 @@ int main(int argc, char *argv[]) {
 #if defined(_WIN32) || defined(__linux__)
     checkAndDownloadLatestVersion();
 #endif // _WIN32 || __linux__
+
+#ifdef _WIN32
+    checkAndEnableLongPaths();
+#endif
 
     GameList *list = new GameList(builder, getTitleEntries(TITLE_CATEGORY_GAME));
 

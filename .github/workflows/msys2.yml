@@ -34,6 +34,7 @@ jobs:
           cp /ucrt64/share/glib-2.0/schemas/* dist/share/glib-2.0/schemas/
           glib-compile-schemas.exe dist/share/glib-2.0/schemas/
           cp build/WiiUDownloader.exe dist/WiiUDownloader.exe
+          cp build/regFixLongPaths.exe dist/regFixLongPaths.exe
           cd dist && zip -9 -r ../WiiUDownloader-Windows.zip .
       - name: Upload Windows Artifact
         uses: actions/upload-artifact@v3

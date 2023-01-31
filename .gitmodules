@@ -4,3 +4,6 @@
 [submodule "AppImageUpdate"]
 	path = AppImageUpdate
 	url = https://github.com/AppImageCommunity/AppImageUpdate
+[submodule "regFixLongPaths"]
+	path = regFixLongPaths
+	url = https://github.com/Xpl0itU/regFixLongPaths

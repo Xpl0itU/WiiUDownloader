@@ -34,26 +34,22 @@ static bool isLongPathsEnabled() {
     return false;
 }
 
-static bool launchExecutable(const wchar_t* executable)
-{
+static bool launchExecutable(const wchar_t *executable) {
     wchar_t currentDirectory[MAX_PATH];
     GetCurrentDirectoryW(MAX_PATH, currentDirectory);
 
     wchar_t executablePath[MAX_PATH];
     swprintf_s(executablePath, L"%s\\%s", currentDirectory, executable);
 
-    SHELLEXECUTEINFOW shellExecuteInfo = { sizeof(shellExecuteInfo) };
+    SHELLEXECUTEINFOW shellExecuteInfo = {sizeof(shellExecuteInfo)};
     shellExecuteInfo.lpFile = executablePath;
     shellExecuteInfo.lpDirectory = currentDirectory;
     shellExecuteInfo.nShow = SW_SHOWNORMAL;
     shellExecuteInfo.lpVerb = L"runas";
 
-    if (ShellExecuteExW(&shellExecuteInfo))
-    {
+    if (ShellExecuteExW(&shellExecuteInfo)) {
         return true;
-    }
-    else
-    {
+    } else {
         DWORD error = GetLastError();
         std::cout << "Failed to launch executable. Error code: " << error << std::endl;
         return false;
@@ -63,7 +59,7 @@ static bool launchExecutable(const wchar_t* executable)
 void checkAndEnableLongPaths() {
     if (!isLongPathsEnabled()) {
         if (ask("Long Paths are disabled, this could cause some issues\nwhile downloading or decrypting\nEnable Long Paths?")) {
-            if(launchExecutable(L"regFixLongPaths.exe"))
+            if (launchExecutable(L"regFixLongPaths.exe"))
                 showError("Successfully enabled Long Paths!");
             else
                 showError("Error while enabling Long Paths!");

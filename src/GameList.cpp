@@ -258,7 +258,7 @@ bool GameList::on_search_equal(const Glib::RefPtr<Gtk::TreeModel> &model, int co
 
 void GameList::on_decrypt_menu_click() {
     char *selectedPath = show_folder_select_dialog();
-    if (selectedPath == NULL)
+    if (selectedPath == nullptr)
         return;
 
     char *argv[2] = {(char *) "WiiUDownloader", selectedPath};

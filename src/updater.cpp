@@ -194,7 +194,7 @@ static std::string fetchLatestVersion() {
     return version;
 }
 
-bool fileExists(const std::string &filename) {
+static bool fileExists(const std::string &filename) {
     std::ifstream file(filename);
     return file.good();
 }
@@ -296,12 +296,19 @@ static int updateAppimage(const char *appname) {
     return 0;
 }
 
+static bool fileExists(const std::string &filename) {
+    std::ifstream file(filename);
+    return file.good();
+}
+
 void checkAndDownloadLatestVersion() {
-    if(checkUpdatable("WiiUDownloader-Linux-x86_64.AppImage")) {
-        int updateStatus = updateAppimage("WiiUDownloader-Linux-x86_64.AppImage");
-        if(updateStatus == 0) { // Update completed successfully
-            showError("Updated successfully, WiiUDownloader will now close\nReopen it manually");
-            exit(0);
+    if(fileExists("WiiUDownloader-Linux-x86_64.AppImage")) {
+        if(checkUpdatable("WiiUDownloader-Linux-x86_64.AppImage")) {
+            int updateStatus = updateAppimage("WiiUDownloader-Linux-x86_64.AppImage");
+            if(updateStatus == 0) { // Update completed successfully
+                showError("Updated successfully, WiiUDownloader will now close\nReopen it manually");
+                exit(0);
+            }
         }
     }
 }

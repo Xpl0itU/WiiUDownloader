@@ -30,7 +30,7 @@ endif()
 
 if(UNIX AND NOT APPLE)
   add_subdirectory(AppImageUpdate)
-  link_libraries(libappimageupdate)
+  link_libraries(libappimageupdate_static)
 endif()
 
 include(GResource)

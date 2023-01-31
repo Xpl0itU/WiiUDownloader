@@ -235,9 +235,9 @@ namespace appimage::update
 }
 
 static int checkUpdatable(const char *appname) {
-    appimage::update::Updater updater(appname, true);
+    appimage::update::Updater update(appname, true);
     std::string test;
-    updater.describeAppImage(test);
+    update.describeAppImage(test);
     if (test.find("Assembled ZSync URL") != std::string::npos)
         return 1;
     return 0;

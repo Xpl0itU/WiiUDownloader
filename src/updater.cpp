@@ -224,6 +224,7 @@ void checkAndDownloadLatestVersion() {
 #include <updater.h>
 #include <appimage/update.h>
 #include <iostream>
+#include <fstream>
 #include <string>
 #include <cstring>
 #include <thread>

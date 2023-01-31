@@ -67,8 +67,10 @@ add_executable(${CMAKE_PROJECT_NAME}
                 ${SOURCES}
                 ${RESOURCE_FILE})
 
-add_subdirectory(regFixLongPaths)
-add_dependencies(${CMAKE_PROJECT_NAME} regFixLongPaths)
+if(uname MATCHES "^MSYS" OR uname MATCHES "^MINGW")
+  add_subdirectory(regFixLongPaths)
+  add_dependencies(${CMAKE_PROJECT_NAME} regFixLongPaths)
+endif()
 
 target_link_libraries(${CMAKE_PROJECT_NAME}
     ${GTKMM_LIBRARIES}

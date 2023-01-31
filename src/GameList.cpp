@@ -1,6 +1,7 @@
 #include <GameList.h>
 #include <cdecrypt/cdecrypt.h>
 #include <utils.h>
+#include <tmd.h>
 
 #include <cstdlib>
 #include <downloader.h>
@@ -80,6 +81,10 @@ GameList::GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos) 
     Gtk::ImageMenuItem *decryptMenuButton = nullptr;
     builder->get_widget("decryptMenuButton", decryptMenuButton);
     decryptMenuButton->signal_activate().connect(sigc::mem_fun(*this, &GameList::on_decrypt_menu_click));
+
+    Gtk::ImageMenuItem *generateFakeTIKButton = nullptr;
+    builder->get_widget("generateFakeTIKButton", generateFakeTIKButton);
+    generateFakeTIKButton->signal_activate().connect(sigc::mem_fun(*this, &GameList::on_generate_fake_tik_menu_click));
 
     updateTitles(currentCategory, selectedRegion);
 
@@ -264,4 +269,29 @@ void GameList::on_decrypt_menu_click() {
     char *argv[2] = {(char *) "WiiUDownloader", selectedPath};
     if (cdecrypt(2, argv) != 0)
         showError("Error: There was a problem decrypting the files.\nThe path specified for the download might be too long.\nPlease try downloading the files to a shorter path and try again.");
+}
+
+void GameList::on_generate_fake_tik_menu_click() {
+    char *selectedPath = show_folder_select_dialog();
+    if (selectedPath == nullptr)
+        return;
+    std::string path(selectedPath);
+    FILE *tmd = fopen((path + "/title.tmd").c_str(), "rb");
+    if(tmd == nullptr) {
+        showError("Error 1 while creating ticket!\nTicket can't be opened or not found");
+        return;
+    }
+    fseek(tmd, 0L, SEEK_END);
+    size_t fSize = ftell(tmd);
+    fseek(tmd, 0L, SEEK_SET);
+    uint8_t buffer[2048];
+    fread(buffer, fSize, 1, tmd);
+    TMD *tmdData = (TMD *) buffer;
+    uint16_t titleVersion = bswap_16(tmdData->title_version);
+    char titleID[17];
+    sprintf(titleID, "%016llx", bswap_64(tmdData->tid));
+    char titleKey[128];
+    generateKey(titleID, titleKey);
+    if(!generateTicket((path + "/title.tik").c_str(), bswap_64(tmdData->tid), titleKey, titleVersion))
+        showError("Error 2 while creating ticket!\nCouldn't write ticket");
 }

@@ -46,6 +46,7 @@ public:
     bool on_search_equal(const Glib::RefPtr<Gtk::TreeModel> &model, int column, const Glib::ustring &key, const Gtk::TreeModel::iterator &iter);
     void search_entry_changed();
     void on_decrypt_menu_click();
+    void on_generate_fake_tik_menu_click();
 
     Gtk::Window *getWindow() { return gameListWindow; }
 

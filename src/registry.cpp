@@ -10,7 +10,7 @@ static bool isLongPathsEnabled() {
     DWORD dwType = REG_DWORD;
     DWORD dwSize = sizeof(dwValue);
     LONG lResult = RegOpenKeyEx(HKEY_LOCAL_MACHINE,
-                                "SYSTEM\\CurrentControlSet\\Control\\FileSystem",
+                                R"(SYSTEM\CurrentControlSet\Control\FileSystem)",
                                 0,
                                 KEY_READ,
                                 &hKey);
@@ -18,7 +18,7 @@ static bool isLongPathsEnabled() {
     if (lResult == ERROR_SUCCESS) {
         lResult = RegQueryValueEx(hKey,
                                   "LongPathsEnabled",
-                                  NULL,
+                                  nullptr,
                                   &dwType,
                                   (LPBYTE) &dwValue,
                                   &dwSize);

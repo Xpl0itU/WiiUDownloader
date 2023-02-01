@@ -145,10 +145,14 @@ void GameList::search_entry_changed() {
 }
 
 void GameList::on_decrypt_selected(Gtk::ToggleButton *button) {
-    decryptContents = !decryptContents;
+    // decryptContents = !decryptContents; Bug Fix Attempt
     if(button->get_active())
+    {
+        decryptContents = true;
         deleteEncryptedContentsButton->set_sensitive(TRUE);
+    }
     else {
+        decryptContents = false;
         deleteEncryptedContentsButton->set_sensitive(FALSE);
         deleteEncryptedContentsButton->set_active(FALSE);
         deleteEncryptedContents = false;
@@ -156,7 +160,16 @@ void GameList::on_decrypt_selected(Gtk::ToggleButton *button) {
 }
 
 void GameList::on_delete_encrypted_selected(Gtk::ToggleButton *button) {
-    deleteEncryptedContents = !deleteEncryptedContents;
+    // deleteEncryptedContents = !deleteEncryptedContents; Bug Fix Attempt 2
+    // I think this way is just better because it ensures consistency no matter what the variable
+    // was previously set to.
+    if(button->get_active())
+    {
+        deleteEncryptedContents = true;
+    }
+    else {
+        deleteEncryptedContents = false;
+    }
 }
 
 void GameList::on_download_queue(GdkEventButton *ev) {

@@ -92,9 +92,20 @@ char *show_folder_select_dialog() {
     return outPath;
 }
 
+bool isThisDecryptedFile(const char *path) {
+    if (std::string(path).find("code") != std::string::npos ||
+        std::string(path).find("content") != std::string::npos ||
+        std::string(path).find("meta") != std::string::npos) {
+        return true;
+    }
+    return false;
+}
+
 void removeFiles(const char *path) {
-    for(const auto & entry : std::filesystem::directory_iterator(path)) {
-        if(entry.is_regular_file()) {
+    for (const auto &entry : std::filesystem::directory_iterator(path)) {
+        if (entry.is_directory()) {
+            removeFiles(entry.path().c_str());
+        } else if (entry.is_regular_file() && !isThisDecryptedFile(entry.path().c_str())) {
             std::filesystem::remove(entry.path());
         }
     }

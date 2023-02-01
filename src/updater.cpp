@@ -283,7 +283,7 @@ static int updateAppimage(const char *appname) {
                 ;
             if (updater.hasError()) {
                 showError("Error while updating! Error 2");
-                print("Error 2 while updating: %s", nextMessage.c_str());
+                printf("Error 2 while updating: %s", nextMessage.c_str());
                 // return error state
                 return -1;
             }

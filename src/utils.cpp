@@ -104,8 +104,8 @@ bool isThisDecryptedFile(const char *path) {
 void removeFiles(const char *path) {
     for (const auto &entry : std::filesystem::directory_iterator(path)) {
         if (entry.is_directory()) {
-            removeFiles(entry.path().c_str());
-        } else if (entry.is_regular_file() && !isThisDecryptedFile(entry.path().c_str())) {
+            removeFiles(reinterpret_cast<const char *>(entry.path().c_str()));
+        } else if (entry.is_regular_file() && !isThisDecryptedFile(reinterpret_cast<const char *>(entry.path().c_str()))) {
             std::filesystem::remove(entry.path());
         }
     }

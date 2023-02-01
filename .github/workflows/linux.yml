@@ -21,7 +21,7 @@ jobs:
       - name: Build
         run: |
           python3 build.py
-          DEPLOY_GTK_VERSION=3 UPDATE_INFORMATION="gh-releases-zsync|Xpl0itU|WiiUDownloader|latest|WiiUDownloader-x86_64.AppImage.zsync" linuxdeploy-x86_64.AppImage --plugin=gtk --output=appimage --create-desktop-file --executable=build/WiiUDownloader --appdir dist --icon-file data/WiiUDownloader.png
+          DEPLOY_GTK_VERSION=3 UPDATE_INFORMATION="gh-releases-zsync|Xpl0itU|WiiUDownloader|latest|WiiUDownloader-x86_64.AppImage.zsync" linuxdeploy-x86_64.AppImage --plugin=gtk --output=appimage --create-desktop-file --executable=build/WiiUDownloader --appdir dist --icon-file data/WiiUDownloader.png WiiUDownloader-Linux-x86_64.AppImage
       - name: Upload Linux Artifact
         uses: actions/upload-artifact@v3
         with:

@@ -82,9 +82,9 @@ char *dirname(char *path) {
 char *show_folder_select_dialog() {
     NFD_Init();
 
-    nfdchar_t *outPath = NULL;
+    nfdchar_t *outPath = nullptr;
 
-    nfdresult_t result = NFD_PickFolder(&outPath, NULL);
+    nfdresult_t result = NFD_PickFolder(&outPath, nullptr);
 
     // Quit NFD
     NFD_Quit();
@@ -103,9 +103,7 @@ bool isThisDecryptedFile(const char *path) {
 
 void removeFiles(const char *path) {
     for (const auto &entry : std::filesystem::directory_iterator(path)) {
-        if (entry.is_directory()) {
-            removeFiles(reinterpret_cast<const char *>(entry.path().c_str()));
-        } else if (entry.is_regular_file() && !isThisDecryptedFile(reinterpret_cast<const char *>(entry.path().c_str()))) {
+        if (entry.is_regular_file() && !isThisDecryptedFile(reinterpret_cast<const char *>(entry.path().c_str()))) {
             std::filesystem::remove(entry.path());
         }
     }

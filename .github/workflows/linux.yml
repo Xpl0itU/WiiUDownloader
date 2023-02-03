@@ -22,7 +22,8 @@ jobs:
         run: |
           python3 build.py
           wget https://github.com/linuxdeploy/linuxdeploy-plugin-checkrt/releases/download/continuous/linuxdeploy-plugin-checkrt-x86_64.sh
-          DEPLOY_GTK_VERSION=3 OUTPUT="WiiUDownloader-Linux-x86_64.AppImage" UPDATE_INFORMATION="gh-releases-zsync|Xpl0itU|WiiUDownloader|latest|WiiUDownloader-*.AppImage.zsync" linuxdeploy-x86_64.AppImage --plugin=gtk --plugin=checkcrt --output=appimage --create-desktop-file --executable=build/WiiUDownloader --appdir dist --icon-file data/WiiUDownloader.png
+          chmod +x linuxdeploy-plugin-checkrt-x86_64.sh
+          DEPLOY_GTK_VERSION=3 OUTPUT="WiiUDownloader-Linux-x86_64.AppImage" UPDATE_INFORMATION="gh-releases-zsync|Xpl0itU|WiiUDownloader|latest|WiiUDownloader-*.AppImage.zsync" linuxdeploy-x86_64.AppImage --plugin gtk --plugin checkcrt --output=appimage --create-desktop-file --executable=build/WiiUDownloader --appdir dist --icon-file data/WiiUDownloader.png
       - name: Upload Linux Artifact
         uses: actions/upload-artifact@v3
         with:

@@ -20,6 +20,8 @@
 #include <curl/curl.h>
 #include <gtk/gtk.h>
 
+#define MAX_RETRIES 5
+
 struct MemoryStruct {
     uint8_t *memory;
     size_t size;
@@ -192,11 +194,13 @@ static int compareRemoteFileSize(const char *url, const char *local_file) {
     return -2;
 }
 
-static int downloadFile(const char *download_url, const char *output_path, struct CURLProgress *progress) {
+static int downloadFile(const char *download_url, const char *output_path, struct CURLProgress *progress, bool doRetrySleep) {
     progress->previousDownloadedSize = 0;
-    if(compareRemoteFileSize(download_url, output_path) == 0) {
-        printf("The file already exists and has the same or bigger size, skipping the download...\n");
-        return 0;
+    if(fileExists(output_path)) {
+        if(compareRemoteFileSize(download_url, output_path) == 0) {
+            printf("The file already exists and has the same or bigger size, skipping the download...\n");
+            return 0;
+        }
     }
 
     FILE *file = fopen(output_path, "wb");
@@ -227,7 +231,16 @@ static int downloadFile(const char *download_url, const char *output_path, struc
 
     curl_easy_setopt(progress->handle, CURLOPT_FAILONERROR, 1L);
 
-    CURLcode curlCode = curl_easy_perform(progress->handle);
+    CURLcode curlCode;
+    int retryCount = 0;
+    do {
+        curlCode = curl_easy_perform(progress->handle);
+        if (curlCode == CURLE_OK)
+            break;
+        ++retryCount;
+        if(doRetrySleep)
+            sleep(5);
+    } while (retryCount < MAX_RETRIES);
 
     long httpCode = 0;
     curl_easy_getinfo(progress->handle, CURLINFO_RESPONSE_CODE, &httpCode);
@@ -342,7 +355,7 @@ void downloadTitle(const char *titleID, const char *name, bool decrypt, bool *ca
     printf("Total size: %s (%zu)\n", progress->totalSize, progress->titleSize);
     snprintf(output_path, sizeof(output_path), "%s/%s", output_dir, "title.tik");
     snprintf(download_url, 74, "%s/%s", base_url, "cetk");
-    if(downloadFile(download_url, output_path, progress) != 0)
+    if(downloadFile(download_url, output_path, progress, false) != 0)
         generateTicket(output_path, strtoull(titleID, NULL, 16), titleKey, title_version);
     for (int i = 0; i < content_count; i++) {
         if (!cancelled) {
@@ -353,7 +366,7 @@ void downloadTitle(const char *titleID, const char *name, bool decrypt, bool *ca
             snprintf(output_path, sizeof(output_path), "%s/%08x.app", output_dir, id);
             snprintf(download_url, 78, "%s/%08x", base_url, id);
             sprintf(progress->currentFile, "%08x.app", id);
-            if (downloadFile(download_url, output_path, progress) != 0) {
+            if (downloadFile(download_url, output_path, progress, true) != 0) {
                 showError("Error downloading file\nPlease check your internet connection\nOr your router might be blocking the NUS server");
                 cancelled = true;
                 break;
@@ -364,7 +377,7 @@ void downloadTitle(const char *titleID, const char *name, bool decrypt, bool *ca
                 snprintf(output_path, sizeof(output_path), "%s/%08x.h3", output_dir, id);
                 snprintf(download_url, 81, "%s/%08x.h3", base_url, id);
                 sprintf(progress->currentFile, "%08x.h3", id);
-                if (downloadFile(download_url, output_path, progress) != 0) {
+                if (downloadFile(download_url, output_path, progress, true) != 0) {
                     showError("Error downloading file\nPlease check your internet connection\nOr your router might be blocking the NUS server");
                     cancelled = true;
                     break;

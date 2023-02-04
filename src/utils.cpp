@@ -6,6 +6,7 @@
 #include <titleInfo.h>
 #include <utils.h>
 
+#include <fstream>
 #include <gtkmm.h>
 #include <nfd.h>
 
@@ -107,4 +108,9 @@ void removeFiles(const char *path) {
             std::filesystem::remove(entry.path());
         }
     }
+}
+
+bool fileExists(const char *filename) {
+    std::ifstream file(filename);
+    return file.good();
 }

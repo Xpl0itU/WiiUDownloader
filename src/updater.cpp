@@ -194,11 +194,6 @@ static std::string fetchLatestVersion() {
     return version;
 }
 
-static bool fileExists(const std::string &filename) {
-    std::ifstream file(filename);
-    return file.good();
-}
-
 void checkAndDownloadLatestVersion() {
     if(fileExists("WiiUDownloader.exe_old"))
         remove("WiiUDownloader.exe_old");

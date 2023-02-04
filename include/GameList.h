@@ -76,7 +76,7 @@ private:
     Gtk::SearchBar *searchBar = nullptr;
     Gtk::SearchEntry *searchEntry = nullptr;
 
-    bool decryptContents = true;
+    bool decryptContents = false;
     bool deleteEncryptedContents = false;
 
     std::map<uint64_t, const char *> queueMap = {};

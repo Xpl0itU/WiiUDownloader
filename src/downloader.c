@@ -157,30 +157,49 @@ static void progressDialog(struct CURLProgress *progress) {
     gtk_widget_show_all(window);
 }
 
-static int downloadFile(const char *download_url, const char *output_path, struct CURLProgress *progress) {
-    progress->previousDownloadedSize = 0;
-    FILE *file = fopen(output_path, "rb");
-    if (file != NULL) {
-        fseek(file, 0, SEEK_END);
-        long fileSize = ftell(file);
-        fclose(file);
-        double remoteFileSize;
-        curl_easy_setopt(progress->handle, CURLOPT_URL, download_url);
-        curl_easy_setopt(progress->handle, CURLOPT_NOBODY, 1L);
-        curl_easy_setopt(progress->handle, CURLOPT_HEADER, 1L);
-        CURLcode curlCode = curl_easy_perform(progress->handle);
-        if (curlCode == CURLE_OK) {
-            curl_easy_getinfo(progress->handle, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &remoteFileSize);
-            if(fileSize == remoteFileSize){
-                printf("The file already exists and has the same size, skipping the download...\n");
-                return 0;
+static int compareRemoteFileSize(const char *url, const char *local_file) {
+    CURL *curl;
+    CURLcode res;
+    double remote_filesize = 0;
+    double local_filesize = 0;
+
+    curl = curl_easy_init();
+    if (curl) {
+        curl_easy_setopt(curl, CURLOPT_URL, url);
+        curl_easy_setopt(curl, CURLOPT_HEADER, 1L);
+        curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
+        res = curl_easy_perform(curl);
+        if (res == CURLE_OK) {
+            res = curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &remote_filesize);
+            if (res == CURLE_OK) {
+                FILE *fp = fopen(local_file, "rb");
+                if (fp) {
+                    fseek(fp, 0L, SEEK_END);
+                    local_filesize = ftell(fp);
+                    fclose(fp);
+                }
+                if (remote_filesize == local_filesize) {
+                    return 0;
+                } else if (remote_filesize > local_filesize) {
+                    return 1;
+                } else {
+                    return -1;
+                }
             }
         }
+        curl_easy_cleanup(curl);
     }
-    curl_easy_setopt(progress->handle, CURLOPT_NOBODY, 0L);
-    curl_easy_setopt(progress->handle, CURLOPT_HEADER, 0L);
+    return -2;
+}
 
-    file = fopen(output_path, "wb");
+static int downloadFile(const char *download_url, const char *output_path, struct CURLProgress *progress) {
+    progress->previousDownloadedSize = 0;
+    if(compareRemoteFileSize(download_url, output_path) == 0) {
+        printf("The file already exists and has the same or bigger size, skipping the download...\n");
+        return 0;
+    }
+
+    FILE *file = fopen(output_path, "wb");
     if (file == NULL)
         return 1;
 
@@ -199,7 +218,6 @@ static int downloadFile(const char *download_url, const char *output_path, struc
     curl_easy_setopt(progress->handle, CURLOPT_ACCEPTTIMEOUT_MS, 5);
     curl_easy_setopt(progress->handle, CURLOPT_TCP_KEEPALIVE, 1L);
     curl_easy_setopt(progress->handle, CURLOPT_TCP_NODELAY, 1);
-    curl_easy_setopt(progress->handle, CURLOPT_CONNECTTIMEOUT, 5);
     curl_easy_setopt(progress->handle, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
     curl_easy_setopt(progress->handle, CURLOPT_NOSIGNAL, 1);
 

@@ -84,7 +84,7 @@ char *show_folder_select_dialog() {
 
     nfdchar_t *outPath = nullptr;
 
-    nfdresult_t result = NFD_PickFolder(&outPath, nullptr);
+    NFD_PickFolder(&outPath, nullptr);
 
     // Quit NFD
     NFD_Quit();

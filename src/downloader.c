@@ -79,6 +79,11 @@ static void pause_button_clicked(GtkWidget *widget, gpointer data) {
     paused = !paused;
 }
 
+static void hide_button_clicked(GtkWidget *widget, gpointer data) {
+    gtk_window_iconify(GTK_WINDOW(window));
+    minimizeGameListWindow();
+}
+
 //LibCurl progress function
 int progress_func(void *p,
                   curl_off_t dltotal, curl_off_t dlnow,
@@ -126,6 +131,7 @@ static void progressDialog(struct CURLProgress *progress) {
     gtk_init(NULL, NULL);
     GtkWidget *cancelButton = gtk_button_new();
     GtkWidget *pauseButton = gtk_button_new();
+    GtkWidget *hideButton = gtk_button_new();
     progress->gameLabel = gtk_label_new(progress->currentTitle);
 
     //Create window
@@ -146,6 +152,9 @@ static void progressDialog(struct CURLProgress *progress) {
     gtk_button_set_label(GTK_BUTTON(pauseButton), "Pause");
     g_signal_connect(pauseButton, "clicked", G_CALLBACK(pause_button_clicked), progress);
 
+    gtk_button_set_label(GTK_BUTTON(hideButton), "Hide");
+    g_signal_connect(hideButton, "clicked", G_CALLBACK(hide_button_clicked), NULL);
+
     //Create container for the window
     GtkWidget *main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     gtk_container_add(GTK_CONTAINER(window), main_box);
@@ -153,6 +162,7 @@ static void progressDialog(struct CURLProgress *progress) {
     gtk_box_pack_start(GTK_BOX(main_box), progress->progress_bar, FALSE, FALSE, 0);
     GtkWidget *button_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
     gtk_container_add(GTK_CONTAINER(main_box), button_box);
+    gtk_box_pack_start(GTK_BOX(button_box), hideButton, FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(button_box), cancelButton, FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(button_box), pauseButton, FALSE, FALSE, 0);
 

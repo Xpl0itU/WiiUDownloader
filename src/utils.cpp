@@ -10,6 +10,8 @@
 #include <gtkmm.h>
 #include <nfd.h>
 
+GtkWindow *gameListWindow = nullptr;
+
 static void normalizeFilename(const char *filename, char *out) {
     size_t j = 0;
     for (size_t i = 0; filename[i]; ++i) {
@@ -113,4 +115,12 @@ void removeFiles(const char *path) {
 bool fileExists(const char *filename) {
     std::ifstream file(filename);
     return file.good();
+}
+
+void setGameList(GtkWindow *window) {
+    gameListWindow = window;
+}
+
+void minimizeGameListWindow() {
+    gtk_window_iconify(gameListWindow);
 }

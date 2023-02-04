@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <gtk/gtk.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -16,6 +17,8 @@ char *dirname(char *path);
 char *show_folder_select_dialog();
 void removeFiles(const char *path);
 bool fileExists(const char *filename);
+void setGameList(GtkWindow *window);
+void minimizeGameListWindow();
 
 #define BSWAP_8(x) ((x) &0xff)
 

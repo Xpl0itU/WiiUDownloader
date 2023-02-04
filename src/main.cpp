@@ -12,6 +12,7 @@
 #endif // _WIN32 || __linux__
 
 #include <GameList.h>
+#include <utils.h>
 
 int main(int argc, char *argv[]) {
 #ifdef _WIN32
@@ -41,6 +42,8 @@ int main(int argc, char *argv[]) {
     GameList *list = new GameList(builder, getTitleEntries(TITLE_CATEGORY_GAME));
 
     list->getWindow()->set_title("WiiUDownloader");
+
+    setGameList(list->getWindow()->gobj());
 
     app->run(*list->getWindow());
 

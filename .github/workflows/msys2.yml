@@ -20,6 +20,12 @@ jobs:
       - name: Build
         run: |
           python3 build.py
+      - name: Run tests
+        run: |
+          cd build
+          ctest -C Debug --output-on-failure --verbose
+      - name: Deploy WiiUDownloader
+        run: |
           mkdir dist
           mkdir dist/lib
           mkdir dist/share

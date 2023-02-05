@@ -271,6 +271,8 @@ static void prepend(char *s, const char *t) {
 }
 
 void setSelectedDir(const char *path) {
+    if(selected_dir == NULL)
+        selected_dir = malloc(strlen(path) + 1);
     strcpy(selected_dir, path);
 }
 
@@ -293,6 +295,7 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool *can
         return -1;
     }
     prepend(output_dir, selected_dir);
+    free(selected_dir);
     if (output_dir[strlen(output_dir) - 1] == '/' || output_dir[strlen(output_dir) - 1] == '\\') {
         output_dir[strlen(output_dir) - 1] = '\0';
     }

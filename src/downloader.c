@@ -276,7 +276,7 @@ void setSelectedDir(const char *path) {
     strcpy(selected_dir, path);
 }
 
-int downloadTitle(const char *titleID, const char *name, bool decrypt, bool *cancelQueue, bool deleteEncryptedContents) {
+int downloadTitle(const char *titleID, const char *name, bool decrypt, bool *cancelQueue, bool deleteEncryptedContents, bool showProgressDialog) {
     // initialize some useful variables
     cancelled = false;
     queueCancelled = cancelQueue;
@@ -364,7 +364,8 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool *can
     memset(progress, 0, sizeof(struct CURLProgress));
     strcpy(progress->currentTitle, name);
     progress->handle = curl_easy_init();
-    progressDialog(progress);
+    if(showProgressDialog)
+        progressDialog(progress);
     for (size_t i = 0; i < content_count; i++) {
         progress->titleSize += bswap_64(tmd_data->contents[i].size);
     }
@@ -410,7 +411,8 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool *can
     printf("Downloading all files for TitleID %s done...\n", titleID);
 
     // cleanup curl stuff
-    gtk_widget_destroy(GTK_WIDGET(window));
+    if(showProgressDialog)
+        gtk_widget_destroy(GTK_WIDGET(window));
     curl_easy_cleanup(progress->handle);
     curl_global_cleanup();
     if (decrypt && !cancelled) {

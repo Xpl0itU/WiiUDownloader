@@ -180,7 +180,7 @@ void GameList::on_download_queue(GdkEventButton *ev) {
     for (auto queuedItem : queueMap) {
         char tid[128];
         sprintf(tid, "%016llx", queuedItem.first);
-        downloadTitle(tid, queuedItem.second, decryptContents, cancelQueue, deleteEncryptedContents);
+        downloadTitle(tid, queuedItem.second, decryptContents, cancelQueue, deleteEncryptedContents, true);
     }
     *cancelQueue = false;
     queueMap.clear();
@@ -250,7 +250,7 @@ void GameList::on_gamelist_row_activated(const Gtk::TreePath &treePath, Gtk::Tre
         char selectedTID[128];
         sprintf(selectedTID, "%016llx", infos[row[columns.index]].tid);
         *cancelQueue = false;
-        downloadTitle(selectedTID, infos[row[columns.index]].name, decryptContents, cancelQueue, deleteEncryptedContents);
+        downloadTitle(selectedTID, infos[row[columns.index]].name, decryptContents, cancelQueue, deleteEncryptedContents, true);
         *cancelQueue = false;
         gameListWindow->set_sensitive(true);
     }

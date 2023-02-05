@@ -280,7 +280,7 @@ void GameList::on_decrypt_menu_click() {
         return;
 
     char *argv[2] = {(char *) "WiiUDownloader", selectedPath};
-    if (cdecrypt(2, argv) != 0)
+    if (cdecrypt(2, argv, true) != 0)
         showError("Error: There was a problem decrypting the files.\nThe path specified for the download might be too long.\nPlease try downloading the files to a shorter path and try again.");
 }
 

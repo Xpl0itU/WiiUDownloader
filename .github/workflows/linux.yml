@@ -24,7 +24,7 @@ jobs:
           docker run --rm -v ${PWD}:/project builder python3 build.py
       - name: Run tests
         run: |
-          docker run --privileged --rm -v ${PWD}:/project builder bash -c "cd build && ctest -C Debug --output-on-failure --verbose"
+          docker run --rm -v ${PWD}:/project builder bash -c "cd build && ctest -C Debug --output-on-failure --verbose"
       - name: Deploy WiiUDownloader
         run: |
           docker run --privileged --rm -e DEPLOY_GTK_VERSION=3 -e OUTPUT="WiiUDownloader-Linux-x86_64.AppImage" -e UPDATE_INFORMATION="gh-releases-zsync|Xpl0itU|WiiUDownloader|latest|WiiUDownloader-*.AppImage.zsync" -v ${PWD}:/project builder linuxdeploy.AppImage --plugin gtk --plugin checkrt --output=appimage --create-desktop-file --executable=build/WiiUDownloader --appdir dist --icon-file data/WiiUDownloader.png

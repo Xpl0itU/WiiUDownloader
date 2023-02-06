@@ -24,7 +24,6 @@ jobs:
           docker run --rm -v ${PWD}:/project builder python3 build.py
       - name: Run tests
         run: |
-          cd build
           docker run --rm -v ${PWD}:/project builder ctest -C Debug --output-on-failure --verbose
       - name: Deploy WiiUDownloader
         run: |

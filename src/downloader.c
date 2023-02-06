@@ -420,10 +420,12 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool *can
         if (cdecrypt(2, argv, showProgressDialog) != 0) {
             showError("Error: There was a problem decrypting the files.\nThe path specified for the download might be too long.\nPlease try downloading the files to a shorter path and try again.");
             ret = -2;
+            goto out;
         }
     }
     if(deleteEncryptedContents)
         removeFiles(dirname(output_path));
+out:
     free(output_dir);
     free(progress);
     return ret;

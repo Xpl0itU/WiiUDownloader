@@ -30,7 +30,7 @@ public:
         Gtk::TreeModelColumn<Glib::ustring> name;
     };
 
-    GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos);
+    GameList(Glib::RefPtr<Gtk::Application> app, Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos);
     ~GameList();
 
     void updateTitles(TITLE_CATEGORY cat, MCPRegion reg);
@@ -52,6 +52,7 @@ public:
 
 private:
     Gtk::Window *gameListWindow = nullptr;
+    Glib::RefPtr<Gtk::Application> app;
     Glib::RefPtr<Gtk::Builder> builder;
 
     Gtk::TreeView *treeView = nullptr;

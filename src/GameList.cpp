@@ -25,7 +25,8 @@ void GameList::updateTitles(TITLE_CATEGORY cat, MCPRegion reg) {
     }
 }
 
-GameList::GameList(Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos) {
+GameList::GameList(Glib::RefPtr<Gtk::Application> app, Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos) {
+    this->app = app;
     this->builder = builder;
     this->infos = infos;
 
@@ -163,11 +164,9 @@ void GameList::on_delete_encrypted_selected(Gtk::ToggleButton *button) {
     // deleteEncryptedContents = !deleteEncryptedContents; Bug Fix Attempt 2
     // I think this way is just better because it ensures consistency no matter what the variable
     // was previously set to.
-    if(button->get_active())
-    {
+    if(button->get_active()) {
         deleteEncryptedContents = true;
-    }
-    else {
+    } else {
         deleteEncryptedContents = false;
     }
 }
@@ -182,6 +181,9 @@ void GameList::on_download_queue(GdkEventButton *ev) {
         sprintf(tid, "%016llx", queuedItem.first);
         downloadTitle(tid, queuedItem.second, decryptContents, cancelQueue, deleteEncryptedContents, true);
     }
+    Glib::RefPtr<Gio::Notification> notification = Gio::Notification::create("WiiUDownloader");
+    notification->set_body("Queue download(s) finished");
+    this->app->send_notification(notification);
     *cancelQueue = false;
     queueMap.clear();
     updateTitles(currentCategory, selectedRegion);
@@ -251,6 +253,9 @@ void GameList::on_gamelist_row_activated(const Gtk::TreePath &treePath, Gtk::Tre
         sprintf(selectedTID, "%016llx", infos[row[columns.index]].tid);
         *cancelQueue = false;
         downloadTitle(selectedTID, infos[row[columns.index]].name, decryptContents, cancelQueue, deleteEncryptedContents, true);
+        Glib::RefPtr<Gio::Notification> notification = Gio::Notification::create("WiiUDownloader");
+        notification->set_body("Download finished");
+        this->app->send_notification(notification);
         *cancelQueue = false;
         gameListWindow->set_sensitive(true);
     }

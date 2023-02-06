@@ -33,7 +33,7 @@ int main(int argc, char *argv[]) {
     checkAndEnableLongPaths();
 #endif // _WIN32
 
-    GameList *list = new GameList(builder, getTitleEntries(TITLE_CATEGORY_GAME));
+    GameList *list = new GameList(app, builder, getTitleEntries(TITLE_CATEGORY_GAME));
 
     list->getWindow()->set_title("WiiUDownloader");
 

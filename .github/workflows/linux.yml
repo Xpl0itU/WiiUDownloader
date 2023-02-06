@@ -16,9 +16,11 @@ jobs:
           key: wiiudownloader-docker-cache-{hash}
           restore-keys: |
             wiiudownloader-docker-cache-
-      - name: Build artifacts
+      - name: Build Docker container
         run: |
           docker build . --file Dockerfile.linux --tag builder
+      - name: Build artifacts
+        run: |
           docker run --rm -v ${PWD}:/project builder python3 build.py
       - name: Run tests
         run: |

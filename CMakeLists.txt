@@ -38,11 +38,6 @@ else()
           )
 endif()
 
-if(UNIX AND NOT APPLE)
-  add_subdirectory(AppImageUpdate)
-  link_libraries(libappimageupdate_static)
-endif()
-
 include(GResource)
 gresource(${CMAKE_CURRENT_SOURCE_DIR}
             data/wiiudownloader.gresource.xml

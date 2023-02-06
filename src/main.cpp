@@ -4,12 +4,9 @@
 
 #ifdef _WIN32
 #include <registry.h>
+#include <updater.h>
 #include <windows.h>
 #endif
-
-#if defined(_WIN32) || defined(__linux__)
-#include <updater.h>
-#endif // _WIN32 || __linux__
 
 #include <GameList.h>
 #include <utils.h>
@@ -31,13 +28,10 @@ int main(int argc, char *argv[]) {
     Glib::RefPtr<Gtk::Application> app = Gtk::Application::create(argc, argv, "org.gtkmm.example");
     Glib::RefPtr<Gtk::Builder> builder = Gtk::Builder::create_from_resource("/wiiudownloader/data/wiiudownloader.ui");
 
-#if defined(_WIN32) || defined(__linux__)
-    checkAndDownloadLatestVersion();
-#endif // _WIN32 || __linux__
-
 #ifdef _WIN32
+    checkAndDownloadLatestVersion();
     checkAndEnableLongPaths();
-#endif
+#endif // _WIN32
 
     GameList *list = new GameList(builder, getTitleEntries(TITLE_CATEGORY_GAME));
 

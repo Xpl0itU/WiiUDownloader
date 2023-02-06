@@ -3,8 +3,8 @@ FROM ubuntu:20.04
 ARG DEBIAN_FRONTEND=noninteractive
 
 RUN mkdir -p /usr/share/man/man1 /usr/share/man/man2 && \
-    apt update && \
-    apt install curl && \
+    apt -y --no-install-recommends update && \
+    apt -y --no-install-recommends install curl && \
     /bin/bash -c "$(curl -sL https://raw.githubusercontent.com/V10lator/NUSspli/master/apt-fast/install.sh)" && \
     apt-fast -y --no-install-recommends update && \
     apt-fast -y --no-install-recommends upgrade && \

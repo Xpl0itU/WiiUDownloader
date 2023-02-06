@@ -2,7 +2,7 @@ FROM ubuntu:20.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-CMD mkdir -p /usr/share/man/man1 /usr/share/man/man2 && \
+RUN mkdir -p /usr/share/man/man1 /usr/share/man/man2 && \
     apt -y --no-install-recommends update && \
     apt -y --no-install-recommends install curl wget && \
     rm -f /etc/ssl/certs/ca-bundle.crt && \
@@ -10,7 +10,7 @@ CMD mkdir -p /usr/share/man/man1 /usr/share/man/man2 && \
     update-ca-certificates && \
     curl -sSL https://raw.githubusercontent.com/Xpl0itU/apt-fast/main/install.sh | bash
 
-CMD apt-fast -y --no-install-recommends update && \
+RUN apt-fast -y --no-install-recommends update && \
     apt-fast -y --no-install-recommends upgrade && \
     apt-fast install -y --no-install-recommends build-essential libgcrypt20-dev desktop-file-utils argagg-dev libgtk-3-dev libgtkmm-3.0-dev libmbedtls-dev libcurl4-openssl-dev cmake libfuse2 libfuse-dev libboost-all-dev nlohmann-json3-dev libgpgme-dev && \
     LINUXDEPLOY="/usr/bin/linuxdeploy.AppImage" && \

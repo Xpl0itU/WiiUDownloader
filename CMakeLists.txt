@@ -80,3 +80,29 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
     mbedx509
     curl
 )
+
+add_subdirectory(Catch2)
+add_executable(tests
+        src/titleInfo.c
+        src/gtitles.c
+        src/utils.cpp
+        src/keygen.cpp
+        src/cdecrypt/aes.c
+        src/cdecrypt/cdecrypt.c
+        src/cdecrypt/sha1.c
+        src/cdecrypt/util.c
+        src/downloader.c
+        tests/tests.cpp)
+
+target_link_libraries(tests
+        stdc++
+        mbedtls
+        mbedcrypto
+        mbedx509
+        curl
+        Catch2::Catch2WithMain)
+
+include(CTest)
+include(Catch)
+catch_discover_tests(tests)
+enable_testing()

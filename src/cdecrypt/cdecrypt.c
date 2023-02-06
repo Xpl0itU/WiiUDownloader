@@ -363,7 +363,7 @@ out:
 }
 #undef BLOCK_SIZE
 
-int cdecrypt(int argc, char **argv) {
+int cdecrypt(int argc, char **argv, bool showProgressDialog) {
     int r = EXIT_FAILURE;
     char str[PATH_MAX], *tmd_path = NULL, *tik_path = NULL;
     FILE *src = NULL;
@@ -523,14 +523,16 @@ int cdecrypt(int argc, char **argv) {
     uint32_t l_entry[16];
 
     uint32_t level = 0;
-
-    progressDialog();
+    if(showProgressDialog)
+        progressDialog();
     for (uint32_t i = 1; i < entries; i++) {
-        gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progress_bar), (double) i / (double) entries);
-        gtk_progress_bar_set_text(GTK_PROGRESS_BAR(progress_bar), "Decrypting...");
-        // force redraw
-        while (gtk_events_pending())
-            gtk_main_iteration();
+        if(showProgressDialog) {
+            gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progress_bar), (double) i / (double) entries);
+            gtk_progress_bar_set_text(GTK_PROGRESS_BAR(progress_bar), "Decrypting...");
+            // force redraw
+            while (gtk_events_pending())
+                gtk_main_iteration();
+        }
         if (level > 0) {
             while ((level >= 1) && (l_entry[level - 1] == i))
                 level--;
@@ -595,7 +597,8 @@ int cdecrypt(int argc, char **argv) {
     r = EXIT_SUCCESS;
 
 out:
-    gtk_widget_destroy(GTK_WIDGET(window));
+    if(showProgressDialog)
+        gtk_widget_destroy(GTK_WIDGET(window));
     free(tmd);
     free(tik);
     free(cnt);

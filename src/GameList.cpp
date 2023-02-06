@@ -180,7 +180,7 @@ void GameList::on_download_queue(GdkEventButton *ev) {
     for (auto queuedItem : queueMap) {
         char tid[128];
         sprintf(tid, "%016llx", queuedItem.first);
-        downloadTitle(tid, queuedItem.second, decryptContents, cancelQueue, deleteEncryptedContents);
+        downloadTitle(tid, queuedItem.second, decryptContents, cancelQueue, deleteEncryptedContents, true);
     }
     *cancelQueue = false;
     queueMap.clear();
@@ -250,7 +250,7 @@ void GameList::on_gamelist_row_activated(const Gtk::TreePath &treePath, Gtk::Tre
         char selectedTID[128];
         sprintf(selectedTID, "%016llx", infos[row[columns.index]].tid);
         *cancelQueue = false;
-        downloadTitle(selectedTID, infos[row[columns.index]].name, decryptContents, cancelQueue, deleteEncryptedContents);
+        downloadTitle(selectedTID, infos[row[columns.index]].name, decryptContents, cancelQueue, deleteEncryptedContents, true);
         *cancelQueue = false;
         gameListWindow->set_sensitive(true);
     }
@@ -280,7 +280,7 @@ void GameList::on_decrypt_menu_click() {
         return;
 
     char *argv[2] = {(char *) "WiiUDownloader", selectedPath};
-    if (cdecrypt(2, argv) != 0)
+    if (cdecrypt(2, argv, true) != 0)
         showError("Error: There was a problem decrypting the files.\nThe path specified for the download might be too long.\nPlease try downloading the files to a shorter path and try again.");
 }
 

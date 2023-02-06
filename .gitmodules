@@ -7,3 +7,6 @@
 [submodule "regFixLongPaths"]
 	path = regFixLongPaths
 	url = https://github.com/Xpl0itU/regFixLongPaths
+[submodule "Catch2"]
+	path = Catch2
+	url = https://github.com/catchorg/Catch2

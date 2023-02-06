@@ -270,12 +270,18 @@ static void prepend(char *s, const char *t) {
     memcpy(s, t, len);
 }
 
-void downloadTitle(const char *titleID, const char *name, bool decrypt, bool *cancelQueue, bool deleteEncryptedContents) {
+void setSelectedDir(const char *path) {
+    if(selected_dir == NULL)
+        selected_dir = malloc(strlen(path) + 1);
+    strcpy(selected_dir, path);
+}
+
+int downloadTitle(const char *titleID, const char *name, bool decrypt, bool *cancelQueue, bool deleteEncryptedContents, bool showProgressDialog) {
     // initialize some useful variables
     cancelled = false;
     queueCancelled = cancelQueue;
     if (*queueCancelled) {
-        return;
+        return 0;
     }
     char *output_dir = malloc(1024);
     char folder_name[1024];
@@ -286,9 +292,10 @@ void downloadTitle(const char *titleID, const char *name, bool decrypt, bool *ca
         selected_dir = show_folder_select_dialog();
     if (selected_dir == NULL) {
         free(output_dir);
-        return;
+        return -1;
     }
     prepend(output_dir, selected_dir);
+    free(selected_dir);
     if (output_dir[strlen(output_dir) - 1] == '/' || output_dir[strlen(output_dir) - 1] == '\\') {
         output_dir[strlen(output_dir) - 1] = '\0';
     }
@@ -301,7 +308,7 @@ void downloadTitle(const char *titleID, const char *name, bool decrypt, bool *ca
 #ifdef _WIN32
     mkdir(output_dir);
 #else
-    mkdir(output_dir, 0700);
+    mkdir(output_dir, 0777);
 #endif
 
     // initialize curl
@@ -338,7 +345,7 @@ void downloadTitle(const char *titleID, const char *name, bool decrypt, bool *ca
     if (!tmd_file) {
         free(output_dir);
         fprintf(stderr, "Error: The file \"%s\" couldn't be opened. Will exit now.\n", output_path);
-        exit(EXIT_FAILURE);
+        return -1;
     }
     fwrite(tmd_mem.memory, 1, tmd_mem.size, tmd_file);
     fclose(tmd_file);
@@ -357,7 +364,8 @@ void downloadTitle(const char *titleID, const char *name, bool decrypt, bool *ca
     memset(progress, 0, sizeof(struct CURLProgress));
     strcpy(progress->currentTitle, name);
     progress->handle = curl_easy_init();
-    progressDialog(progress);
+    if(showProgressDialog)
+        progressDialog(progress);
     for (size_t i = 0; i < content_count; i++) {
         progress->titleSize += bswap_64(tmd_data->contents[i].size);
     }
@@ -367,6 +375,7 @@ void downloadTitle(const char *titleID, const char *name, bool decrypt, bool *ca
     snprintf(download_url, 74, "%s/%s", base_url, "cetk");
     if(downloadFile(download_url, output_path, progress, false) != 0)
         generateTicket(output_path, strtoull(titleID, NULL, 16), titleKey, title_version);
+    int ret = 0;
     for (int i = 0; i < content_count; i++) {
         if (!cancelled) {
             int offset = 2820 + (48 * i);
@@ -379,6 +388,7 @@ void downloadTitle(const char *titleID, const char *name, bool decrypt, bool *ca
             if (downloadFile(download_url, output_path, progress, true) != 0) {
                 showError("Error downloading file\nPlease check your internet connection\nOr your router might be blocking the NUS server");
                 cancelled = true;
+                ret = -1;
                 break;
             }
 
@@ -390,6 +400,7 @@ void downloadTitle(const char *titleID, const char *name, bool decrypt, bool *ca
                 if (downloadFile(download_url, output_path, progress, true) != 0) {
                     showError("Error downloading file\nPlease check your internet connection\nOr your router might be blocking the NUS server");
                     cancelled = true;
+                    ret = -1;
                     break;
                 }
             }
@@ -400,16 +411,20 @@ void downloadTitle(const char *titleID, const char *name, bool decrypt, bool *ca
     printf("Downloading all files for TitleID %s done...\n", titleID);
 
     // cleanup curl stuff
-    gtk_widget_destroy(GTK_WIDGET(window));
+    if(showProgressDialog)
+        gtk_widget_destroy(GTK_WIDGET(window));
     curl_easy_cleanup(progress->handle);
     curl_global_cleanup();
     if (decrypt && !cancelled) {
         char *argv[2] = {"WiiUDownloader", dirname(output_path)};
-        if (cdecrypt(2, argv) != 0)
+        if (cdecrypt(2, argv, showProgressDialog) != 0) {
             showError("Error: There was a problem decrypting the files.\nThe path specified for the download might be too long.\nPlease try downloading the files to a shorter path and try again.");
+            ret = -2;
+        }
     }
     if(deleteEncryptedContents)
         removeFiles(dirname(output_path));
     free(output_dir);
     free(progress);
+    return ret;
 }

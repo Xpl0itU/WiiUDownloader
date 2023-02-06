@@ -15,6 +15,10 @@ jobs:
       - name: Build
         run: |
           python3 build.py
+      - name: Run tests
+        run: |
+          cd build
+          ctest -C Debug --output-on-failure --verbose
       - name: Package
         run: |
           python3 bundling/macOS/create_bundle.py

@@ -1,6 +1,7 @@
 FROM ubuntu:20.04
 
 ARG DEBIAN_FRONTEND=noninteractive
+ARG PATH=/usr/local/sbin:$PATH
 
 RUN mkdir -p /usr/share/man/man1 /usr/share/man/man2 && \
     apt -y --no-install-recommends update && \

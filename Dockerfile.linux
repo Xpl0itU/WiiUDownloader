@@ -6,7 +6,7 @@ ARG PATH=/usr/local/sbin:$PATH
 RUN mkdir -p /usr/share/man/man1 /usr/share/man/man2 && \
     apt -y --no-install-recommends update && \
     apt -y --no-install-recommends install curl wget && \
-    /bin/bash -c "$(curl -sL https://raw.githubusercontent.com/V10lator/NUSspli/master/apt-fast/install.sh)" && \
+    curl -sSL https://raw.githubusercontent.com/V10lator/NUSspli/master/apt-fast/install.sh | bash
     apt-fast -y --no-install-recommends update && \
     apt-fast -y --no-install-recommends upgrade && \
     apt-fast install -y --no-install-recommends libgcrypt20-dev desktop-file-utils argagg-dev libgtk-3-dev libgtkmm-3.0-dev libmbedtls-dev libcurl4-openssl-dev cmake libfuse2 libfuse-dev libboost-all-dev nlohmann-json3-dev libgpgme-dev && \

@@ -38,11 +38,6 @@ else()
           )
 endif()
 
-if(UNIX AND NOT APPLE)
-  add_subdirectory(AppImageUpdate)
-  link_libraries(libappimageupdate_static)
-endif()
-
 include(GResource)
 gresource(${CMAKE_CURRENT_SOURCE_DIR}
             data/wiiudownloader.gresource.xml
@@ -81,6 +76,7 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
     curl
 )
 
+enable_testing()
 add_subdirectory(Catch2)
 add_executable(tests
         src/titleInfo.c
@@ -105,4 +101,3 @@ target_link_libraries(tests
 include(CTest)
 include(Catch)
 catch_discover_tests(tests)
-enable_testing()

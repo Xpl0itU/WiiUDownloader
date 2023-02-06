@@ -22,5 +22,5 @@ try:
 except:
     pass
 os.chdir("build")
-os.system("cmake .. -DBUILD_LIBAPPIMAGEUPDATE_ONLY=ON")
+os.system("cmake ..")
 os.system("cmake --build .")

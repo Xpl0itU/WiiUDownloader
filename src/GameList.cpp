@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <downloader.h>
 #include <iostream>
+#include <utility>
 
 void GameList::updateTitles(TITLE_CATEGORY cat, MCPRegion reg) {
     treeModel = Gtk::ListStore::create(columns);
@@ -25,8 +26,8 @@ void GameList::updateTitles(TITLE_CATEGORY cat, MCPRegion reg) {
     }
 }
 
-GameList::GameList(Glib::RefPtr<Gtk::Application> app, Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos) {
-    this->app = app;
+GameList::GameList(Glib::RefPtr<Gtk::Application> app, const Glib::RefPtr<Gtk::Builder>& builder, const TitleEntry *infos) {
+    this->app = std::move(app);
     this->builder = builder;
     this->infos = infos;
 
@@ -126,7 +127,7 @@ void GameList::search_entry_changed() {
                 if (!iter)
                     return true;
 
-                Gtk::TreeModel::Row row = *iter;
+                const Gtk::TreeModel::Row& row = *iter;
                 Glib::ustring name = row[columns.name];
                 Glib::ustring key = searchEntry->get_text();
                 std::string string_name(name.lowercase());
@@ -261,8 +262,8 @@ void GameList::on_gamelist_row_activated(const Gtk::TreePath &treePath, Gtk::Tre
     }
 }
 
-bool GameList::on_search_equal(const Glib::RefPtr<Gtk::TreeModel> &model, int column, const Glib::ustring &key, const Gtk::TreeModel::iterator &iter) {
-    Gtk::TreeModel::Row row = *iter;
+bool GameList::on_search_equal(const Glib::RefPtr<Gtk::TreeModel> &model, int column, const Glib::ustring &key, const Gtk::TreeModel::iterator &iter) const {
+    const Gtk::TreeModel::Row& row = *iter;
     if (row) {
         Glib::ustring name = row[columns.name];
         std::string string_name(name.lowercase());

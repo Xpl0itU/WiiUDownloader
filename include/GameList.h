@@ -30,7 +30,7 @@ public:
         Gtk::TreeModelColumn<Glib::ustring> name;
     };
 
-    GameList(Glib::RefPtr<Gtk::Application> app, Glib::RefPtr<Gtk::Builder> builder, const TitleEntry *infos);
+    GameList(Glib::RefPtr<Gtk::Application> app, const Glib::RefPtr<Gtk::Builder>& builder, const TitleEntry *infos);
     ~GameList();
 
     void updateTitles(TITLE_CATEGORY cat, MCPRegion reg);
@@ -43,7 +43,7 @@ public:
     void on_download_queue(GdkEventButton *ev);
     void on_decrypt_selected(Gtk::ToggleButton *button);
     void on_delete_encrypted_selected(Gtk::ToggleButton *button);
-    bool on_search_equal(const Glib::RefPtr<Gtk::TreeModel> &model, int column, const Glib::ustring &key, const Gtk::TreeModel::iterator &iter);
+    bool on_search_equal(const Glib::RefPtr<Gtk::TreeModel> &model, int column, const Glib::ustring &key, const Gtk::TreeModel::iterator &iter) const;
     void search_entry_changed();
     void on_decrypt_menu_click();
     void on_generate_fake_tik_menu_click();

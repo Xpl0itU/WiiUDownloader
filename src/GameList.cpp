@@ -193,7 +193,6 @@ void GameList::on_download_queue(GdkEventButton *ev) {
 }
 
 bool GameList::is_selection_in_queue() {
-    //Gtk::TreeModel::Row row = *selection->get_selected();
     std::vector<Gtk::TreeModel::Path> pathlist = treeView->get_selection()->get_selected_rows();
     for (auto iter = pathlist.begin(); iter != pathlist.end(); iter++) {
         Gtk::TreeModel::Row row = *(treeView->get_model()->get_iter(*iter));
@@ -221,7 +220,6 @@ void GameList::on_selection_changed() {
 }
 
 void GameList::on_add_to_queue(GdkEventButton *ev) {
-    //Gtk::TreeModel::Row row = *selection->get_selected();
     std::vector<Gtk::TreeModel::Path> pathlist = treeView->get_selection()->get_selected_rows();
     bool updateAsked = false;
     bool updateSelected;

@@ -11,6 +11,7 @@
 void GameList::updateTitles(TITLE_CATEGORY cat, MCPRegion reg) {
     treeModel = Gtk::ListStore::create(columns);
     treeView->set_model(treeModel);
+    treeView->get_selection()->set_mode(Gtk::SELECTION_MULTIPLE);
     for (unsigned int i = 0; i < getTitleEntriesSize(cat); i++) {
         if (!(reg & infos[i].region))
             continue;
@@ -191,38 +192,70 @@ void GameList::on_download_queue(GdkEventButton *ev) {
     gameListWindow->set_sensitive(true);
 }
 
-void GameList::on_selection_changed() {
-    Glib::RefPtr<Gtk::TreeSelection> selection = treeView->get_selection();
-    Gtk::TreeModel::Row row = *selection->get_selected();
-    if (row) {
-        if (row[columns.toQueue] == true) {
-            addToQueueButton->set_label("Remove from queue");
-        } else {
-            addToQueueButton->set_label("Add to queue");
+bool GameList::is_selection_in_queue() {
+    std::vector<Gtk::TreeModel::Path> pathlist = treeView->get_selection()->get_selected_rows();
+    for (auto iter = pathlist.begin(); iter != pathlist.end(); iter++) {
+        Gtk::TreeModel::Row row = *(treeView->get_model()->get_iter(*iter));
+        if (!row) continue;
+        if (row[columns.toQueue] == false) {
+            return false;
         }
+    }
+    return true;
+}
+
+void GameList::on_selection_changed() {
+    if (treeView->get_selection()->get_selected_rows().size() == 0) {
+        // Change the label to "add" when nothing is selected because it's like the default option.
+        addToQueueButton->set_label("Add to queue");
+        addToQueueButton->set_sensitive(false);
+        return;
+    }
+    addToQueueButton->set_sensitive(true);
+    if (is_selection_in_queue()) {
+        addToQueueButton->set_label("Remove from queue");
+    } else {
+        addToQueueButton->set_label("Add to queue");
     }
 }
 
 void GameList::on_add_to_queue(GdkEventButton *ev) {
-    Glib::RefPtr<Gtk::TreeSelection> selection = treeView->get_selection();
-    Gtk::TreeModel::Row row = *selection->get_selected();
-    if (row) {
-        row[columns.toQueue] = !row[columns.toQueue];
-        if (row[columns.toQueue]) {
+    std::vector<Gtk::TreeModel::Path> pathlist = treeView->get_selection()->get_selected_rows();
+    bool updateAsked = false;
+    bool updateSelected;
+    bool addToQueue = !is_selection_in_queue();
+    for (auto iter = pathlist.begin(); iter != pathlist.end(); iter++) {
+        Gtk::TreeModel::Row row = *(treeView->get_model()->get_iter(*iter));
+        // If (!row) or if row is already in the correct place (queue or not), then skip.
+        if (!row || addToQueue == row[columns.toQueue]) continue;
+        row[columns.toQueue] = addToQueue;
+        if (addToQueue) {
             queueMap.emplace(std::pair(infos[row[columns.index]].tid, infos[row[columns.index]].name));
             uint64_t updateTID = 0;
-            if (getUpdateFromBaseGame(infos[row[columns.index]].tid, &updateTID))
-                if (ask("Update detected.\nDo you want to add the update to the queue too?"))
+            if (getUpdateFromBaseGame(infos[row[columns.index]].tid, &updateTID)) {
+                if (!updateAsked) {
+                    updateAsked = true;
+                    updateSelected = ask("Update(s) detected.\nDo you want to add the update(s) to the queue too?");
+                }
+                if (updateSelected) {
                     queueMap.emplace(std::pair(updateTID, infos[row[columns.index]].name));
+                }
+            }
             addToQueueButton->set_label("Remove from queue");
         } else {
             queueMap.erase(infos[row[columns.index]].tid);
             uint64_t updateTID = 0;
             if (getUpdateFromBaseGame(infos[row[columns.index]].tid, &updateTID)) {
                 bool updateInQueue = queueMap.empty() ? false : queueMap.find(updateTID) != queueMap.end();
-                if (updateInQueue)
-                    if (ask("Update detected.\nDo you want to remove the update from the queue too?"))
+                if (updateInQueue) {
+                    if (!updateAsked) {
+                        updateAsked = true;
+                        updateSelected = ask("Update detected.\nDo you want to remove the update from the queue too?");
+                    }
+                    if (updateSelected) {
                         queueMap.erase(updateTID);
+                    }
+                }
             }
             addToQueueButton->set_label("Add to queue");
         }

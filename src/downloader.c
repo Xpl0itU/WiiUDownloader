@@ -276,6 +276,11 @@ void setSelectedDir(const char *path) {
     strcpy(selected_dir, path);
 }
 
+void freeSelectedDir() {
+    if(selected_dir != NULL)
+        free(selected_dir);
+}
+
 int downloadTitle(const char *titleID, const char *name, bool decrypt, bool *cancelQueue, bool deleteEncryptedContents, bool showProgressDialog) {
     // initialize some useful variables
     cancelled = false;
@@ -289,13 +294,12 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool *can
     strcpy(output_dir, folder_name);
     prepend(output_dir, "/");
     if (selected_dir == NULL)
-        selected_dir = show_folder_select_dialog();
+        setSelectedDir(show_folder_select_dialog());
     if (selected_dir == NULL) {
         free(output_dir);
         return -1;
     }
     prepend(output_dir, selected_dir);
-    free(selected_dir);
     if (output_dir[strlen(output_dir) - 1] == '/' || output_dir[strlen(output_dir) - 1] == '\\') {
         output_dir[strlen(output_dir) - 1] = '\0';
     }

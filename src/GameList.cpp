@@ -119,6 +119,7 @@ GameList::GameList(Glib::RefPtr<Gtk::Application> app, const Glib::RefPtr<Gtk::B
 
 GameList::~GameList() {
     free(cancelQueue);
+    freeSelectedDir();
 }
 
 void GameList::search_entry_changed() {
@@ -149,12 +150,10 @@ void GameList::search_entry_changed() {
 
 void GameList::on_decrypt_selected(Gtk::ToggleButton *button) {
     // decryptContents = !decryptContents; Bug Fix Attempt
-    if(button->get_active())
-    {
+    if(button->get_active()) {
         decryptContents = true;
         deleteEncryptedContentsButton->set_sensitive(TRUE);
-    }
-    else {
+    } else {
         decryptContents = false;
         deleteEncryptedContentsButton->set_sensitive(FALSE);
         deleteEncryptedContentsButton->set_active(FALSE);

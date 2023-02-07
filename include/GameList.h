@@ -39,6 +39,7 @@ public:
     void on_button_selected(GdkEventButton *ev, TITLE_CATEGORY cat);
     void on_region_selected(Gtk::ToggleButton *button, MCPRegion reg);
     void on_add_to_queue(GdkEventButton *ev);
+    bool is_selection_in_queue();
     void on_selection_changed();
     void on_download_queue(GdkEventButton *ev);
     void on_decrypt_selected(Gtk::ToggleButton *button);

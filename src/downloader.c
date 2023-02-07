@@ -245,7 +245,7 @@ static int downloadFile(const char *download_url, const char *output_path, struc
     int retryCount = 0;
     do {
         curlCode = curl_easy_perform(progress->handle);
-        if (curlCode == CURLE_OK)
+        if ((curlCode == CURLE_OK) || cancelled || *queueCancelled)
             break;
         ++retryCount;
         if(doRetrySleep)

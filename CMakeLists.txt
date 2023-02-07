@@ -15,7 +15,7 @@ if (PKG_CONFIG_FOUND)
     add_definitions(${GTKMM_CFLAGS} ${GTKMM_CFLAGS_OTHER})
   endif()
 endif()
-add_subdirectory(nativefiledialog-extended)
+add_subdirectory(lib/nativefiledialog-extended)
 execute_process(COMMAND uname OUTPUT_VARIABLE uname)
 if(uname MATCHES "^MSYS" OR uname MATCHES "^MINGW")
   link_libraries(nfd ole32 uuid shell32)
@@ -63,7 +63,7 @@ add_executable(${CMAKE_PROJECT_NAME}
                 ${RESOURCE_FILE})
 
 if(uname MATCHES "^MSYS" OR uname MATCHES "^MINGW")
-  add_subdirectory(regFixLongPaths)
+  add_subdirectory(lib/regFixLongPaths)
   add_dependencies(${CMAKE_PROJECT_NAME} regFixLongPaths)
 endif()
 
@@ -77,7 +77,7 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
 )
 
 enable_testing()
-add_subdirectory(Catch2)
+add_subdirectory(lib/Catch2)
 add_executable(tests
         src/titleInfo.c
         src/gtitles.c

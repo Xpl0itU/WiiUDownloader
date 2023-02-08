@@ -19,8 +19,8 @@ add_subdirectory(lib/nativefiledialog-extended)
 execute_process(COMMAND uname OUTPUT_VARIABLE uname)
 if(uname MATCHES "^MSYS" OR uname MATCHES "^MINGW")
   link_libraries(nfd ole32 uuid shell32)
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_GNU_SOURCE -UNDEBUG -DAES_ROM_TABLES -fvisibility=hidden -Ofast -fno-strict-aliasing -pipe -mwindows")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GNU_SOURCE -UNDEBUG -DAES_ROM_TABLES -fvisibility=hidden -Ofast -fno-strict-aliasing -pipe -mwindows")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_GNU_SOURCE -UNDEBUG -DAES_ROM_TABLES -fvisibility=hidden -Ofast -fno-strict-aliasing -pipe -mwindows -mms-bitfields")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GNU_SOURCE -UNDEBUG -DAES_ROM_TABLES -fvisibility=hidden -Ofast -fno-strict-aliasing -pipe -mwindows -mms-bitfields")
   file(GLOB SOURCES
           src/*.cpp
           src/*.c
@@ -88,6 +88,7 @@ add_executable(tests
         src/cdecrypt/sha1.c
         src/cdecrypt/util.c
         src/downloader.c
+        src/fst.c
         tests/tests.cpp)
 
 target_link_libraries(tests

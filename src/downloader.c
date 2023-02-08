@@ -12,10 +12,13 @@
 
 #include <cdecrypt/cdecrypt.h>
 #include <downloader.h>
+#include <fst.h>
 #include <keygen.h>
 #include <nfd.h>
 #include <tmd.h>
 #include <utils.h>
+
+#include "cdecrypt/util.h"
 
 #include <curl/curl.h>
 #include <gtk/gtk.h>
@@ -39,12 +42,19 @@ struct CURLProgress {
     CURL *handle;
 };
 
+enum Choice {
+    NO = 0,
+    YES = 1,
+    UNSELECTED = 2
+};
+
 static GtkWidget *window;
 
 static char *selected_dir = NULL;
 static bool cancelled = false;
 static bool paused = false;
 static bool *queueCancelled;
+static enum Choice downloadWiiVC = UNSELECTED;
 
 static char *readable_fs(double size, char *buf) {
     int i = 0;
@@ -379,10 +389,41 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool *can
     snprintf(download_url, 74, "%s/%s", base_url, "cetk");
     if(downloadFile(download_url, output_path, progress, false) != 0)
         generateTicket(output_path, strtoull(titleID, NULL, 16), titleKey, title_version);
+    uint8_t *tikData = malloc(2048);
+    read_file(output_path, &tikData);
     int ret = 0;
+
+    // Check the FST
+    uint32_t fstID = bswap_32(tmd_data->contents[0].cid);
+    snprintf(output_path, sizeof(output_path), "%s/%08x.app", output_dir, fstID);
+    snprintf(download_url, 78, "%s/%08x", base_url, fstID);
+    sprintf(progress->currentFile, "%08x.app", fstID);
+    if (downloadFile(download_url, output_path, progress, true) != 0) {
+        showError("Error downloading FST\nPlease check your internet connection\nOr your router might be blocking the NUS server");
+        cancelled = true;
+        ret = -1;
+    }
+    uint8_t *decryptedFSTData = malloc(bswap_64(tmd_data->contents[0].size));
+    TICKET *tik = (TICKET *)tikData;
+    decryptFST(output_path, decryptedFSTData, tmd_data, tik->key);
+    if(!validateFST(decryptedFSTData)) {
+        showError("Error: Invalid FST Data, download is probably corrupt");
+        fprintf(stderr, "Error: Invalid FST Data, download is probably corrupt");
+        cancelled = true;
+        ret = -1;
+    }
+    if(downloadWiiVC == UNSELECTED) {
+        if(containsFile(decryptedFSTData, "fw.img")) {
+            downloadWiiVC = ask("This is a Wii VC Title\nIt won't run on Cemu\nContinue downloading?") == true ? YES : NO;
+            if(downloadWiiVC == NO)
+                cancelled = true;
+        }
+    }
+    free(decryptedFSTData);
+    free(tikData);
+
     for (int i = 0; i < content_count; i++) {
         if (!cancelled) {
-            int offset = 2820 + (48 * i);
             uint32_t id = bswap_32(tmd_data->contents[i].cid); // the id should usually be chronological, but we wanna be sure
 
             // add a curl handle for the content file (.app file)

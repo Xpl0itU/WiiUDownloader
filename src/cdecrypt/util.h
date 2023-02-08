@@ -17,6 +17,10 @@
 */
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifdef _DEBUG
 #define _CRTDBG_MAP_ALLOC
 #include <stdlib.h>
@@ -219,3 +223,7 @@ uint32_t read_file_max(const char* path, uint8_t** buf, uint32_t max_size);
 uint64_t get_file_size(const char* path);
 void create_backup(const char* path);
 bool write_file(const uint8_t* buf, const uint32_t size, const char* path, const bool backup);
+
+#ifdef __cplusplus
+}
+#endif

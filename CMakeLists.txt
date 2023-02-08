@@ -88,6 +88,7 @@ add_executable(tests
         src/cdecrypt/sha1.c
         src/cdecrypt/util.c
         src/downloader.c
+        src/fst.c
         tests/tests.cpp)
 
 target_link_libraries(tests

@@ -42,12 +42,19 @@ struct CURLProgress {
     CURL *handle;
 };
 
+enum Choice {
+    NO = 0,
+    YES = 1,
+    UNSELECTED = 2
+};
+
 static GtkWidget *window;
 
 static char *selected_dir = NULL;
 static bool cancelled = false;
 static bool paused = false;
 static bool *queueCancelled;
+static enum Choice downloadWiiVC = UNSELECTED;
 
 static char *readable_fs(double size, char *buf) {
     int i = 0;
@@ -404,6 +411,13 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool *can
         fprintf(stderr, "Error: Invalid FST Data, download is probably corrupt");
         cancelled = true;
         ret = -1;
+    }
+    if(downloadWiiVC == UNSELECTED) {
+        if(containsFile(decryptedFSTData, "fw.img")) {
+            downloadWiiVC = ask("This is a Wii VC Title\nIt won't run on Cemu\nContinue downloading?") == true ? YES : NO;
+            if(downloadWiiVC == NO)
+                cancelled = true;
+        }
     }
     free(decryptedFSTData);
     free(tikData);

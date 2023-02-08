@@ -42,10 +42,29 @@ bool decryptFST(const char *path, uint8_t *outputBuffer, TMD *tmd, uint8_t *titl
 }
 
 bool validateFST(uint8_t *data) {
-    FST_Header *fst = (FST_Header*)data;
+    struct FST *fst = (struct FST *)data;
 
-    if(bswap_32(fst->magic) != 0x46535400) {
+    if(bswap_32(fst->MagicBytes) != 0x46535400) {
         return false;
     }
     return true;
+}
+
+bool containsFile(uint8_t *data, const char *path) {
+    struct FST *fst = (struct FST *)data;
+    struct FEntry *fe = (struct FEntry *) (data + 0x20 + (uintptr_t) getbe32(&fst->EntryCount) * 0x20);
+
+    uint32_t entries = getbe32(data + 0x20 + (uintptr_t) getbe32(&fst->EntryCount) * 0x20 + 8);
+    uint32_t name_offset = 0x20 + getbe32(&fst->EntryCount) * 0x20 + entries * 0x10;
+
+    if(bswap_32(fst->MagicBytes) != 0x46535400) {
+        return false;
+    }
+
+    for(uint32_t i = 1; i < entries; ++i) {
+        uint32_t offset = getbe32(&fe[i].TypeName) & 0x00FFFFFF;
+        if(strcmp(path, data + name_offset + offset) == 0)
+            return true;
+    }
+    return false;
 }

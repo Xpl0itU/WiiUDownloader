@@ -1,21 +1,26 @@
 #include <SettingsMenu.h>
 
+#include <downloader.h>
+#include <settings.h>
 #include <utils.h>
 
 SettingsMenu::SettingsMenu(const Glib::RefPtr<Gtk::Builder> &builder) {
     this->builder = builder;
 
     builder->get_widget("settingsDialog", settingsDialog);
+    settingsDialog->set_title("WiiUDownloader Settings");
     settingsDialog->show();
 
     builder->get_widget("downloadDirectoryEntry", downloadDirectoryEntry);
-    downloadDirectoryEntry->set_buffer(downloadDirectory);
+    downloadDirectoryEntry->set_text(getSelectedDir());
 
     builder->get_widget("browseDownloadDirButton", browseDownloadDirButton);
     browseDownloadDirButton->signal_button_press_event().connect_notify(sigc::mem_fun(*this, &SettingsMenu::on_browse_download_dir));
+    browseDownloadDirButton->set_focus_on_click(FALSE);
 
     builder->get_widget("hideWiiVCWarningCheckButton", hideWiiVCWarningCheckButton);
     hideWiiVCWarningCheckButton->signal_toggled().connect_notify(sigc::bind(sigc::mem_fun(*this, &SettingsMenu::on_select_wiivc_hide_change), hideWiiVCWarningCheckButton));
+    hideWiiVCWarningCheckButton->set_active(getHideWiiVCWarning());
 
     builder->get_widget("acceptSettingsButton", acceptSettingsButton);
     acceptSettingsButton->signal_button_press_event().connect_notify(sigc::mem_fun(*this, &SettingsMenu::on_accept_settings));
@@ -27,21 +32,25 @@ SettingsMenu::SettingsMenu(const Glib::RefPtr<Gtk::Builder> &builder) {
 SettingsMenu::~SettingsMenu() = default;
 
 void SettingsMenu::on_browse_download_dir(GdkEventButton *ev) {
-    const char *selectedDir = show_folder_select_dialog();
-    if(selectedDir != nullptr)
+    // TODO: Fix button being triggered after dialog is closed
+    char *selectedDir = show_folder_select_dialog();
+    if(selectedDir != nullptr) {
         this->downloadDirectoryEntry->set_text(selectedDir);
+        free(selectedDir);
+    }
 }
 
 void SettingsMenu::on_select_wiivc_hide_change(Gtk::CheckButton *button) {
     if(button->get_active()) {
-        hideWiiVCWarning = true;
+        setHideWiiVCWarning(true);
     } else {
-        hideWiiVCWarning = false;
+        setHideWiiVCWarning(false);
     }
 }
 
 void SettingsMenu::on_accept_settings(GdkEventButton *ev) {
-    // TODO: Save settings to JSON and set them
+    saveSettings(downloadDirectoryEntry->get_buffer()->get_text().c_str(), getHideWiiVCWarning());
+    loadSettings();
     settingsDialog->hide();
 }
 

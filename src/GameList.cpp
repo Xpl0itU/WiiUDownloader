@@ -123,9 +123,10 @@ GameList::GameList(Glib::RefPtr<Gtk::Application> app, const Glib::RefPtr<Gtk::B
 
 GameList::~GameList() {
     free(cancelQueue);
-    freeSelectedDir();
-    if(settings != nullptr)
+    if(settings != nullptr) {
         delete settings;
+        settings = nullptr;
+    }
 }
 
 void GameList::search_entry_changed() {
@@ -357,10 +358,18 @@ void GameList::on_settings_menu_click() {
     gameListWindow->set_sensitive(FALSE);
     if(settings == nullptr)
         settings = new SettingsMenu(builder);
+    else
+        settings->getWindow()->show();
+    gameListWindow->get_application()->add_window(*settings->getWindow());
+    settingsConn = settings->getWindow()->signal_hide().connect(sigc::mem_fun(*this, &GameList::on_settings_closed));
     settings->getWindow()->set_transient_for(*gameListWindow);
     settings->getWindow()->set_modal(TRUE);
-    settings->getWindow()->set_title("WiiUDownloader Settings");
-    settings->getWindow()->run();
+    gameListWindow->set_sensitive(FALSE);
+}
+
+void GameList::on_settings_closed() {
+    settingsConn.disconnect();
     settings->getWindow()->set_modal(FALSE);
+
     gameListWindow->set_sensitive(TRUE);
 }

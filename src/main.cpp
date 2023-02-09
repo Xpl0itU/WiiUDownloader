@@ -8,7 +8,9 @@
 #include <windows.h>
 #endif
 
+#include <downloader.h>
 #include <GameList.h>
+#include <settings.h>
 #include <utils.h>
 
 int main(int argc, char *argv[]) {
@@ -33,6 +35,8 @@ int main(int argc, char *argv[]) {
     checkAndEnableLongPaths();
 #endif // _WIN32
 
+    loadSettings();
+
     GameList *list = new GameList(app, builder, getTitleEntries(TITLE_CATEGORY_GAME));
 
     list->getWindow()->set_title("WiiUDownloader");
@@ -40,6 +44,8 @@ int main(int argc, char *argv[]) {
     setGameList(list->getWindow()->gobj());
 
     app->run(*list->getWindow());
+
+    saveSettings(getSelectedDir(), getHideWiiVCWarning());
 
     delete list->getWindow();
     delete list;

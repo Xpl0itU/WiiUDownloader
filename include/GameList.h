@@ -50,6 +50,7 @@ public:
     void on_decrypt_menu_click();
     void on_generate_fake_tik_menu_click();
     void on_settings_menu_click();
+    void on_settings_closed();
 
     Gtk::Window *getWindow() { return gameListWindow; }
 
@@ -81,6 +82,7 @@ private:
     Gtk::SearchEntry *searchEntry = nullptr;
 
     SettingsMenu *settings = nullptr;
+    sigc::connection settingsConn;
 
     bool decryptContents = false;
     bool deleteEncryptedContents = false;

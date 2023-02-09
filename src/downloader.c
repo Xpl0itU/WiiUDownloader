@@ -15,6 +15,7 @@
 #include <fst.h>
 #include <keygen.h>
 #include <nfd.h>
+#include <settings.h>
 #include <tmd.h>
 #include <utils.h>
 
@@ -286,9 +287,17 @@ void setSelectedDir(const char *path) {
     strcpy(selected_dir, path);
 }
 
-void freeSelectedDir() {
-    if(selected_dir != NULL)
-        free(selected_dir);
+char *getSelectedDir() {
+    return selected_dir;
+}
+
+// We invert the values here, code planning issue
+void setHideWiiVCWarning(bool value) {
+    downloadWiiVC = value ? NO : YES;
+}
+
+bool getHideWiiVCWarning() {
+    return downloadWiiVC == YES ? false : true;
 }
 
 int downloadTitle(const char *titleID, const char *name, bool decrypt, bool *cancelQueue, bool deleteEncryptedContents, bool showProgressDialog) {
@@ -421,6 +430,7 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool *can
     }
     free(decryptedFSTData);
     free(tikData);
+    saveSettings(getSelectedDir(), getHideWiiVCWarning());
 
     for (int i = 0; i < content_count; i++) {
         if (!cancelled) {

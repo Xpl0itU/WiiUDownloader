@@ -24,7 +24,4 @@ private:
 
     Gtk::Button *acceptSettingsButton = nullptr;
     Gtk::Button *cancelSettingsButton = nullptr;
-
-    Glib::RefPtr<Gtk::EntryBuffer> downloadDirectory;
-    bool hideWiiVCWarning = false;
 };

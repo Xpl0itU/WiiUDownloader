@@ -9,7 +9,7 @@ public:
 
     Gtk::Dialog *getWindow() { return settingsDialog; }
 
-    void on_browse_download_dir(GdkEventButton *ev);
+    void on_browse_download_dir();
     void on_select_wiivc_hide_change(Gtk::CheckButton *button);
     void on_accept_settings(GdkEventButton *ev);
     void on_cancel_settings(GdkEventButton *ev);

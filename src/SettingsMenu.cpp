@@ -15,8 +15,7 @@ SettingsMenu::SettingsMenu(const Glib::RefPtr<Gtk::Builder> &builder) {
     downloadDirectoryEntry->set_text(getSelectedDir());
 
     builder->get_widget("browseDownloadDirButton", browseDownloadDirButton);
-    browseDownloadDirButton->signal_button_press_event().connect_notify(sigc::mem_fun(*this, &SettingsMenu::on_browse_download_dir));
-    browseDownloadDirButton->set_focus_on_click(FALSE);
+    browseDownloadDirButton->signal_pressed().connect(sigc::mem_fun(*this, &SettingsMenu::on_browse_download_dir));
 
     builder->get_widget("hideWiiVCWarningCheckButton", hideWiiVCWarningCheckButton);
     hideWiiVCWarningCheckButton->signal_toggled().connect_notify(sigc::bind(sigc::mem_fun(*this, &SettingsMenu::on_select_wiivc_hide_change), hideWiiVCWarningCheckButton));
@@ -31,8 +30,7 @@ SettingsMenu::SettingsMenu(const Glib::RefPtr<Gtk::Builder> &builder) {
 
 SettingsMenu::~SettingsMenu() = default;
 
-void SettingsMenu::on_browse_download_dir(GdkEventButton *ev) {
-    // TODO: Fix button being triggered after dialog is closed
+void SettingsMenu::on_browse_download_dir() {
     char *selectedDir = show_folder_select_dialog();
     if(selectedDir != nullptr) {
         this->downloadDirectoryEntry->set_text(selectedDir);

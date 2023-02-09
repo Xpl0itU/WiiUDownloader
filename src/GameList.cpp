@@ -1,5 +1,6 @@
 #include <GameList.h>
 #include <cdecrypt/cdecrypt.h>
+#include <SettingsMenu.h>
 #include <utils.h>
 #include <tmd.h>
 
@@ -84,6 +85,10 @@ GameList::GameList(Glib::RefPtr<Gtk::Application> app, const Glib::RefPtr<Gtk::B
     Gtk::ImageMenuItem *decryptMenuButton = nullptr;
     builder->get_widget("decryptMenuButton", decryptMenuButton);
     decryptMenuButton->signal_activate().connect(sigc::mem_fun(*this, &GameList::on_decrypt_menu_click));
+
+    Gtk::ImageMenuItem *settingsButton = nullptr;
+    builder->get_widget("settingsButton", settingsButton);
+    settingsButton->signal_activate().connect(sigc::mem_fun(*this, &GameList::on_settings_menu_click));
 
     Gtk::ImageMenuItem *generateFakeTIKButton = nullptr;
     builder->get_widget("generateFakeTIKButton", generateFakeTIKButton);
@@ -193,8 +198,8 @@ void GameList::on_download_queue(GdkEventButton *ev) {
 
 bool GameList::is_selection_in_queue() {
     std::vector<Gtk::TreeModel::Path> pathlist = treeView->get_selection()->get_selected_rows();
-    for (auto iter = pathlist.begin(); iter != pathlist.end(); iter++) {
-        Gtk::TreeModel::Row row = *(treeView->get_model()->get_iter(*iter));
+    for (auto & iter : pathlist) {
+        Gtk::TreeModel::Row row = *(treeView->get_model()->get_iter(iter));
         if (!row) continue;
         if (row[columns.toQueue] == false) {
             return false;
@@ -204,7 +209,7 @@ bool GameList::is_selection_in_queue() {
 }
 
 void GameList::on_selection_changed() {
-    if (treeView->get_selection()->get_selected_rows().size() == 0) {
+    if (treeView->get_selection()->get_selected_rows().empty()) {
         // Change the label to "add" when nothing is selected because it's like the default option.
         addToQueueButton->set_label("Add to queue");
         addToQueueButton->set_sensitive(false);
@@ -223,8 +228,8 @@ void GameList::on_add_to_queue(GdkEventButton *ev) {
     bool updateAsked = false;
     bool updateSelected;
     bool addToQueue = !is_selection_in_queue();
-    for (auto iter = pathlist.begin(); iter != pathlist.end(); iter++) {
-        Gtk::TreeModel::Row row = *(treeView->get_model()->get_iter(*iter));
+    for (auto & iter : pathlist) {
+        Gtk::TreeModel::Row row = *(treeView->get_model()->get_iter(iter));
         // If (!row) or if row is already in the correct place (queue or not), then skip.
         if (!row || addToQueue == row[columns.toQueue]) continue;
         row[columns.toQueue] = addToQueue;
@@ -345,4 +350,21 @@ void GameList::on_generate_fake_tik_menu_click() {
     generateKey(titleID, titleKey);
     if(!generateTicket((path + "/title.tik").c_str(), bswap_64(tmdData->tid), titleKey, titleVersion))
         showError("Error 2 while creating ticket!\nCouldn't write ticket");
+}
+
+void GameList::on_settings_menu_click() {
+    gameListWindow->set_sensitive(FALSE);
+    SettingsMenu *settings = new SettingsMenu(builder);
+
+    settings->getWindow()->set_title("WiiUDownloader Settings");
+
+    gameListWindow->get_application()->add_window(*settings->getWindow());
+    settings->getWindow()->set_transient_for(*gameListWindow);
+    settings->getWindow()->set_modal(TRUE);
+
+    // TODO: add connection to close window event
+
+    //delete settings->getWindow();
+    //delete settings;
+    //gameListWindow->set_sensitive(TRUE);
 }

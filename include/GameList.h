@@ -48,6 +48,7 @@ public:
     void search_entry_changed();
     void on_decrypt_menu_click();
     void on_generate_fake_tik_menu_click();
+    void on_settings_menu_click();
 
     Gtk::Window *getWindow() { return gameListWindow; }
 

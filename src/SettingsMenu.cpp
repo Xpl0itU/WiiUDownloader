@@ -27,7 +27,6 @@ SettingsMenu::SettingsMenu(const Glib::RefPtr<Gtk::Builder> &builder) {
 SettingsMenu::~SettingsMenu() = default;
 
 void SettingsMenu::on_browse_download_dir(GdkEventButton *ev) {
-    // TODO: For some reason, this gets triggered when exiting
     const char *selectedDir = show_folder_select_dialog();
     if(selectedDir != nullptr)
         this->downloadDirectoryEntry->set_text(selectedDir);

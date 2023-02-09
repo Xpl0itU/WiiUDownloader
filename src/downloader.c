@@ -43,19 +43,13 @@ struct CURLProgress {
     CURL *handle;
 };
 
-enum Choice {
-    NO = 0,
-    YES = 1,
-    UNSELECTED = 2
-};
-
 static GtkWidget *window;
 
 static char *selected_dir = NULL;
 static bool cancelled = false;
 static bool paused = false;
 static bool *queueCancelled;
-static enum Choice downloadWiiVC = UNSELECTED;
+static bool downloadWiiVC = false;
 
 static char *readable_fs(double size, char *buf) {
     int i = 0;
@@ -291,13 +285,12 @@ char *getSelectedDir() {
     return selected_dir;
 }
 
-// We invert the values here, code planning issue
 void setHideWiiVCWarning(bool value) {
-    downloadWiiVC = value ? NO : YES;
+    downloadWiiVC = value;
 }
 
 bool getHideWiiVCWarning() {
-    return downloadWiiVC == YES ? false : true;
+    return downloadWiiVC;
 }
 
 int downloadTitle(const char *titleID, const char *name, bool decrypt, bool *cancelQueue, bool deleteEncryptedContents, bool showProgressDialog) {
@@ -421,10 +414,10 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool *can
         cancelled = true;
         ret = -1;
     }
-    if(downloadWiiVC == UNSELECTED) {
+    if(!downloadWiiVC) {
         if(containsFile(decryptedFSTData, "fw.img")) {
-            downloadWiiVC = ask("This is a Wii VC Title\nIt won't run on Cemu\nContinue downloading?") == true ? YES : NO;
-            if(downloadWiiVC == NO)
+            downloadWiiVC = ask("This is a Wii VC Title\nIt won't run on Cemu\nContinue downloading?");
+            if(!downloadWiiVC)
                 cancelled = true;
         }
     }

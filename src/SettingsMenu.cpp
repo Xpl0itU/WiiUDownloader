@@ -47,7 +47,7 @@ void SettingsMenu::on_select_wiivc_hide_change(Gtk::CheckButton *button) {
 }
 
 void SettingsMenu::on_accept_settings(GdkEventButton *ev) {
-    saveSettings(downloadDirectoryEntry->get_buffer()->get_text().c_str(), getHideWiiVCWarning());
+    saveSettings(downloadDirectoryEntry->get_text().c_str(), getHideWiiVCWarning());
     loadSettings();
     settingsDialog->hide();
 }

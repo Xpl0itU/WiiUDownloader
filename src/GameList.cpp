@@ -1,6 +1,5 @@
 #include <GameList.h>
 #include <cdecrypt/cdecrypt.h>
-#include <SettingsMenu.h>
 #include <utils.h>
 #include <tmd.h>
 
@@ -125,6 +124,8 @@ GameList::GameList(Glib::RefPtr<Gtk::Application> app, const Glib::RefPtr<Gtk::B
 GameList::~GameList() {
     free(cancelQueue);
     freeSelectedDir();
+    if(settings != nullptr)
+        delete settings;
 }
 
 void GameList::search_entry_changed() {
@@ -354,17 +355,12 @@ void GameList::on_generate_fake_tik_menu_click() {
 
 void GameList::on_settings_menu_click() {
     gameListWindow->set_sensitive(FALSE);
-    SettingsMenu *settings = new SettingsMenu(builder);
-
-    settings->getWindow()->set_title("WiiUDownloader Settings");
-
-    gameListWindow->get_application()->add_window(*settings->getWindow());
+    if(settings == nullptr)
+        settings = new SettingsMenu(builder);
     settings->getWindow()->set_transient_for(*gameListWindow);
     settings->getWindow()->set_modal(TRUE);
-
-    // TODO: add connection to close window event
-
-    //delete settings->getWindow();
-    //delete settings;
-    //gameListWindow->set_sensitive(TRUE);
+    settings->getWindow()->set_title("WiiUDownloader Settings");
+    settings->getWindow()->run();
+    settings->getWindow()->set_modal(FALSE);
+    gameListWindow->set_sensitive(TRUE);
 }

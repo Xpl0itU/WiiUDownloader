@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include <SettingsMenu.h>
 #include <gtitles.h>
 #include <keygen.h>
 #include <titleInfo.h>
@@ -78,6 +79,8 @@ private:
     Glib::RefPtr<Gtk::TreeModelFilter> m_refTreeModelFilter;
     Gtk::SearchBar *searchBar = nullptr;
     Gtk::SearchEntry *searchEntry = nullptr;
+
+    SettingsMenu *settings = nullptr;
 
     bool decryptContents = false;
     bool deleteEncryptedContents = false;

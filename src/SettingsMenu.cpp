@@ -27,7 +27,10 @@ SettingsMenu::SettingsMenu(const Glib::RefPtr<Gtk::Builder> &builder) {
 SettingsMenu::~SettingsMenu() = default;
 
 void SettingsMenu::on_browse_download_dir(GdkEventButton *ev) {
-    this->downloadDirectory->set_text(show_folder_select_dialog());
+    // TODO: For some reason, this gets triggered when exiting
+    const char *selectedDir = show_folder_select_dialog();
+    if(selectedDir != nullptr)
+        this->downloadDirectoryEntry->set_text(selectedDir);
 }
 
 void SettingsMenu::on_select_wiivc_hide_change(Gtk::CheckButton *button) {
@@ -40,9 +43,9 @@ void SettingsMenu::on_select_wiivc_hide_change(Gtk::CheckButton *button) {
 
 void SettingsMenu::on_accept_settings(GdkEventButton *ev) {
     // TODO: Save settings to JSON and set them
-    settingsDialog->close();
+    settingsDialog->hide();
 }
 
 void SettingsMenu::on_cancel_settings(GdkEventButton *ev) {
-    settingsDialog->close();
+    settingsDialog->hide();
 }

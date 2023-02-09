@@ -89,6 +89,8 @@ add_executable(tests
         src/cdecrypt/util.c
         src/downloader.c
         src/fst.c
+        src/settings.cpp
+        src/jsoncpp.cpp
         tests/tests.cpp)
 
 target_link_libraries(tests

@@ -12,7 +12,8 @@ SettingsMenu::SettingsMenu(const Glib::RefPtr<Gtk::Builder> &builder) {
     settingsDialog->show();
 
     builder->get_widget("downloadDirectoryEntry", downloadDirectoryEntry);
-    downloadDirectoryEntry->set_text(getSelectedDir());
+    if(getSelectedDir() != nullptr)
+        downloadDirectoryEntry->set_text(getSelectedDir());
 
     builder->get_widget("browseDownloadDirButton", browseDownloadDirButton);
     browseDownloadDirButton->signal_pressed().connect(sigc::mem_fun(*this, &SettingsMenu::on_browse_download_dir));

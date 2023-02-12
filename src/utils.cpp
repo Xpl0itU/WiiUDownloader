@@ -8,6 +8,7 @@
 
 #include <fstream>
 #include <gtkmm.h>
+#include <mbedtls/md.h>
 #include <nfd.h>
 
 GtkWindow *gameListWindow = nullptr;
@@ -123,4 +124,31 @@ void setGameList(GtkWindow *window) {
 
 void minimizeGameListWindow() {
     gtk_window_iconify(gameListWindow);
+}
+
+int compareHash(const char *input, const char *expectedHash) {
+    unsigned char output[32];
+    mbedtls_md_context_t ctx;
+    const mbedtls_md_info_t *info = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
+
+    mbedtls_md_init(&ctx);
+    mbedtls_md_setup(&ctx, info, 0);
+    mbedtls_md_starts(&ctx);
+    mbedtls_md_update(&ctx, (const unsigned char *) input, strlen(input));
+    mbedtls_md_finish(&ctx, output);
+    mbedtls_md_free(&ctx);
+
+    char outputHex[2 * sizeof(output) + 1];
+    for (int i = 0; i < sizeof(output); ++i) {
+        sprintf(outputHex + 2 * i, "%02x", output[i]);
+    }
+
+    return strcmp(expectedHash, outputHex);
+}
+
+size_t getFilesizeFromFile(FILE *file) {
+    fseek(file, 0L, SEEK_END);
+    size_t fSize = ftell(file);
+    fseek(file, 0L, SEEK_SET);
+    return fSize;
 }

@@ -340,9 +340,7 @@ void GameList::on_generate_fake_tik_menu_click() {
         showError("Error 1 while creating ticket!\nTicket can't be opened or not found");
         return;
     }
-    fseek(tmd, 0L, SEEK_END);
-    size_t fSize = ftell(tmd);
-    fseek(tmd, 0L, SEEK_SET);
+    size_t fSize = getFilesizeFromFile(tmd);
     uint8_t *buffer = (uint8_t *) malloc(fSize);
     fread(buffer, fSize, 1, tmd);
     TMD *tmdData = (TMD *) buffer;

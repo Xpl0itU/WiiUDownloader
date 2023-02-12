@@ -3,6 +3,7 @@
 #include <utils.h>
 #include <tmd.h>
 
+#include <nfd.h>
 #include <cstdlib>
 #include <downloader.h>
 #include <iostream>
@@ -19,7 +20,7 @@ void GameList::updateTitles(TITLE_CATEGORY cat, MCPRegion reg) {
         hex(infos[i].tid, 16, id);
         Gtk::TreeModel::Row row = *(treeModel->append());
         row[columns.index] = i;
-        row[columns.toQueue] = queueMap.empty() ? false : queueMap.find(infos[i].tid) != queueMap.end();
+        row[columns.toQueue] = !queueMap.empty() && queueMap.find(infos[i].tid) != queueMap.end();
         row[columns.name] = infos[i].name;
         row[columns.region] = Glib::ustring::format(getFormattedRegion((MCPRegion) infos[i].region));
         row[columns.kind] = Glib::ustring::format(getFormattedKind(infos[i].tid));
@@ -203,7 +204,7 @@ bool GameList::is_selection_in_queue() {
     for (auto & iter : pathlist) {
         Gtk::TreeModel::Row row = *(treeView->get_model()->get_iter(iter));
         if (!row) continue;
-        if (row[columns.toQueue] == false) {
+        if (!row[columns.toQueue]) {
             return false;
         }
     }
@@ -252,7 +253,7 @@ void GameList::on_add_to_queue(GdkEventButton *ev) {
             queueMap.erase(infos[row[columns.index]].tid);
             uint64_t updateTID = 0;
             if (getUpdateFromBaseGame(infos[row[columns.index]].tid, &updateTID)) {
-                bool updateInQueue = queueMap.empty() ? false : queueMap.find(updateTID) != queueMap.end();
+                bool updateInQueue = !queueMap.empty() && queueMap.find(updateTID) != queueMap.end();
                 if (updateInQueue) {
                     if (!updateAsked) {
                         updateAsked = true;
@@ -342,16 +343,20 @@ void GameList::on_generate_fake_tik_menu_click() {
     fseek(tmd, 0L, SEEK_END);
     size_t fSize = ftell(tmd);
     fseek(tmd, 0L, SEEK_SET);
-    uint8_t buffer[2048];
+    uint8_t *buffer = (uint8_t *) malloc(fSize);
     fread(buffer, fSize, 1, tmd);
     TMD *tmdData = (TMD *) buffer;
     uint16_t titleVersion = bswap_16(tmdData->title_version);
     char titleID[17];
     sprintf(titleID, "%016llx", bswap_64(tmdData->tid));
-    char titleKey[128];
+    char *titleKey = (char *) malloc(128);
     generateKey(titleID, titleKey);
-    if(!generateTicket((path + "/title.tik").c_str(), bswap_64(tmdData->tid), titleKey, titleVersion))
+    if(!generateTicket((path + "/title.tik").c_str(), strtoull(titleID, nullptr, 16), titleKey, titleVersion))
         showError("Error 2 while creating ticket!\nCouldn't write ticket");
+    NFD_FreePath(selectedPath);
+    path.clear();
+    path.shrink_to_fit();
+    free(buffer);
 }
 
 void GameList::on_settings_menu_click() {

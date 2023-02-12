@@ -20,8 +20,6 @@ bool fileExists(const char *filename);
 void setGameList(GtkWindow *window);
 void minimizeGameListWindow();
 
-#define BSWAP_8(x) ((x) &0xff)
-
 inline uint16_t bswap_16(uint16_t value) {
     return (uint16_t) ((0x00FF & (value >> 8)) | (0xFF00 & (value << 8)));
 }

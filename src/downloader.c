@@ -307,7 +307,7 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool *can
     prepend(output_dir, "/");
     if ((selected_dir == NULL) || (strcmp(selected_dir, "") == 0))
         selected_dir = show_folder_select_dialog();
-    if (selected_dir == NULL) {
+    if ((selected_dir == NULL) || (strcmp(selected_dir, "") == 0)) {
         free(output_dir);
         return -1;
     }

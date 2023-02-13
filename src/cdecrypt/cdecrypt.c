@@ -25,30 +25,31 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "aes.h"
-#include "sha1.h"
 #include "utf8.h"
 #include "util.h"
+#include <mbedtls/aes.h>
+#include <mbedtls/sha1.h>
 
 #include <cdecrypt/cdecrypt.h>
 #include <gtk/gtk.h>
 
-#define MAX_ENTRIES     90000
-#define MAX_LEVELS      16
-#define FST_MAGIC       0x46535400 // 'FST\0'
+#define MAX_ENTRIES       90000
+#define MAX_LEVELS        16
+#define FST_MAGIC         0x46535400 // 'FST\0'
+#define SHA_DIGEST_LENGTH 20
 // We use part of the root cert name used by TMD/TIK to identify them
-#define TMD_MAGIC       0x4350303030303030ULL // 'CP000000'
-#define TIK_MAGIC       0x5853303030303030ULL // 'XS000000'
-#define T_MAGIC_OFFSET  0x0150
-#define HASH_BLOCK_SIZE 0xFC00
-#define HASHES_SIZE     0x0400
+#define TMD_MAGIC         0x4350303030303030ULL // 'CP000000'
+#define TIK_MAGIC         0x5853303030303030ULL // 'XS000000'
+#define T_MAGIC_OFFSET    0x0150
+#define HASH_BLOCK_SIZE   0xFC00
+#define HASHES_SIZE       0x0400
 
 static const uint8_t WiiUCommonDevKey[16] =
         {0x2F, 0x5C, 0x1B, 0x29, 0x44, 0xE7, 0xFD, 0x6F, 0xC3, 0x97, 0x96, 0x4B, 0x05, 0x76, 0x91, 0xFA};
 static const uint8_t WiiUCommonKey[16] =
         {0xD7, 0xB0, 0x04, 0x02, 0x65, 0x9B, 0xA2, 0xAB, 0xD2, 0xCB, 0x0D, 0xB2, 0x7F, 0xA2, 0xB6, 0x56};
 
-aes_context ctx;
+mbedtls_aes_context ctx;
 uint8_t title_id[16];
 uint8_t title_key[16];
 uint64_t h0_count = 0;
@@ -262,16 +263,16 @@ static bool extract_file_hash(FILE *src, uint64_t part_data_offset, uint64_t fil
 
         memset(iv, 0, sizeof(iv));
         iv[1] = (uint8_t) content_id;
-        aes_crypt_cbc(&ctx, AES_DECRYPT, HASHES_SIZE, iv, enc, (uint8_t *) hashes);
+        mbedtls_aes_crypt_cbc(&ctx, MBEDTLS_AES_DECRYPT, HASHES_SIZE, iv, enc, (uint8_t *) hashes);
 
         memcpy(h0, hashes + 0x14 * block_number, SHA_DIGEST_LENGTH);
 
         memcpy(iv, hashes + 0x14 * block_number, sizeof(iv));
         if (block_number == 0)
             iv[1] ^= content_id;
-        aes_crypt_cbc(&ctx, AES_DECRYPT, HASH_BLOCK_SIZE, iv, enc + HASHES_SIZE, dec);
+        mbedtls_aes_crypt_cbc(&ctx, MBEDTLS_AES_DECRYPT, HASH_BLOCK_SIZE, iv, enc + HASHES_SIZE, dec);
 
-        sha1(dec, HASH_BLOCK_SIZE, hash);
+        mbedtls_sha1_ret(dec, HASH_BLOCK_SIZE, hash);
 
         if (block_number == 0)
             hash[1] ^= content_id;
@@ -342,7 +343,7 @@ static bool extract_file(FILE *src, uint64_t part_data_offset, uint64_t file_off
 
         fread(enc, sizeof(char), BLOCK_SIZE, src);
 
-        aes_crypt_cbc(&ctx, AES_DECRYPT, BLOCK_SIZE, iv, (const uint8_t *) (enc), (uint8_t *) dec);
+        mbedtls_aes_crypt_cbc(&ctx, MBEDTLS_AES_DECRYPT, BLOCK_SIZE, iv, (const uint8_t *) (enc), (uint8_t *) dec);
 
         size -= fwrite(dec + soffset, sizeof(char), (size_t) write_size, dst);
 
@@ -448,9 +449,9 @@ int cdecrypt(int argc, char **argv, bool showProgressDialog) {
     printf("Content count:%u\n", getbe16(&tmd->ContentCount));
 
     if (strcmp((char *) (&tmd->Issuer), "Root-CA00000003-CP0000000b") == 0) {
-        aes_setkey_dec(&ctx, WiiUCommonKey, sizeof(WiiUCommonKey) * 8);
+        mbedtls_aes_setkey_dec(&ctx, WiiUCommonKey, sizeof(WiiUCommonKey) * 8);
     } else if (strcmp((char *) (&tmd->Issuer), "Root-CA00000004-CP00000010") == 0) {
-        aes_setkey_dec(&ctx, WiiUCommonDevKey, sizeof(WiiUCommonDevKey) * 8);
+        mbedtls_aes_setkey_dec(&ctx, WiiUCommonDevKey, sizeof(WiiUCommonDevKey) * 8);
     } else {
         fprintf(stderr, "ERROR: Unknown Root type: '%s'\n", (char *) tmd + 0x140);
         goto out;
@@ -461,8 +462,8 @@ int cdecrypt(int argc, char **argv, bool showProgressDialog) {
     memcpy(title_id, &tmd->TitleID, 8);
     memcpy(title_key, tik + 0x1BF, 16);
 
-    aes_crypt_cbc(&ctx, AES_DECRYPT, sizeof(title_key), title_id, title_key, title_key);
-    aes_setkey_dec(&ctx, title_key, sizeof(title_key) * 8);
+    mbedtls_aes_crypt_cbc(&ctx, MBEDTLS_AES_DECRYPT, sizeof(title_key), title_id, title_key, title_key);
+    mbedtls_aes_setkey_dec(&ctx, title_key, sizeof(title_key) * 8);
 
     uint8_t iv[16];
     memset(iv, 0, sizeof(iv));
@@ -491,7 +492,7 @@ int cdecrypt(int argc, char **argv, bool showProgressDialog) {
         goto out;
     }
 
-    aes_crypt_cbc(&ctx, AES_DECRYPT, cnt_len, iv, cnt, cnt);
+    mbedtls_aes_crypt_cbc(&ctx, MBEDTLS_AES_DECRYPT, cnt_len, iv, cnt, cnt);
 
     if (getbe32(cnt) != FST_MAGIC) {
         sprintf(str, "%s%c%08X.dec", argv[1], PATH_SEP, getbe32(&tmd->Contents[0].ID));
@@ -523,10 +524,10 @@ int cdecrypt(int argc, char **argv, bool showProgressDialog) {
     uint32_t l_entry[16];
 
     uint32_t level = 0;
-    if(showProgressDialog)
+    if (showProgressDialog)
         progressDialog();
     for (uint32_t i = 1; i < entries; i++) {
-        if(showProgressDialog) {
+        if (showProgressDialog) {
             gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progress_bar), (double) i / (double) entries);
             gtk_progress_bar_set_text(GTK_PROGRESS_BAR(progress_bar), "Decrypting...");
             // force redraw
@@ -597,7 +598,7 @@ int cdecrypt(int argc, char **argv, bool showProgressDialog) {
     r = EXIT_SUCCESS;
 
 out:
-    if(showProgressDialog)
+    if (showProgressDialog)
         gtk_widget_destroy(GTK_WIDGET(window));
     free(tmd);
     free(tik);

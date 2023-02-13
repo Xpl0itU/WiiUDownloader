@@ -272,7 +272,7 @@ static bool extract_file_hash(FILE *src, uint64_t part_data_offset, uint64_t fil
             iv[1] ^= content_id;
         mbedtls_aes_crypt_cbc(&ctx, MBEDTLS_AES_DECRYPT, HASH_BLOCK_SIZE, iv, enc + HASHES_SIZE, dec);
 
-        mbedtls_sha1_ret(dec, HASH_BLOCK_SIZE, hash);
+        mbedtls_sha1(dec, HASH_BLOCK_SIZE, hash);
 
         if (block_number == 0)
             hash[1] ^= content_id;

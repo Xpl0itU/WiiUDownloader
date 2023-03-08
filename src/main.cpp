@@ -8,8 +8,8 @@
 #include <windows.h>
 #endif
 
-#include <downloader.h>
 #include <GameList.h>
+#include <downloader.h>
 #include <settings.h>
 #include <utils.h>
 

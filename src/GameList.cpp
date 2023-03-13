@@ -1,12 +1,12 @@
 #include <GameList.h>
 #include <cdecrypt/cdecrypt.h>
-#include <utils.h>
 #include <tmd.h>
+#include <utils.h>
 
-#include <nfd.h>
 #include <cstdlib>
 #include <downloader.h>
 #include <iostream>
+#include <nfd.h>
 #include <utility>
 
 void GameList::updateTitles(TITLE_CATEGORY cat, MCPRegion reg) {
@@ -28,7 +28,7 @@ void GameList::updateTitles(TITLE_CATEGORY cat, MCPRegion reg) {
     }
 }
 
-GameList::GameList(Glib::RefPtr<Gtk::Application> app, const Glib::RefPtr<Gtk::Builder>& builder, const TitleEntry *infos) {
+GameList::GameList(Glib::RefPtr<Gtk::Application> app, const Glib::RefPtr<Gtk::Builder> &builder, const TitleEntry *infos) {
     this->app = std::move(app);
     this->builder = builder;
     this->infos = infos;
@@ -124,7 +124,7 @@ GameList::GameList(Glib::RefPtr<Gtk::Application> app, const Glib::RefPtr<Gtk::B
 
 GameList::~GameList() {
     free(cancelQueue);
-    if(settings != nullptr) {
+    if (settings != nullptr) {
         delete settings;
         settings = nullptr;
     }
@@ -137,7 +137,7 @@ void GameList::search_entry_changed() {
                 if (!iter)
                     return true;
 
-                const Gtk::TreeModel::Row& row = *iter;
+                const Gtk::TreeModel::Row &row = *iter;
                 Glib::ustring name = row[columns.name];
                 Glib::ustring key = searchEntry->get_text();
                 std::string string_name(name.lowercase());
@@ -158,7 +158,7 @@ void GameList::search_entry_changed() {
 
 void GameList::on_decrypt_selected(Gtk::ToggleButton *button) {
     // decryptContents = !decryptContents; Bug Fix Attempt
-    if(button->get_active()) {
+    if (button->get_active()) {
         decryptContents = true;
         deleteEncryptedContentsButton->set_sensitive(TRUE);
     } else {
@@ -173,7 +173,7 @@ void GameList::on_delete_encrypted_selected(Gtk::ToggleButton *button) {
     // deleteEncryptedContents = !deleteEncryptedContents; Bug Fix Attempt 2
     // I think this way is just better because it ensures consistency no matter what the variable
     // was previously set to.
-    if(button->get_active()) {
+    if (button->get_active()) {
         deleteEncryptedContents = true;
     } else {
         deleteEncryptedContents = false;
@@ -186,9 +186,10 @@ void GameList::on_download_queue(GdkEventButton *ev) {
     gameListWindow->set_sensitive(false);
     *cancelQueue = false;
     for (auto queuedItem : queueMap) {
-        char tid[128];
+        char *tid = (char *) malloc(128);
         sprintf(tid, "%016llx", queuedItem.first);
         downloadTitle(tid, queuedItem.second, decryptContents, cancelQueue, deleteEncryptedContents, true);
+        free(tid);
     }
     Glib::RefPtr<Gio::Notification> notification = Gio::Notification::create("WiiUDownloader");
     notification->set_body("Queue download(s) finished");
@@ -201,7 +202,7 @@ void GameList::on_download_queue(GdkEventButton *ev) {
 
 bool GameList::is_selection_in_queue() {
     std::vector<Gtk::TreeModel::Path> pathlist = treeView->get_selection()->get_selected_rows();
-    for (auto & iter : pathlist) {
+    for (auto &iter : pathlist) {
         Gtk::TreeModel::Row row = *(treeView->get_model()->get_iter(iter));
         if (!row) continue;
         if (!row[columns.toQueue]) {
@@ -231,7 +232,7 @@ void GameList::on_add_to_queue(GdkEventButton *ev) {
     bool updateAsked = false;
     bool updateSelected;
     bool addToQueue = !is_selection_in_queue();
-    for (auto & iter : pathlist) {
+    for (auto &iter : pathlist) {
         Gtk::TreeModel::Row row = *(treeView->get_model()->get_iter(iter));
         // If (!row) or if row is already in the correct place (queue or not), then skip.
         if (!row || addToQueue == row[columns.toQueue]) continue;
@@ -290,7 +291,7 @@ void GameList::on_gamelist_row_activated(const Gtk::TreePath &treePath, Gtk::Tre
     Gtk::TreeModel::Row row = *selection->get_selected();
     if (row) {
         gameListWindow->set_sensitive(false);
-        char selectedTID[128];
+        char *selectedTID = (char *) malloc(128);
         sprintf(selectedTID, "%016llx", infos[row[columns.index]].tid);
         *cancelQueue = false;
         downloadTitle(selectedTID, infos[row[columns.index]].name, decryptContents, cancelQueue, deleteEncryptedContents, true);
@@ -299,11 +300,12 @@ void GameList::on_gamelist_row_activated(const Gtk::TreePath &treePath, Gtk::Tre
         this->app->send_notification(notification);
         *cancelQueue = false;
         gameListWindow->set_sensitive(true);
+        free(selectedTID);
     }
 }
 
 bool GameList::on_search_equal(const Glib::RefPtr<Gtk::TreeModel> &model, int column, const Glib::ustring &key, const Gtk::TreeModel::iterator &iter) const {
-    const Gtk::TreeModel::Row& row = *iter;
+    const Gtk::TreeModel::Row &row = *iter;
     if (row) {
         Glib::ustring name = row[columns.name];
         std::string string_name(name.lowercase());
@@ -336,7 +338,7 @@ void GameList::on_generate_fake_tik_menu_click() {
         return;
     std::string path(selectedPath);
     FILE *tmd = fopen((path + "/title.tmd").c_str(), "rb");
-    if(tmd == nullptr) {
+    if (tmd == nullptr) {
         showError("Error 1 while creating ticket!\nTicket can't be opened or not found");
         return;
     }
@@ -349,7 +351,7 @@ void GameList::on_generate_fake_tik_menu_click() {
     sprintf(titleID, "%016llx", bswap_64(tmdData->tid));
     char *titleKey = (char *) malloc(128);
     generateKey(titleID, titleKey);
-    if(!generateTicket((path + "/title.tik").c_str(), strtoull(titleID, nullptr, 16), titleKey, titleVersion))
+    if (!generateTicket((path + "/title.tik").c_str(), strtoull(titleID, nullptr, 16), titleKey, titleVersion))
         showError("Error 2 while creating ticket!\nCouldn't write ticket");
     NFD_FreePath(selectedPath);
     path.clear();
@@ -359,7 +361,7 @@ void GameList::on_generate_fake_tik_menu_click() {
 
 void GameList::on_settings_menu_click() {
     gameListWindow->set_sensitive(FALSE);
-    if(settings == nullptr)
+    if (settings == nullptr)
         settings = new SettingsMenu(builder);
     else
         settings->getWindow()->show();

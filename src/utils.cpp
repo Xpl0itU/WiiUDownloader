@@ -35,9 +35,10 @@ bool getTitleNameFromTid(uint64_t tid, char *out) {
     const TitleEntry *entries = getTitleEntries(TITLE_CATEGORY_ALL);
     const TitleEntry *found = std::find_if(entries, entries + getTitleEntriesSize(TITLE_CATEGORY_ALL), [&](const TitleEntry &e) { return e.tid == tid; });
     if (found != entries + getTitleEntriesSize(TITLE_CATEGORY_ALL)) {
-        char name[1024];
+        char *name = (char *) malloc(1024);
         normalizeFilename(found->name, name);
         sprintf(out, "%s [%s] [%016llx]", name, getFormattedKind(tid), found->tid);
+        free(name);
         return true;
     }
     sprintf(out, "Unknown");
@@ -48,11 +49,13 @@ bool getUpdateFromBaseGame(uint64_t titleID, uint64_t *out) {
     if (!isGame(titleID))
         return false;
     uint64_t updateTID = titleID | 0x0000000E00000000;
-    char name[1024];
+    char *name = (char *) malloc(1024);
     if (getTitleNameFromTid(updateTID, name)) {
         *out = updateTID;
+        free(name);
         return true;
     }
+    free(name);
     return false;
 }
 

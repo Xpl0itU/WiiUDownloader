@@ -37,9 +37,9 @@ struct CURLProgress {
     size_t titleSize;
     size_t downloadedSize;
     size_t previousDownloadedSize;
-    char totalSize[255];
-    char currentFile[255];
-    char currentTitle[1024];
+    char *totalSize;
+    char *currentFile;
+    char *currentTitle;
     CURL *handle;
 };
 
@@ -99,9 +99,9 @@ int progress_func(void *p,
         dlnow = 1;
     struct CURLProgress *progress = (struct CURLProgress *) p;
 
-    char downloadString[1024];
-    char speedString[255];
-    char downNow[255];
+    char *downloadString = (char *) malloc(1024);
+    char *speedString = (char *) malloc(255);
+    char *downNow = (char *) malloc(255);
     progress->downloadedSize -= progress->previousDownloadedSize;
     progress->downloadedSize += dlnow;
     readable_fs(progress->downloadedSize, downNow);
@@ -118,6 +118,9 @@ int progress_func(void *p,
         gtk_main_iteration();
 
     progress->previousDownloadedSize = dlnow;
+    free(downloadString);
+    free(speedString);
+    free(downNow);
     return 0;
 }
 
@@ -211,8 +214,8 @@ static int compareRemoteFileSize(const char *url, const char *local_file) {
 
 static int downloadFile(const char *download_url, const char *output_path, struct CURLProgress *progress, bool doRetrySleep) {
     progress->previousDownloadedSize = 0;
-    if(fileExists(output_path)) {
-        if(compareRemoteFileSize(download_url, output_path) == 0) {
+    if (fileExists(output_path)) {
+        if (compareRemoteFileSize(download_url, output_path) == 0) {
             printf("The file already exists and has the same or bigger size, skipping the download...\n");
             return 0;
         }
@@ -253,7 +256,7 @@ static int downloadFile(const char *download_url, const char *output_path, struc
         if ((curlCode == CURLE_OK) || cancelled || *queueCancelled)
             break;
         ++retryCount;
-        if(doRetrySleep)
+        if (doRetrySleep)
             sleep(5);
     } while (retryCount < MAX_RETRIES);
 
@@ -276,7 +279,7 @@ static void prepend(char *s, const char *t) {
 }
 
 void setSelectedDir(const char *path) {
-    if(selected_dir == NULL)
+    if (selected_dir == NULL)
         selected_dir = malloc(strlen(path) + 1);
     strcpy(selected_dir, path);
 }
@@ -301,13 +304,14 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool *can
         return 0;
     }
     char *output_dir = malloc(1024);
-    char folder_name[1024];
+    char *folder_name = malloc(1024);
     getTitleNameFromTid(strtoull(titleID, NULL, 16), folder_name);
     strcpy(output_dir, folder_name);
     prepend(output_dir, "/");
     if ((selected_dir == NULL) || (strcmp(selected_dir, "") == 0))
         selected_dir = show_folder_select_dialog();
     if ((selected_dir == NULL) || (strcmp(selected_dir, "") == 0)) {
+        free(folder_name);
         free(output_dir);
         return -1;
     }
@@ -360,6 +364,7 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool *can
     FILE *tmd_file = fopen(output_path, "wb");
     if (!tmd_file) {
         free(output_dir);
+        free(folder_name);
         fprintf(stderr, "Error: The file \"%s\" couldn't be opened. Will exit now.\n", output_path);
         return -1;
     }
@@ -371,26 +376,29 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool *can
 
     uint16_t title_version = bswap_16(tmd_data->title_version);
     snprintf(output_path, sizeof(output_path), "%s/%s", output_dir, "title.tik");
-    char titleKey[128];
+    char *titleKey = malloc(128);
     generateKey(titleID, titleKey);
 
     uint16_t content_count = bswap_16(tmd_data->num_contents);
 
     struct CURLProgress *progress = (struct CURLProgress *) malloc(sizeof(struct CURLProgress));
     memset(progress, 0, sizeof(struct CURLProgress));
+    progress->currentTitle = malloc(1024);
     strcpy(progress->currentTitle, name);
     progress->handle = curl_easy_init();
-    if(showProgressDialog)
+    if (showProgressDialog)
         progressDialog(progress);
     for (size_t i = 0; i < content_count; i++) {
         progress->titleSize += bswap_64(tmd_data->contents[i].size);
     }
+    progress->totalSize = malloc(255);
     readable_fs(progress->titleSize, progress->totalSize);
     printf("Total size: %s (%zu)\n", progress->totalSize, progress->titleSize);
     snprintf(output_path, sizeof(output_path), "%s/%s", output_dir, "title.tik");
     snprintf(download_url, 74, "%s/%s", base_url, "cetk");
-    if(downloadFile(download_url, output_path, progress, false) != 0)
+    if (downloadFile(download_url, output_path, progress, false) != 0)
         generateTicket(output_path, strtoull(titleID, NULL, 16), titleKey, title_version);
+    free(titleKey);
     uint8_t *tikData = malloc(2048);
     read_file(output_path, &tikData);
     int ret = 0;
@@ -399,6 +407,7 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool *can
     uint32_t fstID = bswap_32(tmd_data->contents[0].cid);
     snprintf(output_path, sizeof(output_path), "%s/%08x.app", output_dir, fstID);
     snprintf(download_url, 78, "%s/%08x", base_url, fstID);
+    progress->currentFile = malloc(255);
     sprintf(progress->currentFile, "%08x.app", fstID);
     if (downloadFile(download_url, output_path, progress, true) != 0) {
         showError("Error downloading FST\nPlease check your internet connection\nOr your router might be blocking the NUS server");
@@ -406,18 +415,18 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool *can
         ret = -1;
     }
     uint8_t *decryptedFSTData = malloc(bswap_64(tmd_data->contents[0].size));
-    TICKET *tik = (TICKET *)tikData;
+    TICKET *tik = (TICKET *) tikData;
     decryptFST(output_path, decryptedFSTData, tmd_data, tik->key);
-    if(!validateFST(decryptedFSTData)) {
+    if (!validateFST(decryptedFSTData)) {
         showError("Error: Invalid FST Data, download is probably corrupt");
         fprintf(stderr, "Error: Invalid FST Data, download is probably corrupt");
         cancelled = true;
         ret = -1;
     }
-    if(!downloadWiiVC) {
-        if(containsFile(decryptedFSTData, "fw.img")) {
+    if (!downloadWiiVC) {
+        if (containsFile(decryptedFSTData, "fw.img")) {
             downloadWiiVC = ask("This is a Wii VC Title\nIt won't run on Cemu\nContinue downloading?");
-            if(!downloadWiiVC)
+            if (!downloadWiiVC)
                 cancelled = true;
         }
     }
@@ -459,7 +468,7 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool *can
     printf("Downloading all files for TitleID %s done...\n", titleID);
 
     // cleanup curl stuff
-    if(showProgressDialog)
+    if (showProgressDialog)
         gtk_widget_destroy(GTK_WIDGET(window));
     curl_easy_cleanup(progress->handle);
     curl_global_cleanup();
@@ -471,10 +480,14 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool *can
             goto out;
         }
     }
-    if(deleteEncryptedContents)
+    if (deleteEncryptedContents)
         removeFiles(dirname(output_path));
 out:
     free(output_dir);
+    free(folder_name);
+    free(progress->totalSize);
+    free(progress->currentFile);
+    free(progress->currentTitle);
     free(progress);
     return ret;
 }

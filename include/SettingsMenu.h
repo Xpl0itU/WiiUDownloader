@@ -4,7 +4,7 @@
 
 class SettingsMenu {
 public:
-    SettingsMenu(const Glib::RefPtr<Gtk::Builder>& builder);
+    SettingsMenu(const Glib::RefPtr<Gtk::Builder> &builder);
     ~SettingsMenu();
 
     Gtk::Dialog *getWindow() { return settingsDialog; }
@@ -16,7 +16,6 @@ public:
 
 private:
     Gtk::Dialog *settingsDialog = nullptr;
-    Glib::RefPtr<Gtk::Builder> builder;
 
     Gtk::Entry *downloadDirectoryEntry = nullptr;
     Gtk::Button *browseDownloadDirButton = nullptr;

@@ -5,14 +5,12 @@
 #include <utils.h>
 
 SettingsMenu::SettingsMenu(const Glib::RefPtr<Gtk::Builder> &builder) {
-    this->builder = builder;
-
     builder->get_widget("settingsDialog", settingsDialog);
     settingsDialog->set_title("WiiUDownloader Settings");
     settingsDialog->show();
 
     builder->get_widget("downloadDirectoryEntry", downloadDirectoryEntry);
-    if(getSelectedDir() != nullptr)
+    if (getSelectedDir() != nullptr)
         downloadDirectoryEntry->set_text(getSelectedDir());
 
     builder->get_widget("browseDownloadDirButton", browseDownloadDirButton);
@@ -33,14 +31,14 @@ SettingsMenu::~SettingsMenu() = default;
 
 void SettingsMenu::on_browse_download_dir() {
     char *selectedDir = show_folder_select_dialog();
-    if(selectedDir != nullptr) {
+    if (selectedDir != nullptr) {
         this->downloadDirectoryEntry->set_text(selectedDir);
         free(selectedDir);
     }
 }
 
 void SettingsMenu::on_select_wiivc_hide_change(Gtk::CheckButton *button) {
-    if(button->get_active()) {
+    if (button->get_active()) {
         setHideWiiVCWarning(true);
     } else {
         setHideWiiVCWarning(false);

@@ -5,9 +5,9 @@
 
 #include <fstream>
 
-static void utf8JSON(std::fstream &file, const Json::Value &value, bool emitUTF8) {
+static void utf8JSON(std::fstream &file, const Json::Value &value) {
     Json::StreamWriterBuilder builder;
-    builder.settings_["emitUTF8"] = emitUTF8;
+    builder.settings_["emitUTF8"] = true;
     std::unique_ptr<Json::StreamWriter> writer(builder.newStreamWriter());
     writer->write(value, &file);
 }
@@ -25,7 +25,7 @@ bool saveSettings(const char *selectedDir, bool hideWiiVCWarning) {
     std::fstream settingsFile("settings.json", std::fstream::out);
     if (!settingsFile.is_open())
         return false;
-    utf8JSON(settingsFile, root, true);
+    utf8JSON(settingsFile, root);
     settingsFile.close();
     setSelectedDir(selectedDir);
     return true;

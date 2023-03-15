@@ -1,7 +1,5 @@
 #include <gtkmm.h>
 
-#include <fcntl.h>
-
 #ifdef _WIN32
 #include <registry.h>
 #include <updater.h>

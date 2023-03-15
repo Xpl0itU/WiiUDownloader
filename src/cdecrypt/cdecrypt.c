@@ -156,8 +156,6 @@ struct FEntry {
 static GtkWidget *progress_bar;
 static GtkWidget *window;
 
-static char currentFile[255] = "None";
-
 static void progressDialog() {
     gtk_init(NULL, NULL);
 

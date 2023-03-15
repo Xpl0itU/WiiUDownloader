@@ -1,6 +1,4 @@
 #include <curl/curl.h>
-#include <inttypes.h>
-#include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,7 +19,6 @@
 
 #include "cdecrypt/util.h"
 
-#include <curl/curl.h>
 #include <gtk/gtk.h>
 
 #define MAX_RETRIES 5

@@ -270,12 +270,6 @@ static int downloadFile(const char *download_url, const char *output_path, struc
     return 0;
 }
 
-static void prepend(char *s, const char *t) {
-    size_t len = strlen(t);
-    memmove(s + len, s, strlen(s) + 1);
-    memcpy(s, t, len);
-}
-
 void setSelectedDir(const char *path) {
     if (selected_dir == NULL)
         selected_dir = malloc(strlen(path) + 1);
@@ -304,8 +298,6 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool *can
     char *output_dir = malloc(1024);
     char *folder_name = malloc(1024);
     getTitleNameFromTid(strtoull(titleID, NULL, 16), folder_name);
-    strcpy(output_dir, folder_name);
-    prepend(output_dir, "/");
     if ((selected_dir == NULL) || (strcmp(selected_dir, "") == 0))
         selected_dir = show_folder_select_dialog();
     if ((selected_dir == NULL) || (strcmp(selected_dir, "") == 0)) {
@@ -313,7 +305,9 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool *can
         free(output_dir);
         return -1;
     }
-    prepend(output_dir, selected_dir);
+    strcpy(output_dir, selected_dir);
+    strcat(output_dir, "/");
+    strcat(output_dir, folder_name);
     if (output_dir[strlen(output_dir) - 1] == '/' || output_dir[strlen(output_dir) - 1] == '\\') {
         output_dir[strlen(output_dir) - 1] = '\0';
     }

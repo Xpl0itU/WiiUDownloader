@@ -225,8 +225,6 @@ static int downloadFile(const char *download_url, const char *output_path, struc
     if (file == NULL)
         return 1;
 
-    curl_easy_setopt(progress->handle, CURLOPT_FAILONERROR, 1L);
-
     curl_easy_setopt(progress->handle, CURLOPT_WRITEFUNCTION, write_function);
     curl_easy_setopt(progress->handle, CURLOPT_URL, download_url);
     curl_easy_setopt(progress->handle, CURLOPT_NOPROGRESS, 0L);

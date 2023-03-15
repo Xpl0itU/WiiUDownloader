@@ -16,7 +16,7 @@ void GameList::updateTitles(TITLE_CATEGORY cat, MCPRegion reg) {
     for (unsigned int i = 0; i < getTitleEntriesSize(cat); i++) {
         if (!(reg & infos[i].region))
             continue;
-        char id[128];
+        char *id = (char *) malloc(128);
         hex(infos[i].tid, 16, id);
         Gtk::TreeModel::Row row = *(treeModel->append());
         row[columns.index] = i;
@@ -25,6 +25,7 @@ void GameList::updateTitles(TITLE_CATEGORY cat, MCPRegion reg) {
         row[columns.region] = Glib::ustring::format(getFormattedRegion((MCPRegion) infos[i].region));
         row[columns.kind] = Glib::ustring::format(getFormattedKind(infos[i].tid));
         row[columns.titleId] = Glib::ustring::format(id);
+        free(id);
     }
 }
 

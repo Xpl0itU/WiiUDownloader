@@ -581,7 +581,8 @@ int cdecrypt(int argc, char **argv, bool showProgressDialog) {
                     fprintf(stderr, "ERROR: Could not open: '%s'\n", str);
                     goto out;
                 }
-                if ((getbe16(&fe[i].Flags) & 0x440)) {
+                uint16_t tmd_flags = tmd->Contents[getbe16(&fe[i].ContentID)].Type;
+                if ((getbe16(&tmd_flags) & 0x02)) {
                     if (!extract_file_hash(src, 0, cnt_offset, getbe32(&fe[i].FileLength), path, getbe16(&fe[i].ContentID)))
                         goto out;
                 } else {

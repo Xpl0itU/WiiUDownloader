@@ -55,20 +55,18 @@ uint8_t title_key[16];
 uint64_t h0_count = 0;
 uint64_t h0_fail = 0;
 
-#pragma pack(1)
-
 enum ContentType {
     CONTENT_REQUIRED = (1 << 0), // Not sure
     CONTENT_SHARED = (1 << 15),
     CONTENT_OPTIONAL = (1 << 14),
-};
+} __attribute__((gcc_struct, __packed__));
 
 typedef struct
 {
     uint16_t IndexOffset;  //  0  0x204
     uint16_t CommandCount; //  2  0x206
     uint8_t SHA2[32];      //  12 0x208
-} ContentInfo;
+} __attribute__((gcc_struct, __packed__)) ContentInfo;
 
 typedef struct
 {
@@ -77,7 +75,7 @@ typedef struct
     uint16_t Type;    //  6  0xB0A
     uint64_t Size;    //  8  0xB0C
     uint8_t SHA2[32]; //  16 0xB14
-} Content;
+} __attribute__((gcc_struct, __packed__)) Content;
 
 typedef struct
 {
@@ -108,14 +106,14 @@ typedef struct
 
     Content Contents[]; // 0x1E4
 
-} TitleMetaData;
+} __attribute__((gcc_struct, __packed__)) TitleMetaData;
 
 struct FSTInfo {
     uint32_t Unknown;
     uint32_t Size;
     uint32_t UnknownB;
     uint32_t UnknownC[6];
-};
+} __attribute__((gcc_struct, __packed__));
 
 struct FST {
     uint32_t MagicBytes;
@@ -125,7 +123,7 @@ struct FST {
     uint32_t UnknownB[5];
 
     struct FSTInfo FSTInfos[];
-};
+} __attribute__((gcc_struct, __packed__));
 
 struct FEntry {
     union {
@@ -133,7 +131,7 @@ struct FEntry {
         {
             uint32_t Type : 8;
             uint32_t NameOffset : 24;
-        };
+        } __attribute__((gcc_struct, __packed__));
         uint32_t TypeName;
     };
     union {
@@ -141,17 +139,17 @@ struct FEntry {
         {
             uint32_t FileOffset;
             uint32_t FileLength;
-        };
+        } __attribute__((gcc_struct, __packed__));
         struct // Dir Entry
         {
             uint32_t ParentOffset;
             uint32_t NextOffset;
-        };
+        } __attribute__((gcc_struct, __packed__));
         uint32_t entry[2];
     };
     uint16_t Flags;
     uint16_t ContentID;
-};
+} __attribute__((gcc_struct, __packed__));
 
 static GtkWidget *progress_bar;
 static GtkWidget *window;

@@ -17,8 +17,10 @@ int main(int argc, char *argv[]) {
     if (AttachConsole(ATTACH_PARENT_PROCESS))
         AllocConsole();
 #endif // _WIN32
-    freopen("log.txt", "w", stdout);
-    freopen("log.txt", "w", stderr);
+    if (fileExists("log.txt"))
+        remove("log.txt");
+    freopen("log.txt", "a", stdout);
+    freopen("log.txt", "a", stderr);
 
     Glib::RefPtr<Gtk::Application> app = Gtk::Application::create(argc, argv, "org.gtkmm.example");
     Glib::RefPtr<Gtk::Builder> builder = Gtk::Builder::create_from_resource("/wiiudownloader/data/wiiudownloader.ui");

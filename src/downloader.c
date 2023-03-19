@@ -48,6 +48,8 @@ static bool paused = false;
 static bool *queueCancelled;
 static bool downloadWiiVC = false;
 
+CURLSH *share = NULL;
+
 static char *readable_fs(double size, char *buf) {
     int i = 0;
     const char *units[] = {"B", "kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"};
@@ -232,6 +234,9 @@ static int downloadFile(const char *download_url, const char *output_path, struc
 
     curl_easy_setopt(progress->handle, CURLOPT_FAILONERROR, 1L);
 
+    if (share != NULL)
+        curl_easy_setopt(progress->handle, CURLOPT_SHARE, share);
+
     CURLcode curlCode;
     int retryCount = 0;
     do {
@@ -314,6 +319,15 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool *can
     // make an own handle for the tmd file, as we wanna download it to memory first
     CURL *tmd_handle = curl_easy_init();
     curl_easy_setopt(tmd_handle, CURLOPT_FAILONERROR, 1L);
+
+    if (share == NULL) {
+        share = curl_share_init();
+        curl_share_setopt(share, CURLSHOPT_SHARE, CURL_LOCK_DATA_CONNECT);
+        curl_share_setopt(share, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
+    }
+
+    if (share != NULL)
+        curl_easy_setopt(tmd_handle, CURLOPT_SHARE, share);
 
     // Download the tmd and save it in memory, as we need some data from it
     curl_easy_setopt(tmd_handle, CURLOPT_WRITEFUNCTION, WriteDataToMemory);
@@ -466,5 +480,9 @@ out:
     free(progress->currentFile);
     free(progress->currentTitle);
     free(progress);
+    if (share != NULL) {
+        curl_share_cleanup(share);
+        share = NULL;
+    }
     return ret;
 }

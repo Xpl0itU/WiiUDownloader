@@ -187,6 +187,8 @@ static int compareRemoteFileSize(const char *url, const char *local_file) {
         curl_easy_setopt(curl, CURLOPT_URL, url);
         curl_easy_setopt(curl, CURLOPT_HEADER, 1L);
         curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
+        if (share != NULL)
+            curl_easy_setopt(curl, CURLOPT_SHARE, share);
         res = curl_easy_perform(curl);
         if (res == CURLE_OK) {
             res = curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &remote_filesize);

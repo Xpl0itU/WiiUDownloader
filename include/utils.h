@@ -1,9 +1,9 @@
 #pragma once
 
+#include <gtk/gtk.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <gtk/gtk.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -21,6 +21,7 @@ void setGameList(GtkWindow *window);
 void minimizeGameListWindow();
 int compareHash(const char *input, const char *expectedHash);
 size_t getFilesizeFromFile(FILE *file);
+int32_t loadFile(const char *fPath, uint8_t **buf);
 
 inline uint16_t bswap_16(uint16_t value) {
     return (uint16_t) ((0x00FF & (value >> 8)) | (0xFF00 & (value << 8)));

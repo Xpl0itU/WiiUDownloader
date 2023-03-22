@@ -154,3 +154,23 @@ size_t getFilesizeFromFile(FILE *file) {
     fseek(file, 0L, SEEK_SET);
     return fSize;
 }
+
+int32_t loadFile(const char *fPath, uint8_t **buf) {
+    int ret = 0;
+    FILE *file = fopen(fPath, "rb");
+    if (file != nullptr) {
+        struct stat st {};
+        stat(fPath, &st);
+        int size = st.st_size;
+
+        *buf = (uint8_t *) malloc(size);
+        if (*buf != nullptr) {
+            if (fread(*buf, size, 1, file) == 1)
+                ret = size;
+            else
+                free(*buf);
+        }
+        fclose(file);
+    }
+    return ret;
+}

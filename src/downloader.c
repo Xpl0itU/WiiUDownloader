@@ -8,7 +8,7 @@
 #include <sys/stat.h>
 #endif
 
-#include <cdecrypt/cdecrypt.h>
+#include <decryptor.h>
 #include <downloader.h>
 #include <fst.h>
 #include <keygen.h>
@@ -16,8 +16,6 @@
 #include <settings.h>
 #include <tmd.h>
 #include <utils.h>
-
-#include "cdecrypt/util.h"
 
 #include <gtk/gtk.h>
 
@@ -41,6 +39,7 @@ struct CURLProgress {
 };
 
 static GtkWidget *window;
+static GtkWidget *decryptionWindow;
 
 static char *selected_dir = NULL;
 static bool cancelled = false;
@@ -393,7 +392,7 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool *can
         generateTicket(output_path, strtoull(titleID, NULL, 16), titleKey, title_version);
     free(titleKey);
     uint8_t *tikData = malloc(2048);
-    read_file(output_path, &tikData);
+    loadFile(output_path, &tikData);
     int ret = 0;
 
     // Check the FST
@@ -461,17 +460,14 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool *can
     printf("Downloading all files for TitleID %s done...\n", titleID);
 
     // cleanup curl stuff
-    if (showProgressDialog)
-        gtk_widget_destroy(GTK_WIDGET(window));
     curl_easy_cleanup(progress->handle);
     curl_global_cleanup();
+
+    if (showProgressDialog)
+        gtk_widget_destroy(GTK_WIDGET(window));
+
     if (decrypt && !cancelled) {
-        char *argv[2] = {"WiiUDownloader", dirname(output_path)};
-        if (cdecrypt(2, argv, showProgressDialog) != 0) {
-            showError("Error: There was a problem decrypting the files.\nThe path specified for the download might be too long.\nPlease try downloading the files to a shorter path and try again.");
-            ret = -2;
-            goto out;
-        }
+        decryptor(dirname(output_path), showProgressDialog);
     }
     if (deleteEncryptedContents)
         removeFiles(dirname(output_path));

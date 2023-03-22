@@ -24,7 +24,6 @@ if (uname MATCHES "^MSYS" OR uname MATCHES "^MINGW")
     file(GLOB SOURCES
             src/*.cpp
             src/*.c
-            src/cdecrypt/*.c
             src/miniz/*.c
             )
 else ()
@@ -34,7 +33,6 @@ else ()
     file(GLOB SOURCES
             src/*.cpp
             src/*.c
-            src/cdecrypt/*.c
             )
 endif ()
 
@@ -67,6 +65,9 @@ if (uname MATCHES "^MSYS" OR uname MATCHES "^MINGW")
     add_dependencies(${CMAKE_PROJECT_NAME} regFixLongPaths)
 endif ()
 
+add_dependencies(${CMAKE_PROJECT_NAME} goshim)
+add_subdirectory(lib/libgodecrypt)
+
 target_link_libraries(${CMAKE_PROJECT_NAME}
         ${GTKMM_LIBRARIES}
         stdc++
@@ -74,6 +75,8 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
         mbedcrypto
         mbedx509
         curl
+        goshim
+        pthread
         )
 
 enable_testing()
@@ -83,8 +86,6 @@ add_executable(tests
         src/gtitles.c
         src/utils.cpp
         src/keygen.cpp
-        src/cdecrypt/cdecrypt.c
-        src/cdecrypt/util.c
         src/downloader.c
         src/fst.c
         src/settings.cpp
@@ -97,6 +98,8 @@ target_link_libraries(tests
         mbedcrypto
         mbedx509
         curl
+        goshim
+        pthread
         Catch2::Catch2WithMain)
 
 include(CTest)

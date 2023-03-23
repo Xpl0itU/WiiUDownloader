@@ -467,10 +467,8 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool *can
         gtk_widget_destroy(GTK_WIDGET(window));
 
     if (decrypt && !cancelled) {
-        decryptor(dirname(output_path), showProgressDialog);
+        decryptor(dirname(output_path), showProgressDialog, deleteEncryptedContents);
     }
-    if (deleteEncryptedContents)
-        removeFiles(dirname(output_path));
 out:
     free(output_dir);
     free(folder_name);

@@ -3,20 +3,27 @@
 #include <gtk/gtk.h>
 #include <libgodecrypt.h>
 #include <thread>
+#include <utils.h>
 
 static GtkWidget *window;
+static bool deleteEncryptedFiles = false;
+static char *selectedPath;
 
 static gboolean pulseBar(gpointer data) {
     gdk_threads_enter();
     gtk_progress_bar_pulse(GTK_PROGRESS_BAR(data));
     gdk_threads_leave();
-
     return TRUE;
 }
 
 static gboolean destroyWindow(gpointer user_data) {
     GtkWidget *window = GTK_WIDGET(user_data);
     gtk_widget_destroy(window);
+    if (deleteEncryptedFiles) {
+        removeFiles(selectedPath);
+        deleteEncryptedFiles = false;
+        free(selectedPath);
+    }
     return G_SOURCE_REMOVE;
 }
 
@@ -57,9 +64,13 @@ void workerFunction(char *path, std::function<void()> callback) {
     callback();
 }
 
-void decryptor(const char *path, bool showProgressDialog) {
+void decryptor(const char *path, bool showProgressDialog, bool deleteEncryptedContents) {
     if (showProgressDialog)
         decryptionDialog();
+
+    deleteEncryptedFiles = deleteEncryptedContents;
+    selectedPath = (char *) malloc(strlen(path) + 1);
+    strcpy(selectedPath, path);
 
     std::thread decryptThread(workerFunction, const_cast<char *>(path), [&] {
         if (showProgressDialog)

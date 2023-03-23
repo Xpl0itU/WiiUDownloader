@@ -130,8 +130,6 @@ bool generateTicket(const char *path, uint64_t titleID, const char *titleKey, ui
 
     hex2bytes(titleKey, ticket.key);
 
-    memcpy(ticket.key, ticket.key, 0x10);
-
     generateHeader(true, &ticket.header);
     rndBytes((char *) &ticket.ecdsa_pubkey, sizeof(ticket.ecdsa_pubkey));
     rndBytes((char *) &ticket.ticket_id, sizeof(uint64_t));
@@ -173,7 +171,7 @@ bool generateTicket(const char *path, uint64_t titleID, const char *titleKey, ui
         section.unk04 = bswap_32(0x00000084);
         section.unk05 = bswap_16(0x0003);
         for (int i = 0; i < 8; i++)
-            section.unk06[i] = bswap_32(0xFFFFFFFF);
+            section.unk06[i] = 0xFFFFFFFF;
 
         fwrite(&section, 1, sizeof(TICKET_HEADER_SECTION), tik);
     }

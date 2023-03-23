@@ -12,22 +12,6 @@ extern "C" {
 #define TOKENPASTE2(x, y) TOKENPASTE(x, y)
 #define PADDING(size)     char TOKENPASTE2(padding_, __LINE__)[size]
 
-typedef struct {
-    uint8_t *start;
-    size_t size;
-} TICKET_SECTION;
-
-typedef struct __attribute__((__packed__)) {
-    uint32_t unk01;
-    uint32_t unk02;
-    uint32_t unk03;
-    uint32_t unk04;
-    uint16_t unk05;
-    PADDING(6);
-    uint32_t unk06[8];
-    PADDING(96);
-} TICKET_HEADER_SECTION;
-
 typedef struct __attribute__((__packed__)) {
     uint32_t sig_type;
 

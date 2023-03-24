@@ -328,7 +328,7 @@ void GameList::on_decrypt_menu_click() {
     if (selectedPath == nullptr)
         return;
 
-    decryptor(selectedPath, true, false);
+    decryptor(selectedPath, true);
 }
 
 void GameList::on_generate_fake_tik_menu_click() {

@@ -6,7 +6,7 @@ extern "C" {
 
 #include <stdbool.h>
 
-void decryptor(const char *path, bool showProgressDialog, bool deleteEncryptedContents);
+void decryptor(const char *path, bool showProgressDialog);
 
 #ifdef __cplusplus
 }

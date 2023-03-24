@@ -90,7 +90,6 @@ add_executable(tests
         src/fst.c
         src/settings.cpp
         src/jsoncpp.cpp
-        src/decryptor.cpp
         tests/tests.cpp)
 
 target_link_libraries(tests

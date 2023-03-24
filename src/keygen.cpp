@@ -3,6 +3,7 @@
 #include <mbedtls/pkcs5.h>
 
 #include <keygen.h>
+#include <log.h>
 #include <utils.h>
 #include <version.h>
 
@@ -41,7 +42,7 @@ static int char2int(char input) {
         return input - 'A' + 10;
     if (input >= 'a' && input <= 'f')
         return input - 'a' + 10;
-    fprintf(stderr, "Error: Malformed input: %c\n", input);
+    log_fatal("Malformed input: %c\n", input);
     exit(1);
 }
 
@@ -123,7 +124,7 @@ bool generateKey(const char *tid, char *out) {
 bool generateTicket(const char *path, uint64_t titleID, const char *titleKey, uint16_t titleVersion) {
     FILE *ticket_file = fopen(path, "wb");
     if (!ticket_file) {
-        fprintf(stderr, "Error: The file \"%s\" couldn't be opened. Will exit now.\n", path);
+        log_fatal("The file \"%s\" couldn't be opened. Will exit now.\n", path);
         exit(EXIT_FAILURE);
     }
 
@@ -135,7 +136,7 @@ bool generateTicket(const char *path, uint64_t titleID, const char *titleKey, ui
     memcpy(&ticket_data[486], &titleVersion, 2);
     fwrite(ticket_data, 1, 848, ticket_file);
     fclose(ticket_file);
-    printf("Finished creating \"%s\".\n", path);
+    log_info("Finished creating \"%s\".\n", path);
 
     return true;
 }

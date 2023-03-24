@@ -8,6 +8,7 @@
 
 #include <GameList.h>
 #include <downloader.h>
+#include <log.h>
 #include <settings.h>
 #include <utils.h>
 
@@ -19,10 +20,11 @@ int main(int argc, char *argv[]) {
 #endif // _WIN32
     if (fileExists("log.txt"))
         remove("log.txt");
-    freopen("log.txt", "a", stdout);
-    freopen("log.txt", "a", stderr);
+    FILE *log = fopen("log.txt", "w");
+    log_add_fp(log, LOG_TRACE);
 
-    Glib::RefPtr<Gtk::Application> app = Gtk::Application::create(argc, argv, "org.gtkmm.example");
+    Glib::RefPtr<Gtk::Application>
+            app = Gtk::Application::create(argc, argv, "org.gtkmm.example");
     Glib::RefPtr<Gtk::Builder> builder = Gtk::Builder::create_from_resource("/wiiudownloader/data/wiiudownloader.ui");
 
 #ifdef _WIN32
@@ -44,6 +46,8 @@ int main(int argc, char *argv[]) {
 
     delete list->getWindow();
     delete list;
+
+    fclose(log);
 
     return 0;
 }

@@ -1,23 +1,24 @@
 #ifdef _WIN32
 
-#include <updater.h>
+#include <cstdio>
 #include <curl/curl.h>
 #include <direct.h>
-#include <iostream>
 #include <fstream>
-#include <string>
+#include <iostream>
 #include <json/json.h>
-#include <cstdio>
+#include <log.h>
+#include <miniz/miniz.h>
+#include <string>
+#include <updater.h>
 #include <utils.h>
 #include <vector>
-#include <miniz/miniz.h>
 #include <version.h>
 
 #define URL "https://github.com/Xpl0itU/WiiUDownloader/releases/latest/download/WiiUDownloader-Windows.zip"
 
 static std::string buffer;
 
-static size_t WriteCallback(char* contents, size_t size, size_t nmemb, void* userp) {
+static size_t WriteCallback(char *contents, size_t size, size_t nmemb, void *userp) {
     buffer.append(contents, size * nmemb);
     return size * nmemb;
 }
@@ -45,7 +46,8 @@ static int compareVersion(std::string version1, std::string version2) {
         if (k >= v1.size()) v1.push_back(0);
         if (k >= v2.size()) v2.push_back(0);
         if (v1[k] < v2[k]) return -1;
-        else if (v1[k] > v2[k]) return 1;
+        else if (v1[k] > v2[k])
+            return 1;
     }
     return 0;
 }
@@ -69,7 +71,7 @@ static int downloadFile(const std::string &url, const std::string &filename) {
     return res;
 }
 
-static bool mkdir_p(const std::string& dir) {
+static bool mkdir_p(const std::string &dir) {
     std::vector<std::string> parts;
     std::string current;
 
@@ -86,7 +88,7 @@ static bool mkdir_p(const std::string& dir) {
 
     // Create the necessary intermediate directories
     current.clear();
-    for (const std::string& part : parts) {
+    for (const std::string &part : parts) {
         current += "/" + part;
         if (mkdir(current.c_str()) != 0 && errno != EEXIST) {
             std::cerr << "Can't create directory: " << current << std::endl;
@@ -101,19 +103,19 @@ static int extractZip(const char *zipfile) {
     mz_zip_archive zip;
     memset(&zip, 0, sizeof(zip));
     if (!mz_zip_reader_init_file(&zip, zipfile, 0)) {
-        printf("Error opening zip file: %s\n", zipfile);
+        log_error("Error opening zip file: %s\n", zipfile);
         return -1;
     }
     for (int i = 0; i < (int) mz_zip_reader_get_num_files(&zip); i++) {
         mz_zip_archive_file_stat file_stat;
         if (!mz_zip_reader_file_stat(&zip, i, &file_stat)) {
-            printf("Error reading zip file: %s\n", zipfile);
+            log_error("Error reading zip file: %s\n", zipfile);
             return -1;
         }
         if (!mz_zip_reader_is_file_a_directory(&zip, i)) {
             char *filename = (char *) malloc(strlen(file_stat.m_filename) + 1);
             if (!filename) {
-                printf("Error allocating filename\n");
+                log_error("Error allocating filename\n");
                 return -1;
             }
             sprintf(filename, "%s", file_stat.m_filename);
@@ -124,7 +126,7 @@ static int extractZip(const char *zipfile) {
                 *last = '/';
             }
             if (!mz_zip_reader_extract_to_file(&zip, i, filename, 0)) {
-                printf("Error extracting zip file: %s\n", zipfile);
+                log_error("Error extracting zip file: %s\n", zipfile);
                 free(filename);
                 return -1;
             }
@@ -162,23 +164,23 @@ static int downloadNewestVersion() {
 
 static std::string fetchLatestVersion() {
     std::string version;
-    CURL* curl;
+    CURL *curl;
     CURLcode res;
 
     curl = curl_easy_init();
-    if(curl) {
+    if (curl) {
         curl_easy_setopt(curl, CURLOPT_USERAGENT, "WiiUDownloader-Updater");
         curl_easy_setopt(curl, CURLOPT_URL, "https://api.github.com/repos/Xpl0itU/WiiUDownloader/releases/latest");
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
         res = curl_easy_perform(curl);
 
-        if(res != CURLE_OK) {
+        if (res != CURLE_OK) {
             std::cerr << "curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
         } else {
             Json::Value root;
             Json::Reader reader;
 
-            if(reader.parse(buffer, root)) {
+            if (reader.parse(buffer, root)) {
                 std::string releaseName = root["name"].asString();
                 std::cout << "Latest release name: " << releaseName << std::endl;
                 version = releaseName;
@@ -195,14 +197,14 @@ static std::string fetchLatestVersion() {
 }
 
 void checkAndDownloadLatestVersion() {
-    if(fileExists("WiiUDownloader.exe_old"))
+    if (fileExists("WiiUDownloader.exe_old"))
         remove("WiiUDownloader.exe_old");
     std::string latestVersion = fetchLatestVersion();
-    if(!latestVersion.empty()) {
+    if (!latestVersion.empty()) {
         latestVersion = latestVersion.substr(1, latestVersion.length() - 1);
-        if(compareVersion(VERSION, latestVersion) == -1) {
-            if(ask("A new update has been released, do you want to update?")) {
-                if(downloadNewestVersion() != 0) {
+        if (compareVersion(VERSION, latestVersion) == -1) {
+            if (ask("A new update has been released, do you want to update?")) {
+                if (downloadNewestVersion() != 0) {
                     showError("Error while updating!");
                 } else {
                     showError("Updated successfully, WiiUDownloader will now close\nReopen it manually");

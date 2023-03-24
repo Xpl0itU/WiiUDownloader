@@ -12,6 +12,7 @@
 #include <downloader.h>
 #include <fst.h>
 #include <keygen.h>
+#include <log.h>
 #include <nfd.h>
 #include <settings.h>
 #include <tmd.h>
@@ -217,7 +218,7 @@ static int downloadFile(const char *download_url, const char *output_path, struc
     progress->previousDownloadedSize = 0;
     if (fileExists(output_path)) {
         if (compareRemoteFileSize(download_url, output_path) == 0) {
-            printf("The file already exists and has the same or bigger size, skipping the download...\n");
+            log_info("The file already exists and has the same or bigger size, skipping the download...\n");
             return 0;
         }
     }
@@ -358,12 +359,12 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool *can
     if (!tmd_file) {
         free(output_dir);
         free(folder_name);
-        fprintf(stderr, "Error: The file \"%s\" couldn't be opened. Will exit now.\n", output_path);
+        log_error("The file \"%s\" couldn't be opened. Will exit now.\n", output_path);
         return -1;
     }
     fwrite(tmd_mem.memory, 1, tmd_mem.size, tmd_file);
     fclose(tmd_file);
-    printf("Finished downloading \"%s\".\n", output_path);
+    log_info("Finished downloading \"%s\".\n", output_path);
 
     TMD *tmd_data = (TMD *) tmd_mem.memory;
 
@@ -386,7 +387,7 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool *can
     }
     progress->totalSize = malloc(255);
     readable_fs(progress->titleSize, progress->totalSize);
-    printf("Total size: %s (%zu)\n", progress->totalSize, progress->titleSize);
+    log_trace("Total size: %s (%zu)\n", progress->totalSize, progress->titleSize);
     snprintf(output_path, sizeof(output_path), "%s/%s", output_dir, "title.tik");
     snprintf(download_url, 74, "%s/%s", base_url, "cetk");
     if (downloadFile(download_url, output_path, progress, false) != 0)
@@ -412,7 +413,7 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool *can
     decryptFST(output_path, decryptedFSTData, tmd_data, tik->key);
     if (!validateFST(decryptedFSTData)) {
         showError("Error: Invalid FST Data, download is probably corrupt");
-        fprintf(stderr, "Error: Invalid FST Data, download is probably corrupt");
+        log_error("Invalid FST Data, download is probably corrupt");
         cancelled = true;
         ret = -1;
     }
@@ -458,7 +459,7 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool *can
     }
     free(tmd_mem.memory);
 
-    printf("Downloading all files for TitleID %s done...\n", titleID);
+    log_info("Downloading all files for TitleID %s done...\n", titleID);
 
     // cleanup curl stuff
     if (showProgressDialog)

@@ -16,6 +16,7 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <log.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -48,7 +49,7 @@ bool create_path(char *path) {
             path[pos] = 0;
             char *new_path = malloc(strlen(path) + 1);
             if (new_path == NULL) {
-                fprintf(stderr, "ERROR: Can't allocate path\n");
+                log_error("Can't allocate path\n");
                 return false;
             }
             strcpy(new_path, path);
@@ -60,7 +61,7 @@ bool create_path(char *path) {
         if (result)
             result = CREATE_DIR(path);
     } else if (!S_ISDIR(st.st_mode)) {
-        fprintf(stderr, "ERROR: '%s' exists but isn't a directory\n", path);
+        log_error("'%s' exists but isn't a directory\n", path);
         return false;
     }
 
@@ -161,7 +162,7 @@ size_t get_trailing_slash(const char *path) {
 uint32_t read_file_max(const char *path, uint8_t **buf, uint32_t max_size) {
     FILE *file = fopen_utf8(path, "rb");
     if (file == NULL) {
-        fprintf(stderr, "ERROR: Can't open '%s'\n", path);
+        log_error("Can't open '%s'\n", path);
         return 0;
     }
 
@@ -177,7 +178,7 @@ uint32_t read_file_max(const char *path, uint8_t **buf, uint32_t max_size) {
         goto out;
     }
     if (fread(*buf, 1, size, file) != size) {
-        fprintf(stderr, "ERROR: Can't read '%s'\n", path);
+        log_error("Can't read '%s'\n", path);
         size = 0;
     }
 out:
@@ -192,7 +193,7 @@ out:
 uint64_t get_file_size(const char *path) {
     FILE *file = fopen_utf8(path, "rb");
     if (file == NULL) {
-        fprintf(stderr, "ERROR: Can't open '%s'\n", path);
+        log_error("Can't open '%s'\n", path);
         return 0;
     }
 
@@ -212,9 +213,9 @@ void create_backup(const char *path) {
         strcat(backup_path, ".bak");
         if (stat64_utf8(backup_path, &st) != 0) {
             if (rename_utf8(path, backup_path) == 0)
-                printf("Saved backup as '%s'\n", backup_path);
+                log_info("Saved backup as '%s'\n", backup_path);
             else
-                fprintf(stderr, "WARNING: Could not create backup file '%s\n", backup_path);
+                log_warn("Could not create backup file '%s\n", backup_path);
         }
         free(backup_path);
     }
@@ -225,12 +226,12 @@ bool write_file(const uint8_t *buf, const uint32_t size, const char *path, const
         create_backup(path);
     FILE *file = fopen_utf8(path, "wb");
     if (file == NULL) {
-        fprintf(stderr, "ERROR: Can't create file '%s'\n", path);
+        log_error("Can't create file '%s'\n", path);
         return false;
     }
     bool r = (fwrite(buf, 1, size, file) == size);
     fclose(file);
     if (!r)
-        fprintf(stderr, "ERROR: Can't write file '%s'\n", path);
+        log_error("Can't write file '%s'\n", path);
     return r;
 }

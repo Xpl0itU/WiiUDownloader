@@ -1,5 +1,5 @@
 #include <GameList.h>
-#include <decryptor.h>
+#include <cdecrypt/cdecrypt.h>
 #include <tmd.h>
 #include <utils.h>
 
@@ -328,7 +328,9 @@ void GameList::on_decrypt_menu_click() {
     if (selectedPath == nullptr)
         return;
 
-    decryptor(selectedPath, true);
+    char *argv[2] = {(char *) "WiiUDownloader", selectedPath};
+    if (cdecrypt(2, argv, true) != 0)
+        showError("Error: There was a problem decrypting the files.\nThe path specified for the download might be too long.\nPlease try downloading the files to a shorter path and try again.");
 }
 
 void GameList::on_generate_fake_tik_menu_click() {

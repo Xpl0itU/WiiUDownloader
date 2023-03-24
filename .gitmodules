@@ -7,6 +7,3 @@
 [submodule "Catch2"]
 	path = lib/Catch2
 	url = https://github.com/catchorg/Catch2
-[submodule "lib/libgodecrypt"]
-	path = lib/libgodecrypt
-	url = https://github.com/Xpl0itU/libgodecrypt

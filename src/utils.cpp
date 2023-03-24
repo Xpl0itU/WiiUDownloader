@@ -2,6 +2,7 @@
 #include <cstring>
 #include <filesystem>
 #include <gtitles.h>
+#include <log.h>
 #include <titleInfo.h>
 #include <utils.h>
 
@@ -60,6 +61,7 @@ bool getUpdateFromBaseGame(uint64_t titleID, uint64_t *out) {
 
 void showError(const char *text) {
     Gtk::MessageDialog dlg(text, false, Gtk::MESSAGE_ERROR, Gtk::BUTTONS_OK);
+    log_error(text);
     dlg.run();
 }
 

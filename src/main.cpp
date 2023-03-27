@@ -47,7 +47,7 @@ int main(int argc, char *argv[]) {
 
     delete list->getWindow();
     delete list;
-#ifdef __APPLE__
+#ifndef __APPLE__
     fclose(log);
 #endif // __APPLE__
 

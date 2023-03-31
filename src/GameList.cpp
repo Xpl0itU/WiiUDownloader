@@ -34,9 +34,6 @@ GameList::GameList(Glib::RefPtr<Gtk::Application> app, const Glib::RefPtr<Gtk::B
     this->builder = builder;
     this->infos = infos;
 
-    builder->get_widget("gameListWindow", gameListWindow);
-    gameListWindow->show();
-
     builder->get_widget("gamesButton", gamesButton);
     gamesButton->set_active();
     gamesButton->signal_button_press_event().connect_notify(sigc::bind(sigc::mem_fun(*this, &GameList::on_button_selected), TITLE_CATEGORY_GAME));
@@ -121,6 +118,9 @@ GameList::GameList(Glib::RefPtr<Gtk::Application> app, const Glib::RefPtr<Gtk::B
     treeModel->set_sort_column(5, Gtk::SortType::SORT_ASCENDING);
 
     treeView->set_search_equal_func(sigc::mem_fun(*this, &GameList::on_search_equal));
+    
+    builder->get_widget("gameListWindow", gameListWindow);
+    gameListWindow->show();
 }
 
 GameList::~GameList() {

@@ -3,6 +3,7 @@
 #include <keygen.h>
 #include <utils.h>
 
+#include <memory>
 #include <sstream>
 #include <iomanip>
 
@@ -16,41 +17,39 @@ static char *uint8ArrayToCString(const uint8_t *data, size_t dataLen) {
     }
 
     std::string str = ss.str();
-    char *c_str = new char[str.length() + 1];
-    strcpy(c_str, str.c_str());
+    auto c_str = std::make_unique<char[]>(str.length() + 1);
+    strcpy(c_str.get(), str.c_str());
 
-    return c_str;
+    return std::move(c_str).get();
 }
 
 TEST_CASE("Title testing", "[titles]") {
     setSelectedDir(".");
     bool cancelQueue = false;
     SECTION("Title downloads") {
-        int downloadValue = downloadTitle("0005001010004000", "OSv0", false, &cancelQueue, false, false);
+        int downloadValue = downloadTitle("0005001010004000", "OSv0", false, cancelQueue, false, false);
         REQUIRE(downloadValue == 0);
     }
 
     SECTION("Title resuming and decryption") {
-        int downloadValue = downloadTitle("0005001010004000", "OSv0", true, &cancelQueue, false, false);
+        int downloadValue = downloadTitle("0005001010004000", "OSv0", true, cancelQueue, false, false);
         REQUIRE(downloadValue == 0);
     }
 
     SECTION("Ticket TitleKey verification") {
-        int hashValue = -1;
+        int hashValue = -6;
         if(fileExists(OSV0_TICKET_PATH)) {
             FILE *tik = fopen(OSV0_TICKET_PATH, "rb");
             if(tik != nullptr) {
                 size_t fSize = getFilesizeFromFile(tik);
                 if(fSize) {
-                    uint8_t *buffer = (uint8_t *) malloc(fSize);
-                    fread(buffer, fSize, 1, tik);
-                    TICKET *ticket = (TICKET *) buffer;
+                    auto buffer = std::make_unique<uint8_t>(fSize);
+                    fread(buffer.get(), fSize, 1, tik);
+                    TICKET *ticket = (TICKET *) buffer.get();
 
                     char *titleKey = uint8ArrayToCString(ticket->key, 0x10);
                     hashValue = compareHash(titleKey, OSV0_TITLE_KEY_HASH);
 
-                    delete[] titleKey;
-                    free(buffer);
                     fclose(tik);
                 }
             }

@@ -27,7 +27,7 @@ bool saveSettings(const char *selectedDir, bool hideWiiVCWarning) {
         return false;
     utf8JSON(settingsFile, root);
     settingsFile.close();
-    setSelectedDir(selectedDir);
+    setSelectedDir(selectedDir != nullptr ? selectedDir : "");
     return true;
 }
 

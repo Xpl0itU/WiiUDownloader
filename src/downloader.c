@@ -69,7 +69,7 @@ static size_t write_function(void *data, size_t size, size_t nmemb, void *userp)
 
 static void cancel_button_clicked(GtkWidget *widget, gpointer data) {
     cancelled = true;
-    queueCancelled = true;
+    setQueueCancelled(true);
 }
 
 static void pause_button_clicked(GtkWidget *widget, gpointer data) {
@@ -281,10 +281,13 @@ bool getHideWiiVCWarning() {
     return downloadWiiVC;
 }
 
-int downloadTitle(const char *titleID, const char *name, bool decrypt, bool cancelQueue, bool deleteEncryptedContents, bool showProgressDialog) {
+void setQueueCancelled(bool value) {
+    queueCancelled = value;
+}
+
+int downloadTitle(const char *titleID, const char *name, bool decrypt, bool deleteEncryptedContents, bool showProgressDialog) {
     // initialize some useful variables
     cancelled = false;
-    queueCancelled = cancelQueue;
     if (queueCancelled) {
         return 0;
     }
@@ -347,7 +350,7 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool canc
 
     if (httpCode != 200 || tmdCode != CURLE_OK) {
         showError("Error downloading title metadata.\nPlease check your internet connection\nOr your router might be blocking the NUS server");
-        queueCancelled = true;
+        setQueueCancelled(true);
         cancelled = true;
     }
     curl_easy_cleanup(tmd_handle);

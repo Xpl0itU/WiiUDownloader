@@ -3,7 +3,6 @@
 #include <keygen.h>
 #include <utils.h>
 
-#include <memory>
 #include <sstream>
 #include <iomanip>
 
@@ -17,22 +16,22 @@ static char *uint8ArrayToCString(const uint8_t *data, size_t dataLen) {
     }
 
     std::string str = ss.str();
-    auto c_str = std::make_unique<char[]>(str.length() + 1);
-    strcpy(c_str.get(), str.c_str());
+    char *c_str = new char[str.length() + 1];
+    strcpy(c_str, str.c_str());
 
-    return std::move(c_str).get();
+    return c_str;
 }
 
 TEST_CASE("Title testing", "[titles]") {
     setSelectedDir(".");
     bool cancelQueue = false;
     SECTION("Title downloads") {
-        int downloadValue = downloadTitle("0005001010004000", "OSv0", false, cancelQueue, false, false);
+        int downloadValue = downloadTitle("0005001010004000", "OSv0", false, false, false);
         REQUIRE(downloadValue == 0);
     }
 
     SECTION("Title resuming and decryption") {
-        int downloadValue = downloadTitle("0005001010004000", "OSv0", true, cancelQueue, false, false);
+        int downloadValue = downloadTitle("0005001010004000", "OSv0", true, false, false);
         REQUIRE(downloadValue == 0);
     }
 
@@ -43,13 +42,15 @@ TEST_CASE("Title testing", "[titles]") {
             if(tik != nullptr) {
                 size_t fSize = getFilesizeFromFile(tik);
                 if(fSize) {
-                    auto buffer = std::make_unique<uint8_t>(fSize);
-                    fread(buffer.get(), fSize, 1, tik);
-                    TICKET *ticket = (TICKET *) buffer.get();
+                    uint8_t *buffer = (uint8_t *) malloc(fSize);
+                    fread(buffer, fSize, 1, tik);
+                    TICKET *ticket = (TICKET *) buffer;
 
                     char *titleKey = uint8ArrayToCString(ticket->key, 0x10);
                     hashValue = compareHash(titleKey, OSV0_TITLE_KEY_HASH);
 
+                    delete[] titleKey;
+                    free(buffer);
                     fclose(tik);
                 }
             }

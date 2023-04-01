@@ -178,16 +178,16 @@ void GameList::on_download_queue(GdkEventButton *ev) {
     if (queueMap.empty())
         return;
     gameListWindow->set_sensitive(false);
-    cancelQueue = false;
+    setQueueCancelled(false);
     for (auto queuedItem : queueMap) {
         auto tid = std::make_unique<char[]>(17);
         sprintf(tid.get(), "%016llx", queuedItem.first);
-        downloadTitle(tid.get(), queuedItem.second, decryptContents, cancelQueue, deleteEncryptedContents, true);
+        downloadTitle(tid.get(), queuedItem.second, decryptContents, deleteEncryptedContents, true);
     }
     Glib::RefPtr<Gio::Notification> notification = Gio::Notification::create("WiiUDownloader");
     notification->set_body("Queue download(s) finished");
     this->app->send_notification(notification);
-    cancelQueue = false;
+    setQueueCancelled(false);
     queueMap.clear();
     updateTitles(currentCategory, selectedRegion);
     gameListWindow->set_sensitive(true);
@@ -286,12 +286,12 @@ void GameList::on_gamelist_row_activated(const Gtk::TreePath &treePath, Gtk::Tre
         gameListWindow->set_sensitive(false);
         auto selectedTID = std::make_unique<char[]>(17);
         sprintf(selectedTID.get(), "%016llx", infos[row[columns.index]].tid);
-        cancelQueue = false;
-        downloadTitle(selectedTID.get(), infos[row[columns.index]].name, decryptContents, cancelQueue, deleteEncryptedContents, true);
+        setQueueCancelled(false);
+        downloadTitle(selectedTID.get(), infos[row[columns.index]].name, decryptContents, deleteEncryptedContents, true);
         Glib::RefPtr<Gio::Notification> notification = Gio::Notification::create("WiiUDownloader");
         notification->set_body("Download finished");
         this->app->send_notification(notification);
-        cancelQueue = false;
+        setQueueCancelled(false);
         gameListWindow->set_sensitive(true);
     }
 }

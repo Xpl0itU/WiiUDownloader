@@ -24,7 +24,7 @@ void GameList::updateTitles(TITLE_CATEGORY cat, MCPRegion reg) {
         row[columns.name] = infos[i].name;
         row[columns.region] = Glib::ustring::format(getFormattedRegion((MCPRegion) infos[i].region));
         row[columns.kind] = Glib::ustring::format(getFormattedKind(infos[i].tid));
-        row[columns.titleId] = Glib::ustring::format(id);
+        row[columns.titleId] = Glib::ustring::format(id.get());
     }
 }
 

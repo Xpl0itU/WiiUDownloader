@@ -16,8 +16,8 @@ void GameList::updateTitles(TITLE_CATEGORY cat, MCPRegion reg) {
     for (unsigned int i = 0; i < getTitleEntriesSize(cat); i++) {
         if (!(reg & infos[i].region))
             continue;
-        char *id = (char *) malloc(128);
-        hex(infos[i].tid, 16, id);
+        auto id = std::make_unique<char[]>(17);
+        hex(infos[i].tid, 16, id.get());
         Gtk::TreeModel::Row row = *(treeModel->append());
         row[columns.index] = i;
         row[columns.toQueue] = !queueMap.empty() && queueMap.find(infos[i].tid) != queueMap.end();
@@ -25,7 +25,6 @@ void GameList::updateTitles(TITLE_CATEGORY cat, MCPRegion reg) {
         row[columns.region] = Glib::ustring::format(getFormattedRegion((MCPRegion) infos[i].region));
         row[columns.kind] = Glib::ustring::format(getFormattedKind(infos[i].tid));
         row[columns.titleId] = Glib::ustring::format(id);
-        free(id);
     }
 }
 
@@ -123,13 +122,7 @@ GameList::GameList(Glib::RefPtr<Gtk::Application> app, const Glib::RefPtr<Gtk::B
     gameListWindow->show();
 }
 
-GameList::~GameList() {
-    free(cancelQueue);
-    if (settings != nullptr) {
-        delete settings;
-        settings = nullptr;
-    }
-}
+GameList::~GameList() {}
 
 void GameList::search_entry_changed() {
     m_refTreeModelFilter = Gtk::TreeModelFilter::create(treeModel);
@@ -185,17 +178,16 @@ void GameList::on_download_queue(GdkEventButton *ev) {
     if (queueMap.empty())
         return;
     gameListWindow->set_sensitive(false);
-    *cancelQueue = false;
+    cancelQueue = false;
     for (auto queuedItem : queueMap) {
-        char *tid = (char *) malloc(128);
-        sprintf(tid, "%016llx", queuedItem.first);
-        downloadTitle(tid, queuedItem.second, decryptContents, cancelQueue, deleteEncryptedContents, true);
-        free(tid);
+        auto tid = std::make_unique<char[]>(17);
+        sprintf(tid.get(), "%016llx", queuedItem.first);
+        downloadTitle(tid.get(), queuedItem.second, decryptContents, cancelQueue, deleteEncryptedContents, true);
     }
     Glib::RefPtr<Gio::Notification> notification = Gio::Notification::create("WiiUDownloader");
     notification->set_body("Queue download(s) finished");
     this->app->send_notification(notification);
-    *cancelQueue = false;
+    cancelQueue = false;
     queueMap.clear();
     updateTitles(currentCategory, selectedRegion);
     gameListWindow->set_sensitive(true);
@@ -292,16 +284,15 @@ void GameList::on_gamelist_row_activated(const Gtk::TreePath &treePath, Gtk::Tre
     Gtk::TreeModel::Row row = *selection->get_selected();
     if (row) {
         gameListWindow->set_sensitive(false);
-        char *selectedTID = (char *) malloc(128);
-        sprintf(selectedTID, "%016llx", infos[row[columns.index]].tid);
-        *cancelQueue = false;
-        downloadTitle(selectedTID, infos[row[columns.index]].name, decryptContents, cancelQueue, deleteEncryptedContents, true);
+        auto selectedTID = std::make_unique<char[]>(17);
+        sprintf(selectedTID.get(), "%016llx", infos[row[columns.index]].tid);
+        cancelQueue = false;
+        downloadTitle(selectedTID.get(), infos[row[columns.index]].name, decryptContents, cancelQueue, deleteEncryptedContents, true);
         Glib::RefPtr<Gio::Notification> notification = Gio::Notification::create("WiiUDownloader");
         notification->set_body("Download finished");
         this->app->send_notification(notification);
-        *cancelQueue = false;
+        cancelQueue = false;
         gameListWindow->set_sensitive(true);
-        free(selectedTID);
     }
 }
 
@@ -344,26 +335,25 @@ void GameList::on_generate_fake_tik_menu_click() {
         return;
     }
     size_t fSize = getFilesizeFromFile(tmd);
-    uint8_t *buffer = (uint8_t *) malloc(fSize);
-    fread(buffer, fSize, 1, tmd);
-    TMD *tmdData = (TMD *) buffer;
+    auto buffer = std::make_unique<uint8_t>(fSize);
+    fread(buffer.get(), fSize, 1, tmd);
+    TMD *tmdData = (TMD *) buffer.get();
     uint16_t titleVersion = bswap_16(tmdData->title_version);
     char titleID[17];
     sprintf(titleID, "%016llx", bswap_64(tmdData->tid));
-    char *titleKey = (char *) malloc(128);
-    generateKey(titleID, titleKey);
-    if (!generateTicket((path + "/title.tik").c_str(), strtoull(titleID, nullptr, 16), titleKey, titleVersion))
+    auto titleKey = std::make_unique<char[]>(33);
+    generateKey(titleID, titleKey.get());
+    if (!generateTicket((path + "/title.tik").c_str(), strtoull(titleID, nullptr, 16), titleKey.get(), titleVersion))
         showError("Error 2 while creating ticket!\nCouldn't write ticket");
     NFD_FreePath(selectedPath);
     path.clear();
     path.shrink_to_fit();
-    free(buffer);
 }
 
 void GameList::on_settings_menu_click() {
     gameListWindow->set_sensitive(FALSE);
     if (settings == nullptr)
-        settings = new SettingsMenu(builder);
+        settings = std::make_unique<SettingsMenu>(builder);
     else
         settings->getWindow()->show();
     gameListWindow->get_application()->add_window(*settings->getWindow());

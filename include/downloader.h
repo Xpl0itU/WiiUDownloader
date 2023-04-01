@@ -10,7 +10,7 @@ void setSelectedDir(const char *path);
 char *getSelectedDir();
 void setHideWiiVCWarning(bool value);
 bool getHideWiiVCWarning();
-int downloadTitle(const char *titleID, const char *name, bool decrypt, bool *cancelQueue, bool deleteEncryptedContents, bool showProgressDialog);
+int downloadTitle(const char *titleID, const char *name, bool decrypt, bool cancelQueue, bool deleteEncryptedContents, bool showProgressDialog);
 
 #ifdef __cplusplus
 }

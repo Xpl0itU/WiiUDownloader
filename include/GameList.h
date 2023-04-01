@@ -2,6 +2,7 @@
 
 #include <gtkmm.h>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -75,13 +76,13 @@ private:
     ModelColumns columns;
     const TitleEntry *infos;
 
-    bool *cancelQueue = (bool *) malloc(1);
+    bool cancelQueue = false;
 
     Glib::RefPtr<Gtk::TreeModelFilter> m_refTreeModelFilter;
     Gtk::SearchBar *searchBar = nullptr;
     Gtk::SearchEntry *searchEntry = nullptr;
 
-    SettingsMenu *settings = nullptr;
+    std::unique_ptr<SettingsMenu> settings;
     sigc::connection settingsConn;
 
     bool decryptContents = false;

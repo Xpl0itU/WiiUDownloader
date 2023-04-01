@@ -46,7 +46,7 @@ static GtkWidget *window;
 static char *selected_dir = NULL;
 static bool cancelled = false;
 static bool paused = false;
-static bool *queueCancelled;
+static bool queueCancelled;
 static bool downloadWiiVC = false;
 
 CURLSH *share = NULL;
@@ -69,7 +69,7 @@ static size_t write_function(void *data, size_t size, size_t nmemb, void *userp)
 
 static void cancel_button_clicked(GtkWidget *widget, gpointer data) {
     cancelled = true;
-    *queueCancelled = true;
+    queueCancelled = true;
 }
 
 static void pause_button_clicked(GtkWidget *widget, gpointer data) {
@@ -244,7 +244,7 @@ static int downloadFile(const char *download_url, const char *output_path, struc
     int retryCount = 0;
     do {
         curlCode = curl_easy_perform(progress->handle);
-        if ((curlCode == CURLE_OK) || cancelled || *queueCancelled)
+        if ((curlCode == CURLE_OK) || cancelled || queueCancelled)
             break;
         ++retryCount;
         if (doRetrySleep)
@@ -281,11 +281,11 @@ bool getHideWiiVCWarning() {
     return downloadWiiVC;
 }
 
-int downloadTitle(const char *titleID, const char *name, bool decrypt, bool *cancelQueue, bool deleteEncryptedContents, bool showProgressDialog) {
+int downloadTitle(const char *titleID, const char *name, bool decrypt, bool cancelQueue, bool deleteEncryptedContents, bool showProgressDialog) {
     // initialize some useful variables
     cancelled = false;
     queueCancelled = cancelQueue;
-    if (*queueCancelled) {
+    if (queueCancelled) {
         return 0;
     }
     char *output_dir = malloc(1024);
@@ -347,7 +347,7 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool *can
 
     if (httpCode != 200 || tmdCode != CURLE_OK) {
         showError("Error downloading title metadata.\nPlease check your internet connection\nOr your router might be blocking the NUS server");
-        *queueCancelled = true;
+        queueCancelled = true;
         cancelled = true;
     }
     curl_easy_cleanup(tmd_handle);

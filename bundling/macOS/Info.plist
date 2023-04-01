@@ -7,23 +7,23 @@
     <key>CFBundleExecutable</key>
     <string>WiiUDownloader</string>
     <key>CFBundleGetInfoString</key>
-    <string>0.3, Copyright 2006-2007 Imendio AB</string>
+    <string>1.29, Copyright 2022-2023 Xpl0itU</string>
     <key>CFBundleIconFile</key>
     <string>Giggle.icns</string>
     <key>CFBundleIdentifier</key>
-    <string>com.imendio.Giggle</string>
+    <string>com.Xpl0itU.WiiUDownloader</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.3</string>
+    <string>1.29</string>
     <key>CFBundleSignature</key>
     <string>????</string>
     <key>CFBundleVersion</key>
-    <string>0.3</string>
+    <string>1.29</string>
     <key>NSHumanReadableCopyright</key>
-    <string>Copyright 2006-2007 Imendio AB, GNU General Public License.</string>
+    <string>Copyright 2022-2023 Xpl0itU, GNU General Public License.</string>
     <key>LSMinimumSystemVersion</key>
     <string>10.4</string>
 </dict>

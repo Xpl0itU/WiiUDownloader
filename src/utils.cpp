@@ -122,6 +122,10 @@ bool fileExists(const char *filename) {
     return file.good();
 }
 
+bool dirExists(const char *folder) {
+    return std::filesystem::is_directory(folder);
+}
+
 void setGameList(GtkWindow *window) {
     gameListWindow = window;
 }

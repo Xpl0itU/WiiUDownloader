@@ -318,9 +318,9 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool dele
     char *output_dir = malloc(1024);
     char *folder_name = malloc(1024);
     getTitleNameFromTid(strtoull(titleID, NULL, 16), folder_name);
-    if ((selected_dir == NULL) || (strcmp(selected_dir, "") == 0))
-        setSelectedDir(show_folder_select_dialog());
-    if ((selected_dir == NULL) || (strcmp(selected_dir, "") == 0)) {
+    if ((selected_dir == NULL) || (strcmp(selected_dir, "") == 0) || !dirExists(selected_dir))
+        selected_dir = show_folder_select_dialog();
+    if ((selected_dir == NULL) || (strcmp(selected_dir, "") == 0) || !dirExists(selected_dir)) {
         free(folder_name);
         free(output_dir);
         return -1;

@@ -17,6 +17,7 @@ char *dirname(char *path);
 char *show_folder_select_dialog();
 void removeFiles(const char *path);
 bool fileExists(const char *filename);
+bool dirExists(const char *folder);
 void setGameList(GtkWindow *window);
 void minimizeGameListWindow();
 int compareHash(const char *input, const char *expectedHash);

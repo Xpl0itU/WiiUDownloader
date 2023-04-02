@@ -274,7 +274,7 @@ static int downloadFile(const char *download_url, const char *output_path, struc
 void setSelectedDir(const char *path) {
     if (selected_dir == NULL)
         selected_dir = malloc(strlen(path) + 1);
-    if (strlen(path) < strlen(selected_dir)) {
+    if (strlen(path) > strlen(selected_dir)) {
         free(selected_dir);
         selected_dir = malloc(strlen(path) + 1);
     }
@@ -300,9 +300,9 @@ void setQueueCancelled(bool value) {
 void setCurrentTitle(const char *value) {
     if (currentTitle == NULL)
         currentTitle = malloc(strlen(value) + 1);
-    if (strlen(value) < strlen(selected_dir)) {
-        free(selected_dir);
-        selected_dir = malloc(strlen(value) + 1);
+    if (strlen(value) > strlen(currentTitle)) {
+        free(currentTitle);
+        currentTitle = malloc(strlen(value) + 1);
     }
     strcpy(currentTitle, value);
     if(gameLabel != NULL)
@@ -319,7 +319,7 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool dele
     char *folder_name = malloc(1024);
     getTitleNameFromTid(strtoull(titleID, NULL, 16), folder_name);
     if ((selected_dir == NULL) || (strcmp(selected_dir, "") == 0))
-        selected_dir = show_folder_select_dialog();
+        setSelectedDir(show_folder_select_dialog());
     if ((selected_dir == NULL) || (strcmp(selected_dir, "") == 0)) {
         free(folder_name);
         free(output_dir);

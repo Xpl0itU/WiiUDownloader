@@ -122,7 +122,7 @@ GameList::GameList(Glib::RefPtr<Gtk::Application> app, const Glib::RefPtr<Gtk::B
     gameListWindow->show();
 }
 
-GameList::~GameList() {}
+GameList::~GameList() = default;
 
 void GameList::search_entry_changed() {
     m_refTreeModelFilter = Gtk::TreeModelFilter::create(treeModel);

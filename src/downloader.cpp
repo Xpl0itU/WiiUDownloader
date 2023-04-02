@@ -1,8 +1,8 @@
 #include <curl/curl.h>
-#include <stdbool.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <future>
 #include <unistd.h>
 #ifndef _WIN32
 #include <sys/stat.h>
@@ -63,7 +63,7 @@ static char *readable_fs(double size, char *buf) {
 }
 
 static size_t write_function(void *data, size_t size, size_t nmemb, void *userp) {
-    size_t written = fwrite(data, size, nmemb, userp);
+    size_t written = fwrite(data, size, nmemb, (FILE *)userp);
     return cancelled ? 0 : written;
 }
 
@@ -128,7 +128,7 @@ static size_t WriteDataToMemory(void *contents, size_t size, size_t nmemb, void 
     size_t realsize = size * nmemb;
     struct MemoryStruct *mem = (struct MemoryStruct *) userp;
 
-    mem->memory = realloc(mem->memory, mem->size + realsize);
+    mem->memory = (uint8_t *)realloc(mem->memory, mem->size + realsize);
     memcpy(&(mem->memory[mem->size]), contents, realsize);
     mem->size += realsize;
 
@@ -273,10 +273,10 @@ static int downloadFile(const char *download_url, const char *output_path, struc
 
 void setSelectedDir(const char *path) {
     if (selected_dir == NULL)
-        selected_dir = malloc(strlen(path) + 1);
+        selected_dir = (char *)malloc(strlen(path) + 1);
     if (strlen(path) > strlen(selected_dir)) {
         free(selected_dir);
-        selected_dir = malloc(strlen(path) + 1);
+        selected_dir = (char *)malloc(strlen(path) + 1);
     }
     strcpy(selected_dir, path);
 }
@@ -299,10 +299,10 @@ void setQueueCancelled(bool value) {
 
 void setCurrentTitle(const char *value) {
     if (currentTitle == NULL)
-        currentTitle = malloc(strlen(value) + 1);
+        currentTitle = (char *)malloc(strlen(value) + 1);
     if (strlen(value) > strlen(currentTitle)) {
         free(currentTitle);
-        currentTitle = malloc(strlen(value) + 1);
+        currentTitle = (char *)malloc(strlen(value) + 1);
     }
     strcpy(currentTitle, value);
     if(gameLabel != NULL)
@@ -315,8 +315,8 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool dele
     if (queueCancelled) {
         return 0;
     }
-    char *output_dir = malloc(1024);
-    char *folder_name = malloc(1024);
+    char *output_dir = (char *)malloc(1024);
+    char *folder_name = (char *)malloc(1024);
     getTitleNameFromTid(strtoull(titleID, NULL, 16), folder_name);
     if ((selected_dir == NULL) || (strcmp(selected_dir, "") == 0) || !dirExists(selected_dir))
         selected_dir = show_folder_select_dialog();
@@ -334,7 +334,7 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool dele
     char base_url[69];
     snprintf(base_url, 69, "http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/%s", titleID);
     char download_url[81];
-    char output_path[strlen(output_dir) + 14];
+    char *output_path = (char *)malloc(strlen(output_dir) + 14);
 
 // create the output directory if it doesn't exist
 #ifdef _WIN32
@@ -365,7 +365,7 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool dele
     curl_easy_setopt(tmd_handle, CURLOPT_URL, download_url);
 
     struct MemoryStruct tmd_mem;
-    tmd_mem.memory = malloc(0);
+    tmd_mem.memory = (uint8_t *)malloc(0);
     tmd_mem.size = 0;
     curl_easy_setopt(tmd_handle, CURLOPT_WRITEDATA, (void *) &tmd_mem);
     CURLcode tmdCode = curl_easy_perform(tmd_handle);
@@ -379,14 +379,15 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool dele
     }
     curl_easy_cleanup(tmd_handle);
     // write out the tmd file
-    snprintf(output_path, sizeof(output_path), "%s/%s", output_dir, "title.cert");
+    sprintf(output_path, "%s/%s", output_dir, "title.cert");
     generateCert(output_path);
-    snprintf(output_path, sizeof(output_path), "%s/%s", output_dir, "title.tmd");
+    sprintf(output_path, "%s/%s", output_dir, "title.tmd");
     FILE *tmd_file = fopen(output_path, "wb");
     if (!tmd_file) {
-        free(output_dir);
-        free(folder_name);
         log_error("The file \"%s\" couldn't be opened. Will exit now.\n", output_path);
+        free(output_dir);
+        free(output_path);
+        free(folder_name);
         return -1;
     }
     fwrite(tmd_mem.memory, 1, tmd_mem.size, tmd_file);
@@ -396,8 +397,8 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool dele
     TMD *tmd_data = (TMD *) tmd_mem.memory;
 
     uint16_t title_version = bswap_16(tmd_data->title_version);
-    snprintf(output_path, sizeof(output_path), "%s/%s", output_dir, "title.tik");
-    char *titleKey = malloc(128);
+    sprintf(output_path, "%s/%s", output_dir, "title.tik");
+    char *titleKey = (char *)malloc(33);
     generateKey(titleID, titleKey);
 
     uint16_t content_count = bswap_16(tmd_data->num_contents);
@@ -409,30 +410,32 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool dele
     for (size_t i = 0; i < content_count; i++) {
         progress->titleSize += bswap_64(tmd_data->contents[i].size);
     }
-    progress->totalSize = malloc(255);
+    progress->totalSize = (char *)malloc(255);
     readable_fs(progress->titleSize, progress->totalSize);
     log_trace("Total size: %s (%zu)\n", progress->totalSize, progress->titleSize);
-    snprintf(output_path, sizeof(output_path), "%s/%s", output_dir, "title.tik");
+    sprintf(output_path, "%s/%s", output_dir, "title.tik");
     snprintf(download_url, 74, "%s/%s", base_url, "cetk");
-    if (downloadFile(download_url, output_path, progress, false) != 0)
+    std::future<int> downloadFuture = std::async(downloadFile, download_url, output_path, progress, false);
+    downloadFuture.wait();
+    if (downloadFuture.get() != 0)
         generateTicket(output_path, strtoull(titleID, NULL, 16), titleKey, title_version);
     free(titleKey);
-    uint8_t *tikData = malloc(2048);
+    uint8_t *tikData = (uint8_t *)malloc(2048);
     read_file(output_path, &tikData);
     int ret = 0;
 
     // Check the FST
     uint32_t fstID = bswap_32(tmd_data->contents[0].cid);
-    snprintf(output_path, sizeof(output_path), "%s/%08x.app", output_dir, fstID);
+    sprintf(output_path, "%s/%08x.app", output_dir, fstID);
     snprintf(download_url, 78, "%s/%08x", base_url, fstID);
-    progress->currentFile = malloc(255);
+    progress->currentFile = (char *)malloc(255);
     sprintf(progress->currentFile, "%08x.app", fstID);
     if (downloadFile(download_url, output_path, progress, true) != 0) {
         showError("Error downloading FST\nPlease check your internet connection\nOr your router might be blocking the NUS server");
         cancelled = true;
         ret = -1;
     }
-    uint8_t *decryptedFSTData = malloc(bswap_64(tmd_data->contents[0].size));
+    uint8_t *decryptedFSTData = (uint8_t *)malloc(bswap_64(tmd_data->contents[0].size));
     TICKET *tik = (TICKET *) tikData;
     decryptFST(output_path, decryptedFSTData, tmd_data, tik->key);
     if (!validateFST(decryptedFSTData)) {
@@ -457,7 +460,7 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool dele
             uint32_t id = bswap_32(tmd_data->contents[i].cid); // the id should usually be chronological, but we wanna be sure
 
             // add a curl handle for the content file (.app file)
-            snprintf(output_path, sizeof(output_path), "%s/%08x.app", output_dir, id);
+            sprintf(output_path, "%s/%08x.app", output_dir, id);
             snprintf(download_url, 78, "%s/%08x", base_url, id);
             sprintf(progress->currentFile, "%08x.app", id);
             if (downloadFile(download_url, output_path, progress, true) != 0) {
@@ -469,7 +472,7 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool dele
 
             if (bswap_16(tmd_data->contents[i].type) & TMD_CONTENT_TYPE_HASHED) {
                 // add a curl handle for the hash file (.h3 file)
-                snprintf(output_path, sizeof(output_path), "%s/%08x.h3", output_dir, id);
+                sprintf(output_path, "%s/%08x.h3", output_dir, id);
                 snprintf(download_url, 81, "%s/%08x.h3", base_url, id);
                 sprintf(progress->currentFile, "%08x.h3", id);
                 if (downloadFile(download_url, output_path, progress, true) != 0) {
@@ -489,7 +492,7 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool dele
     curl_easy_cleanup(handle);
     curl_global_cleanup();
     if (decrypt && !cancelled) {
-        char *argv[2] = {"WiiUDownloader", dirname(output_path)};
+        char *argv[2] = {"WiiUDownloader", _dirname(output_path)};
         if (cdecrypt(2, argv) != 0) {
             showError("Error: There was a problem decrypting the files.\nThe path specified for the download might be too long.\nPlease try downloading the files to a shorter path and try again.");
             ret = -2;
@@ -497,9 +500,10 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool dele
         }
     }
     if (deleteEncryptedContents)
-        removeFiles(dirname(output_path));
+        removeFiles(_dirname(output_path));
 out:
     free(output_dir);
+    free(output_path);
     free(folder_name);
     free(progress->totalSize);
     free(progress->currentFile);

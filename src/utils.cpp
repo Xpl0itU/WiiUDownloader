@@ -70,23 +70,6 @@ bool ask(const char *question) {
     return dlg.run() == Gtk::RESPONSE_YES;
 }
 
-char *dirname(char *path) {
-    int len = strlen(path);
-    int last = len - 1;
-    char *parent = (char *) malloc(sizeof(char) * (len + 1));
-    strcpy(parent, path);
-    parent[len] = '\0';
-
-    while (last >= 0) {
-        if (parent[last] == '/') {
-            parent[last] = '\0';
-            break;
-        }
-        last--;
-    }
-    return parent;
-}
-
 char *show_folder_select_dialog() {
     NFD_Init();
 

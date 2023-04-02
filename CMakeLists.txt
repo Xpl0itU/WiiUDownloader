@@ -85,7 +85,7 @@ add_executable(tests
         src/keygen.cpp
         src/cdecrypt/cdecrypt.c
         src/cdecrypt/util.c
-        src/downloader.c
+        src/downloader.cpp
         src/fst.c
         src/settings.cpp
         src/jsoncpp.cpp

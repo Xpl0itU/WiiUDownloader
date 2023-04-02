@@ -13,7 +13,6 @@ bool getTitleNameFromTid(uint64_t tid, char *out);
 bool getUpdateFromBaseGame(uint64_t titleID, uint64_t *out);
 void showError(const char *text);
 bool ask(const char *question);
-char *dirname(char *path);
 char *show_folder_select_dialog();
 void removeFiles(const char *path);
 bool fileExists(const char *filename);

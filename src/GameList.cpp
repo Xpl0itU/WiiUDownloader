@@ -335,23 +335,24 @@ void GameList::on_generate_fake_tik_menu_click() {
     std::string path(selectedPath);
     FILE *tmd = fopen((path + "/title.tmd").c_str(), "rb");
     if (tmd == nullptr) {
-        showError("Error 1 while creating ticket!\nTicket can't be opened or not found");
+        showError("Error 1 while creating ticket!\nTMD can't be opened or not found");
         return;
     }
     size_t fSize = getFilesizeFromFile(tmd);
-    auto buffer = std::make_unique<uint8_t>(fSize);
-    fread(buffer.get(), fSize, 1, tmd);
-    TMD *tmdData = (TMD *) buffer.get();
+    uint8_t *buffer = (uint8_t *) malloc(fSize);
+    fread(buffer, fSize, 1, tmd);
+    TMD *tmdData = (TMD *) buffer;
     uint16_t titleVersion = bswap_16(tmdData->title_version);
     char titleID[17];
     sprintf(titleID, "%016llx", bswap_64(tmdData->tid));
-    auto titleKey = std::make_unique<char[]>(33);
-    generateKey(titleID, titleKey.get());
-    if (!generateTicket((path + "/title.tik").c_str(), strtoull(titleID, nullptr, 16), titleKey.get(), titleVersion))
+    char *titleKey = (char *) malloc(33);
+    generateKey(titleID, titleKey);
+    if (!generateTicket((path + "/title.tik").c_str(), strtoull(titleID, nullptr, 16), titleKey, titleVersion))
         showError("Error 2 while creating ticket!\nCouldn't write ticket");
     NFD_FreePath(selectedPath);
     path.clear();
     path.shrink_to_fit();
+    free(buffer);
 }
 
 void GameList::on_settings_menu_click() {

@@ -6,7 +6,7 @@
 extern "C" {
 #endif
 
-int cdecrypt(int argc, char **argv, bool showProgressDialog);
+int cdecrypt(int argc, char **argv);
 
 #ifdef __cplusplus
 }

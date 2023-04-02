@@ -26,12 +26,12 @@ TEST_CASE("Title testing", "[titles]") {
     setSelectedDir(".");
     bool cancelQueue = false;
     SECTION("Title downloads") {
-        int downloadValue = downloadTitle("0005001010004000", "OSv0", false, false, false);
+        int downloadValue = downloadTitle("0005001010004000", "OSv0", false, false);
         REQUIRE(downloadValue == 0);
     }
 
     SECTION("Title resuming and decryption") {
-        int downloadValue = downloadTitle("0005001010004000", "OSv0", true, false, false);
+        int downloadValue = downloadTitle("0005001010004000", "OSv0", true, false);
         REQUIRE(downloadValue == 0);
     }
 

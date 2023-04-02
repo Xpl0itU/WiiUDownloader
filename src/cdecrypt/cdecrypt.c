@@ -59,14 +59,14 @@ enum ContentType {
     CONTENT_REQUIRED = (1 << 0), // Not sure
     CONTENT_SHARED = (1 << 15),
     CONTENT_OPTIONAL = (1 << 14),
-} __attribute__((gcc_struct, __packed__));
+} __attribute__((__packed__));
 
 typedef struct
 {
     uint16_t IndexOffset;  //  0  0x204
     uint16_t CommandCount; //  2  0x206
     uint8_t SHA2[32];      //  12 0x208
-} __attribute__((gcc_struct, __packed__)) ContentInfo;
+} __attribute__((__packed__)) ContentInfo;
 
 typedef struct
 {
@@ -75,7 +75,7 @@ typedef struct
     uint16_t Type;    //  6  0xB0A
     uint64_t Size;    //  8  0xB0C
     uint8_t SHA2[32]; //  16 0xB14
-} __attribute__((gcc_struct, __packed__)) Content;
+} __attribute__((__packed__)) Content;
 
 typedef struct
 {
@@ -106,14 +106,14 @@ typedef struct
 
     Content Contents[]; // 0x1E4
 
-} __attribute__((gcc_struct, __packed__)) TitleMetaData;
+} __attribute__((__packed__)) TitleMetaData;
 
 struct FSTInfo {
     uint32_t Unknown;
     uint32_t Size;
     uint32_t UnknownB;
     uint32_t UnknownC[6];
-} __attribute__((gcc_struct, __packed__));
+} __attribute__((__packed__));
 
 struct FST {
     uint32_t MagicBytes;
@@ -123,7 +123,7 @@ struct FST {
     uint32_t UnknownB[5];
 
     struct FSTInfo FSTInfos[];
-} __attribute__((gcc_struct, __packed__));
+} __attribute__((__packed__));
 
 struct FEntry {
     union {
@@ -131,7 +131,7 @@ struct FEntry {
         {
             uint32_t Type : 8;
             uint32_t NameOffset : 24;
-        } __attribute__((gcc_struct, __packed__));
+        } __attribute__((__packed__));
         uint32_t TypeName;
     };
     union {
@@ -139,43 +139,17 @@ struct FEntry {
         {
             uint32_t FileOffset;
             uint32_t FileLength;
-        } __attribute__((gcc_struct, __packed__));
+        } __attribute__((__packed__));
         struct // Dir Entry
         {
             uint32_t ParentOffset;
             uint32_t NextOffset;
-        } __attribute__((gcc_struct, __packed__));
+        } __attribute__((__packed__));
         uint32_t entry[2];
     };
     uint16_t Flags;
     uint16_t ContentID;
-} __attribute__((gcc_struct, __packed__));
-
-static GtkWidget *progress_bar;
-static GtkWidget *window;
-
-static void progressDialog() {
-    gtk_init(NULL, NULL);
-
-    //Create window
-    window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-    gtk_window_set_title(GTK_WINDOW(window), "Download Progress");
-    gtk_window_set_default_size(GTK_WINDOW(window), 300, 50);
-    gtk_container_set_border_width(GTK_CONTAINER(window), 10);
-    gtk_window_set_modal(GTK_WINDOW(window), TRUE);
-
-    //Create progress bar
-    progress_bar = gtk_progress_bar_new();
-    gtk_progress_bar_set_show_text(GTK_PROGRESS_BAR(progress_bar), TRUE);
-    gtk_progress_bar_set_text(GTK_PROGRESS_BAR(progress_bar), "Downloading");
-
-    //Create container for the window
-    GtkWidget *main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-    gtk_container_add(GTK_CONTAINER(window), main_box);
-    gtk_box_pack_start(GTK_BOX(main_box), progress_bar, FALSE, FALSE, 0);
-
-    gtk_widget_show_all(window);
-}
+} __attribute__((__packed__));
 
 static bool file_dump(const char *path, void *buf, size_t len) {
     assert(buf != NULL);
@@ -360,7 +334,7 @@ out:
 }
 #undef BLOCK_SIZE
 
-int cdecrypt(int argc, char **argv, bool showProgressDialog) {
+int cdecrypt(int argc, char **argv) {
     int r = EXIT_FAILURE;
     char str[PATH_MAX], *tmd_path = NULL, *tik_path = NULL;
     FILE *src = NULL;
@@ -520,16 +494,12 @@ int cdecrypt(int argc, char **argv, bool showProgressDialog) {
     uint32_t l_entry[16];
 
     uint32_t level = 0;
-    if (showProgressDialog)
-        progressDialog();
     for (uint32_t i = 1; i < entries; i++) {
-        if (showProgressDialog) {
-            gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progress_bar), (double) i / (double) entries);
-            gtk_progress_bar_set_text(GTK_PROGRESS_BAR(progress_bar), "Decrypting...");
-            // force redraw
-            while (gtk_events_pending())
-                gtk_main_iteration();
-        }
+        gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(getProgressBar()), (double) i / (double) entries);
+        gtk_progress_bar_set_text(GTK_PROGRESS_BAR(getProgressBar()), "Decrypting...");
+        // force redraw
+        while (gtk_events_pending())
+            gtk_main_iteration();
         if (level > 0) {
             while ((level >= 1) && (l_entry[level - 1] == i))
                 level--;
@@ -595,8 +565,6 @@ int cdecrypt(int argc, char **argv, bool showProgressDialog) {
     r = EXIT_SUCCESS;
 
 out:
-    if (showProgressDialog)
-        gtk_widget_destroy(GTK_WIDGET(window));
     free(tmd);
     free(tik);
     free(cnt);

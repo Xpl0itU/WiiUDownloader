@@ -179,11 +179,13 @@ void GameList::on_download_queue(GdkEventButton *ev) {
         return;
     gameListWindow->set_sensitive(false);
     setQueueCancelled(false);
+    progressDialog();
     for (auto queuedItem : queueMap) {
         auto tid = std::make_unique<char[]>(17);
         sprintf(tid.get(), "%016llx", queuedItem.first);
-        downloadTitle(tid.get(), queuedItem.second, decryptContents, deleteEncryptedContents, true);
+        downloadTitle(tid.get(), queuedItem.second, decryptContents, deleteEncryptedContents);
     }
+    destroyProgressDialog();
     Glib::RefPtr<Gio::Notification> notification = Gio::Notification::create("WiiUDownloader");
     notification->set_body("Queue download(s) finished");
     this->app->send_notification(notification);
@@ -287,7 +289,9 @@ void GameList::on_gamelist_row_activated(const Gtk::TreePath &treePath, Gtk::Tre
         auto selectedTID = std::make_unique<char[]>(17);
         sprintf(selectedTID.get(), "%016llx", infos[row[columns.index]].tid);
         setQueueCancelled(false);
-        downloadTitle(selectedTID.get(), infos[row[columns.index]].name, decryptContents, deleteEncryptedContents, true);
+        progressDialog();
+        downloadTitle(selectedTID.get(), infos[row[columns.index]].name, decryptContents, deleteEncryptedContents);
+        destroyProgressDialog();
         Glib::RefPtr<Gio::Notification> notification = Gio::Notification::create("WiiUDownloader");
         notification->set_body("Download finished");
         this->app->send_notification(notification);
@@ -320,7 +324,7 @@ void GameList::on_decrypt_menu_click() {
         return;
 
     char *argv[2] = {(char *) "WiiUDownloader", selectedPath};
-    if (cdecrypt(2, argv, true) != 0)
+    if (cdecrypt(2, argv) != 0)
         showError("Error: There was a problem decrypting the files.\nThe path specified for the download might be too long.\nPlease try downloading the files to a shorter path and try again.");
 }
 

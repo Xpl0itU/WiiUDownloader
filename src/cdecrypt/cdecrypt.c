@@ -29,6 +29,7 @@
 #include <mbedtls/aes.h>
 #include <mbedtls/sha1.h>
 
+#include <downloader.h>
 #include <cdecrypt/cdecrypt.h>
 #include <gtk/gtk.h>
 #include <log.h>

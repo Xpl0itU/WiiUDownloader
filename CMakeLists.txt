@@ -19,8 +19,8 @@ add_subdirectory(lib/nativefiledialog-extended)
 execute_process(COMMAND uname OUTPUT_VARIABLE uname)
 if (uname MATCHES "^MSYS" OR uname MATCHES "^MINGW")
     link_libraries(nfd ole32 uuid shell32)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_GNU_SOURCE -UNDEBUG -DAES_ROM_TABLES -fvisibility=hidden -Ofast -fno-strict-aliasing -pipe -mwindows -mms-bitfields")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GNU_SOURCE -UNDEBUG -DAES_ROM_TABLES -fvisibility=hidden -Ofast -fno-strict-aliasing -pipe -mwindows -mms-bitfields")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_GNU_SOURCE -UNDEBUG -DAES_ROM_TABLES -fvisibility=hidden -Ofast -fno-strict-aliasing -pipe -mwindows -mms-bitfields -DCURL_STATICLIB")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GNU_SOURCE -UNDEBUG -DAES_ROM_TABLES -fvisibility=hidden -Ofast -fno-strict-aliasing -pipe -mwindows -mms-bitfields -DCURL_STATICLIB")
     file(GLOB SOURCES
             src/*.cpp
             src/*.c
@@ -29,8 +29,8 @@ if (uname MATCHES "^MSYS" OR uname MATCHES "^MINGW")
             )
 else ()
     link_libraries(nfd)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_GNU_SOURCE -UNDEBUG -DAES_ROM_TABLES -fvisibility=hidden -Ofast -fno-strict-aliasing -pipe")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GNU_SOURCE -UNDEBUG -DAES_ROM_TABLES -fvisibility=hidden -Ofast -fno-strict-aliasing -pipe")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_GNU_SOURCE -UNDEBUG -DAES_ROM_TABLES -fvisibility=hidden -Ofast -fno-strict-aliasing -pipe -DCURL_STATICLIB")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GNU_SOURCE -UNDEBUG -DAES_ROM_TABLES -fvisibility=hidden -Ofast -fno-strict-aliasing -pipe -DCURL_STATICLIB")
     file(GLOB SOURCES
             src/*.cpp
             src/*.c

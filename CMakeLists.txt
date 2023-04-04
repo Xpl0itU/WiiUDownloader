@@ -74,6 +74,7 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
         mbedcrypto
         mbedx509
         curl
+        pthread
         )
 
 enable_testing()
@@ -98,6 +99,7 @@ target_link_libraries(tests
         mbedcrypto
         mbedx509
         curl
+        pthread
         Catch2::Catch2WithMain)
 
 include(CTest)

@@ -38,8 +38,8 @@ public:
     void updateTitles(TITLE_CATEGORY cat, MCPRegion reg);
 
     void on_gamelist_row_activated(const Gtk::TreePath &treePath, Gtk::TreeViewColumn *const &column);
-    void on_button_selected(GdkEventButton *ev, TITLE_CATEGORY cat);
-    void on_region_selected(Gtk::ToggleButton *button, MCPRegion reg);
+    void on_button_selected(GdkEventButton *ev, Gtk::ToggleButton *selectedButton, TITLE_CATEGORY cat);
+    void on_region_selected(Gtk::CheckButton *button, MCPRegion reg);
     void on_add_to_queue(GdkEventButton *ev);
     bool is_selection_in_queue();
     void on_selection_changed();
@@ -61,11 +61,11 @@ private:
     Glib::RefPtr<Gtk::Builder> builder;
 
     Gtk::TreeView *treeView = nullptr;
-    Gtk::RadioButton *gamesButton = nullptr;
-    Gtk::RadioButton *updatesButton = nullptr;
-    Gtk::RadioButton *dlcsButton = nullptr;
-    Gtk::RadioButton *demosButton = nullptr;
-    Gtk::RadioButton *allButton = nullptr;
+    Gtk::ToggleButton *gamesButton = nullptr;
+    Gtk::ToggleButton *updatesButton = nullptr;
+    Gtk::ToggleButton *dlcsButton = nullptr;
+    Gtk::ToggleButton *demosButton = nullptr;
+    Gtk::ToggleButton *allButton = nullptr;
     Gtk::CheckButton *japanButton = nullptr;
     Gtk::CheckButton *usaButton = nullptr;
     Gtk::CheckButton *europeButton = nullptr;

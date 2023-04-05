@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.38.2 -->
+<!-- Generated with glade 3.40.0 -->
 <interface>
   <requires lib="gtk+" version="3.24"/>
   <object class="GtkImage" id="image1">
@@ -96,13 +96,12 @@
             <property name="can-focus">False</property>
             <property name="layout-style">start</property>
             <child>
-              <object class="GtkRadioButton" id="gamesButton">
+              <object class="GtkToggleButton" id="gamesButton">
                 <property name="label" translatable="yes">Games</property>
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
-                <property name="receives-default">False</property>
+                <property name="receives-default">True</property>
                 <property name="active">True</property>
-                <property name="draw-indicator">True</property>
               </object>
               <packing>
                 <property name="expand">True</property>
@@ -111,13 +110,11 @@
               </packing>
             </child>
             <child>
-              <object class="GtkRadioButton" id="updatesButton">
+              <object class="GtkToggleButton" id="updatesButton">
                 <property name="label" translatable="yes">Updates</property>
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
-                <property name="receives-default">False</property>
-                <property name="draw-indicator">True</property>
-                <property name="group">gamesButton</property>
+                <property name="receives-default">True</property>
               </object>
               <packing>
                 <property name="expand">True</property>
@@ -126,13 +123,11 @@
               </packing>
             </child>
             <child>
-              <object class="GtkRadioButton" id="dlcsButton">
+              <object class="GtkToggleButton" id="dlcsButton">
                 <property name="label" translatable="yes">DLCs</property>
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
-                <property name="receives-default">False</property>
-                <property name="draw-indicator">True</property>
-                <property name="group">gamesButton</property>
+                <property name="receives-default">True</property>
               </object>
               <packing>
                 <property name="expand">True</property>
@@ -141,13 +136,11 @@
               </packing>
             </child>
             <child>
-              <object class="GtkRadioButton" id="demoButton">
+              <object class="GtkToggleButton" id="demoButton">
                 <property name="label" translatable="yes">Demo</property>
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
-                <property name="receives-default">False</property>
-                <property name="draw-indicator">True</property>
-                <property name="group">gamesButton</property>
+                <property name="receives-default">True</property>
               </object>
               <packing>
                 <property name="expand">True</property>
@@ -156,13 +149,11 @@
               </packing>
             </child>
             <child>
-              <object class="GtkRadioButton" id="allButton">
+              <object class="GtkToggleButton" id="allButton">
                 <property name="label" translatable="yes">All</property>
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
-                <property name="receives-default">False</property>
-                <property name="draw-indicator">True</property>
-                <property name="group">gamesButton</property>
+                <property name="receives-default">True</property>
               </object>
               <packing>
                 <property name="expand">True</property>

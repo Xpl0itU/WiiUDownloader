@@ -35,19 +35,19 @@ GameList::GameList(Glib::RefPtr<Gtk::Application> app, const Glib::RefPtr<Gtk::B
 
     builder->get_widget("gamesButton", gamesButton);
     gamesButton->set_active();
-    gamesButton->signal_button_press_event().connect_notify(sigc::bind(sigc::mem_fun(*this, &GameList::on_button_selected), TITLE_CATEGORY_GAME));
+    gamesButton->signal_button_press_event().connect_notify(sigc::bind(sigc::mem_fun(*this, &GameList::on_button_selected), gamesButton, TITLE_CATEGORY_GAME));
 
     builder->get_widget("updatesButton", updatesButton);
-    updatesButton->signal_button_press_event().connect_notify(sigc::bind(sigc::mem_fun(*this, &GameList::on_button_selected), TITLE_CATEGORY_UPDATE));
+    updatesButton->signal_button_press_event().connect_notify(sigc::bind(sigc::mem_fun(*this, &GameList::on_button_selected), updatesButton, TITLE_CATEGORY_UPDATE));
 
     builder->get_widget("dlcsButton", dlcsButton);
-    dlcsButton->signal_button_press_event().connect_notify(sigc::bind(sigc::mem_fun(*this, &GameList::on_button_selected), TITLE_CATEGORY_DLC));
+    dlcsButton->signal_button_press_event().connect_notify(sigc::bind(sigc::mem_fun(*this, &GameList::on_button_selected), dlcsButton, TITLE_CATEGORY_DLC));
 
     builder->get_widget("demoButton", demosButton);
-    demosButton->signal_button_press_event().connect_notify(sigc::bind(sigc::mem_fun(*this, &GameList::on_button_selected), TITLE_CATEGORY_DEMO));
+    demosButton->signal_button_press_event().connect_notify(sigc::bind(sigc::mem_fun(*this, &GameList::on_button_selected), demosButton, TITLE_CATEGORY_DEMO));
 
     builder->get_widget("allButton", allButton);
-    allButton->signal_button_press_event().connect_notify(sigc::bind(sigc::mem_fun(*this, &GameList::on_button_selected), TITLE_CATEGORY_ALL));
+    allButton->signal_button_press_event().connect_notify(sigc::bind(sigc::mem_fun(*this, &GameList::on_button_selected), allButton, TITLE_CATEGORY_ALL));
 
     builder->get_widget("addToQueueButton", addToQueueButton);
     addToQueueButton->signal_button_press_event().connect_notify(sigc::mem_fun(*this, &GameList::on_add_to_queue));
@@ -265,14 +265,19 @@ void GameList::on_add_to_queue(GdkEventButton *ev) {
     }
 }
 
-void GameList::on_button_selected(GdkEventButton *ev, TITLE_CATEGORY cat) {
+void GameList::on_button_selected(GdkEventButton *ev, Gtk::ToggleButton *selectedButton, TITLE_CATEGORY cat) {
     currentCategory = cat;
     infos = getTitleEntries(currentCategory);
+    for (auto button : {gamesButton, updatesButton, dlcsButton, demosButton, allButton}) {
+        if (button == selectedButton)
+            continue;
+        button->set_active(false);
+    }
     updateTitles(currentCategory, selectedRegion);
     search_entry_changed();
 }
 
-void GameList::on_region_selected(Gtk::ToggleButton *button, MCPRegion reg) {
+void GameList::on_region_selected(Gtk::CheckButton *button, MCPRegion reg) {
     if (button->get_active())
         selectedRegion = (MCPRegion) (selectedRegion | reg);
     else

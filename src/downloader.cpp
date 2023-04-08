@@ -251,6 +251,8 @@ static int downloadFile(const char *download_url, const char *output_path, struc
     CURLcode curlCode;
     int retryCount = 0;
     do {
+        // Reset file position to start in case we have a partially-written file
+        fseek(file, 0, SEEK_SET);
         curlCode = curl_easy_perform(handle);
         if ((curlCode == CURLE_OK) || cancelled || queueCancelled)
             break;

@@ -186,12 +186,11 @@ GtkWidget *getProgressBar() {
 }
 
 static int compareRemoteFileSize(const char *url, const char *local_file) {
-    CURL *curl;
     CURLcode res;
     double remote_filesize = 0;
     double local_filesize = 0;
 
-    curl = curl_easy_init();
+    CURL *curl = curl_easy_init();
     if (curl) {
         curl_easy_setopt(curl, CURLOPT_URL, url);
         curl_easy_setopt(curl, CURLOPT_HEADER, 1L);
@@ -208,13 +207,8 @@ static int compareRemoteFileSize(const char *url, const char *local_file) {
                     local_filesize = ftell(fp);
                     fclose(fp);
                 }
-                if (remote_filesize == local_filesize) {
-                    return 0;
-                } else if (remote_filesize > local_filesize) {
-                    return 1;
-                } else {
-                    return -1;
-                }
+                curl_easy_cleanup(curl);
+                return compareDoubles(remote_filesize, local_filesize);
             }
         }
         curl_easy_cleanup(curl);
@@ -226,7 +220,7 @@ static int downloadFile(const char *download_url, const char *output_path, struc
     progress->previousDownloadedSize = 0;
     if (fileExists(output_path)) {
         if (compareRemoteFileSize(download_url, output_path) == 0) {
-            log_info("The file already exists and has the same or bigger size, skipping the download...\n");
+            log_info("The file already exists and has the same, skipping the download...\n");
             return 0;
         }
     }
@@ -494,8 +488,8 @@ int downloadTitle(const char *titleID, const char *name, bool decrypt, bool dele
     curl_easy_cleanup(handle);
     curl_global_cleanup();
     if (decrypt && !cancelled) {
-        char *argv[2] = {"WiiUDownloader", _dirname(output_path)};
-        if (cdecrypt(2, argv) != 0) {
+        const char *argv[2] = {"WiiUDownloader", _dirname(output_path)};
+        if (cdecrypt(2, const_cast<char **>(argv)) != 0) {
             showError("Error: There was a problem decrypting the files.\nThe path specified for the download might be too long.\nPlease try downloading the files to a shorter path and try again.");
             ret = -2;
             goto out;

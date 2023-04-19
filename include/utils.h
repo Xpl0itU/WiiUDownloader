@@ -21,6 +21,7 @@ void setGameList(GtkWindow *window);
 void minimizeGameListWindow();
 int compareHash(const char *input, const char *expectedHash);
 size_t getFilesizeFromFile(FILE *file);
+int compareDoubles(double a, double b);
 
 inline uint16_t bswap_16(uint16_t value) {
     return (uint16_t) ((0x00FF & (value >> 8)) | (0xFF00 & (value << 8)));

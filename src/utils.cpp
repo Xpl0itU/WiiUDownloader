@@ -143,3 +143,11 @@ size_t getFilesizeFromFile(FILE *file) {
     fseek(file, 0L, SEEK_SET);
     return fSize;
 }
+
+int compareDoubles(double a, double b) {
+    if (a < b - DBL_EPSILON)
+        return -1;  // a is less than b
+    else if (a > b + DBL_EPSILON)
+        return 1;  // a is greater than b
+    return 0;      // a is approximately equal to b
+}

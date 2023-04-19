@@ -220,7 +220,7 @@ static int downloadFile(const char *download_url, const char *output_path, struc
     progress->previousDownloadedSize = 0;
     if (fileExists(output_path)) {
         if (compareRemoteFileSize(download_url, output_path) == 0) {
-            log_info("The file already exists and has the same, skipping the download...\n");
+            log_info("The file already exists and has the same size, skipping the download...\n");
             return 0;
         }
     }

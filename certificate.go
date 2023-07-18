@@ -26,11 +26,11 @@ func getCert(tmdData []byte, id int, numContents uint16) ([]byte, error) {
 	}
 }
 
-func getDefaultCert(client *grab.Client) ([]byte, error) {
+func getDefaultCert(progressWindow *ProgressWindow, client *grab.Client) ([]byte, error) {
 	if len(cetkData) >= 0x350+0x300 {
 		return cetkData[0x350 : 0x350+0x300], nil
 	}
-	if err := downloadFile(client, "http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/000500101000400a/cetk", "cetk"); err != nil {
+	if err := downloadFile(progressWindow, client, "http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/000500101000400a/cetk", "cetk"); err != nil {
 		return nil, err
 	}
 	cetkData, err := os.ReadFile("cetk")

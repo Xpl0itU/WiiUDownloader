@@ -346,7 +346,7 @@ out:
 }
 #undef BLOCK_SIZE
 
-int cdecrypt_main(int argc, char **argv) {
+int cdecrypt_main(int argc, char **argv, int *progress) {
   int r = EXIT_FAILURE;
   char str[PATH_MAX], *tmd_path = NULL, *tik_path = NULL;
   FILE *src = NULL;
@@ -526,6 +526,7 @@ int cdecrypt_main(int argc, char **argv) {
   uint32_t level = 0;
 
   for (uint32_t i = 1; i < entries; i++) {
+    *progress = (i * 100) / entries;
     if (level > 0) {
       while ((level >= 1) && (l_entry[level - 1] == i))
         level--;

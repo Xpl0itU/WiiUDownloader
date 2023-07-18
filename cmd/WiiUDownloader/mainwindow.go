@@ -9,9 +9,16 @@ import (
 	"github.com/gotk3/gotk3/gtk"
 )
 
+const (
+	NAME_COLUMN     = 0
+	TITLE_ID_COLUMN = 1
+	REGION_COLUMN   = 2
+)
+
 type MainWindow struct {
-	window *gtk.Window
-	titles []wiiudownloader.TitleEntry
+	window   *gtk.Window
+	treeView *gtk.TreeView
+	titles   []wiiudownloader.TitleEntry
 }
 
 func NewMainWindow(entries []wiiudownloader.TitleEntry) *MainWindow {
@@ -43,7 +50,7 @@ func (mw *MainWindow) ShowAll() {
 	for _, entry := range mw.titles {
 		iter := store.Append()
 		err = store.Set(iter,
-			[]int{0, 1, 2},
+			[]int{NAME_COLUMN, TITLE_ID_COLUMN, REGION_COLUMN},
 			[]interface{}{entry.Name, fmt.Sprintf("%016x", entry.TitleID), wiiudownloader.GetFormattedRegion(entry.Region)},
 		)
 		if err != nil {
@@ -51,7 +58,7 @@ func (mw *MainWindow) ShowAll() {
 		}
 	}
 
-	treeView, err := gtk.TreeViewNewWithModel(store)
+	mw.treeView, err = gtk.TreeViewNewWithModel(store)
 	if err != nil {
 		log.Fatal("Unable to create tree view:", err)
 	}
@@ -60,38 +67,63 @@ func (mw *MainWindow) ShowAll() {
 	if err != nil {
 		log.Fatal("Unable to create cell renderer:", err)
 	}
-	column, err := gtk.TreeViewColumnNewWithAttribute("Name", renderer, "text", 0)
+	column, err := gtk.TreeViewColumnNewWithAttribute("Name", renderer, "text", NAME_COLUMN)
 	if err != nil {
 		log.Fatal("Unable to create tree view column:", err)
 	}
-	treeView.AppendColumn(column)
+	mw.treeView.AppendColumn(column)
 
 	renderer, err = gtk.CellRendererTextNew()
 	if err != nil {
 		log.Fatal("Unable to create cell renderer:", err)
 	}
-	column, err = gtk.TreeViewColumnNewWithAttribute("Title ID", renderer, "text", 1)
+	column, err = gtk.TreeViewColumnNewWithAttribute("Title ID", renderer, "text", TITLE_ID_COLUMN)
 	if err != nil {
 		log.Fatal("Unable to create tree view column:", err)
 	}
-	treeView.AppendColumn(column)
+	mw.treeView.AppendColumn(column)
 
-	column, err = gtk.TreeViewColumnNewWithAttribute("Region", renderer, "text", 2)
+	column, err = gtk.TreeViewColumnNewWithAttribute("Region", renderer, "text", REGION_COLUMN)
 	if err != nil {
 		log.Fatal("Unable to create tree view column:", err)
 	}
-	treeView.AppendColumn(column)
+	mw.treeView.AppendColumn(column)
+
+	mw.treeView.Connect("row-activated", mw.onRowActivated)
 
 	scrollable, err := gtk.ScrolledWindowNew(nil, nil)
 	if err != nil {
 		log.Fatal("Unable to create scrolled window:", err)
 	}
 	scrollable.SetPolicy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
-	scrollable.Add(treeView)
+	scrollable.Add(mw.treeView)
 
 	mw.window.Add(scrollable)
 
 	mw.window.ShowAll()
+}
+
+func (mw *MainWindow) onRowActivated() {
+	selection, err := mw.treeView.GetSelection()
+	if err != nil {
+		log.Fatal("Unable to get selection:", err)
+	}
+
+	model, iter, _ := selection.GetSelected()
+	if iter != nil {
+		tid, _ := model.ToTreeModel().GetValue(iter, TITLE_ID_COLUMN)
+		if tid != nil {
+			if tidStr, err := tid.GetString(); err == nil {
+				fmt.Println("Cell Value:", tidStr)
+				progressWindow, err := wiiudownloader.CreateProgressWindow(mw.window)
+				if err != nil {
+					return
+				}
+				progressWindow.Window.ShowAll()
+				go wiiudownloader.DownloadTitle(tidStr, "output", true, &progressWindow)
+			}
+		}
+	}
 }
 
 func Main() {

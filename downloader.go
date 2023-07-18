@@ -10,23 +10,95 @@ import (
 	"strings"
 
 	"github.com/cavaliergopher/grab/v3"
+	"github.com/gotk3/gotk3/glib"
+	"github.com/gotk3/gotk3/gtk"
 )
 
-func downloadFile(client *grab.Client, url string, outputPath string) error {
+type ProgressWindow struct {
+	Window       *gtk.Window
+	box          *gtk.Box
+	label        *gtk.Label
+	bar          *gtk.ProgressBar
+	percentLabel *gtk.Label
+}
+
+func CreateProgressWindow(parent *gtk.Window) (ProgressWindow, error) {
+	win, err := gtk.WindowNew(gtk.WINDOW_TOPLEVEL)
+	if err != nil {
+		return ProgressWindow{}, err
+	}
+	win.SetTitle("File Download")
+
+	win.SetTransientFor(parent)
+
+	box, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 5)
+	if err != nil {
+		return ProgressWindow{}, err
+	}
+	win.Add(box)
+
+	filenameLabel, err := gtk.LabelNew("File: ")
+	if err != nil {
+		return ProgressWindow{}, err
+	}
+	box.PackStart(filenameLabel, false, false, 0)
+
+	progressBar, err := gtk.ProgressBarNew()
+	if err != nil {
+		return ProgressWindow{}, err
+	}
+	box.PackStart(progressBar, false, false, 0)
+
+	percentLabel, err := gtk.LabelNew("0%")
+	if err != nil {
+		return ProgressWindow{}, err
+	}
+	box.PackStart(percentLabel, false, false, 0)
+
+	return ProgressWindow{
+		Window:       win,
+		box:          box,
+		label:        filenameLabel,
+		bar:          progressBar,
+		percentLabel: percentLabel,
+	}, nil
+}
+
+func downloadFile(progressWindow *ProgressWindow, client *grab.Client, url string, outputPath string) error {
 	req, err := grab.NewRequest(outputPath, url)
 	if err != nil {
 		return err
 	}
+
 	resp := client.Do(req)
 	if err := resp.Err(); err != nil {
 		return err
 	}
 
-	fmt.Printf("[Info] Download saved to ./%v \n", resp.Filename)
+	progressWindow.label.SetText(fmt.Sprintf("File: %s", resp.Filename))
+
+	go func() {
+		for !resp.IsComplete() {
+			glib.IdleAdd(func() {
+				progress := float64(resp.BytesComplete()) / float64(resp.Size())
+				progressWindow.bar.SetFraction(progress)
+				progressWindow.percentLabel.SetText(fmt.Sprintf("%.0f%%", progress*100))
+			})
+		}
+
+		progressWindow.bar.SetFraction(1)
+
+		glib.IdleAdd(func() {
+			progressWindow.Window.SetTitle("Download Complete")
+		})
+	}()
+
 	return nil
 }
 
-func DownloadTitle(titleID string, outputDirectory string, doDecryption bool) error {
+func DownloadTitle(titleID string, outputDirectory string, doDecryption bool, progressWindow *ProgressWindow) error {
+	progress := 0
+	currentFile := ""
 	outputDir := strings.TrimRight(outputDirectory, "/\\")
 	baseURL := fmt.Sprintf("http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/%s", titleID)
 	titleKeyBytes, err := hex.DecodeString(titleID)
@@ -41,7 +113,7 @@ func DownloadTitle(titleID string, outputDirectory string, doDecryption bool) er
 	client := grab.NewClient()
 	downloadURL := fmt.Sprintf("%s/%s", baseURL, "tmd")
 	tmdPath := filepath.Join(outputDir, "title.tmd")
-	if err := downloadFile(client, downloadURL, tmdPath); err != nil {
+	if err := downloadFile(progressWindow, client, downloadURL, tmdPath); err != nil {
 		return err
 	}
 
@@ -57,7 +129,7 @@ func DownloadTitle(titleID string, outputDirectory string, doDecryption bool) er
 
 	tikPath := filepath.Join(outputDir, "title.tik")
 	downloadURL = fmt.Sprintf("%s/%s", baseURL, "cetk")
-	if err := downloadFile(client, downloadURL, tikPath); err != nil {
+	if err := downloadFile(progressWindow, client, downloadURL, tikPath); err != nil {
 		return err
 	}
 	tikData, err := os.ReadFile(tikPath)
@@ -85,7 +157,7 @@ func DownloadTitle(titleID string, outputDirectory string, doDecryption bool) er
 	}
 	cert.Write(cert1)
 
-	defaultCert, err := getDefaultCert(client)
+	defaultCert, err := getDefaultCert(progressWindow, client)
 	if err != nil {
 		return err
 	}
@@ -108,17 +180,18 @@ func DownloadTitle(titleID string, outputDirectory string, doDecryption bool) er
 		if err := binary.Read(bytes.NewReader(tmdData[offset:offset+4]), binary.BigEndian, &id); err != nil {
 			return err
 		}
-
-		appPath := filepath.Join(outputDir, fmt.Sprintf("%08X.app", id))
+		currentFile = fmt.Sprintf("%08X.app", id)
+		appPath := filepath.Join(outputDir, currentFile)
 		downloadURL = fmt.Sprintf("%s/%08X", baseURL, id)
-		if err := downloadFile(client, downloadURL, appPath); err != nil {
+		if err := downloadFile(progressWindow, client, downloadURL, appPath); err != nil {
 			return err
 		}
 
 		if tmdData[offset+7]&0x2 == 2 {
-			h3Path := filepath.Join(outputDir, fmt.Sprintf("%08X.h3", id))
+			currentFile = fmt.Sprintf("%08X.h3", id)
+			h3Path := filepath.Join(outputDir, currentFile)
 			downloadURL = fmt.Sprintf("%s/%08X.h3", baseURL, id)
-			if err := downloadFile(client, downloadURL, h3Path); err != nil {
+			if err := downloadFile(progressWindow, client, downloadURL, h3Path); err != nil {
 				return err
 			}
 			var content contentInfo
@@ -132,8 +205,12 @@ func DownloadTitle(titleID string, outputDirectory string, doDecryption bool) er
 	}
 
 	if doDecryption {
-		decryptContents(outputDir)
+		if err := decryptContents(outputDir, &progress); err != nil {
+			return err
+		}
 	}
+
+	progressWindow.Window.Close()
 
 	return nil
 }

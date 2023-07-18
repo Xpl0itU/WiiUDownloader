@@ -83,6 +83,9 @@ func downloadFile(progressWindow *ProgressWindow, client *grab.Client, url strin
 				progress := float64(resp.BytesComplete()) / float64(resp.Size())
 				progressWindow.bar.SetFraction(progress)
 				progressWindow.percentLabel.SetText(fmt.Sprintf("%.0f%%", progress*100))
+				for gtk.EventsPending() {
+					gtk.MainIteration()
+				}
 			})
 		}
 
@@ -130,7 +133,14 @@ func DownloadTitle(titleID string, outputDirectory string, doDecryption bool, pr
 	tikPath := filepath.Join(outputDir, "title.tik")
 	downloadURL = fmt.Sprintf("%s/%s", baseURL, "cetk")
 	if err := downloadFile(progressWindow, client, downloadURL, tikPath); err != nil {
-		return err
+		titleKey, err := generateKey(titleID)
+		if err != nil {
+			return err
+		}
+		fmt.Println(titleKey)
+		if err := generateTicket(tikPath, titleID, titleKey, titleVersion); err != nil {
+			return err
+		}
 	}
 	tikData, err := os.ReadFile(tikPath)
 	if err != nil {
@@ -206,6 +216,7 @@ func DownloadTitle(titleID string, outputDirectory string, doDecryption bool, pr
 
 	if doDecryption {
 		if err := decryptContents(outputDir, &progress); err != nil {
+			progressWindow.Window.Close()
 			return err
 		}
 	}

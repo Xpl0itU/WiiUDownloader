@@ -43,22 +43,22 @@ const (
 )
 
 type TitleEntry struct {
-	name    string
-	titleID uint64
-	region  uint8
+	Name    string
+	TitleID uint64
+	Region  uint8
 	key     uint8
 }
 
-func getTitleEntries(category uint8) []TitleEntry {
+func GetTitleEntries(category uint8) []TitleEntry {
 	entriesSize := getTitleEntriesSize(category)
 	entriesSlice := make([]TitleEntry, entriesSize)
 	cEntries := C.getTitleEntries(C.TITLE_CATEGORY(category))
 	cSlice := (*[1 << 28]C.TitleEntry)(unsafe.Pointer(cEntries))[:entriesSize:entriesSize]
 	for i := 0; i < entriesSize; i++ {
 		entriesSlice[i] = TitleEntry{
-			name:    C.GoString(cSlice[i].name),
-			titleID: uint64(cSlice[i].tid),
-			region:  uint8(cSlice[i].region),
+			Name:    C.GoString(cSlice[i].name),
+			TitleID: uint64(cSlice[i].tid),
+			Region:  uint8(cSlice[i].region),
 			key:     uint8(cSlice[i].key),
 		}
 	}
@@ -67,4 +67,29 @@ func getTitleEntries(category uint8) []TitleEntry {
 
 func getTitleEntriesSize(category uint8) int {
 	return int(C.getTitleEntriesSize(C.TITLE_CATEGORY(category)))
+}
+
+func GetFormattedRegion(region uint8) string {
+	if region&MCP_REGION_EUROPE != 0 {
+		if region&MCP_REGION_USA != 0 {
+			if region&MCP_REGION_JAPAN != 0 {
+				return "All"
+			}
+			return "USA/Europe"
+		}
+		if region&MCP_REGION_JAPAN != 0 {
+			return "Europe/Japan"
+		}
+		return "Europe"
+	}
+	if region&MCP_REGION_USA != 0 {
+		if region&MCP_REGION_JAPAN != 0 {
+			return "USA/Japan"
+		}
+		return "USA"
+	}
+	if region&MCP_REGION_JAPAN != 0 {
+		return "Japan"
+	}
+	return "Unknown"
 }

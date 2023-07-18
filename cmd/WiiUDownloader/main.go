@@ -1,9 +1,10 @@
 package main
 
-import (
-	"fmt"
-)
+import wiiudownloader "github.com/Xpl0itU/WiiUDownloader"
 
 func main() {
-	fmt.Println("Hello World!")
+	win := NewMainWindow(wiiudownloader.GetTitleEntries(wiiudownloader.TITLE_CATEGORY_GAME))
+
+	win.ShowAll()
+	Main()
 }

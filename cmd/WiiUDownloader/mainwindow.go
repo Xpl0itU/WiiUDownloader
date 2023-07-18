@@ -22,13 +22,14 @@ const (
 )
 
 type MainWindow struct {
-	window          *gtk.Window
-	treeView        *gtk.TreeView
-	titles          []wiiudownloader.TitleEntry
-	searchEntry     *gtk.Entry
-	categoryButtons []*gtk.ToggleButton
-	titleQueue      []wiiudownloader.TitleEntry
-	progressWindow  wiiudownloader.ProgressWindow
+	window           *gtk.Window
+	treeView         *gtk.TreeView
+	titles           []wiiudownloader.TitleEntry
+	searchEntry      *gtk.Entry
+	categoryButtons  []*gtk.ToggleButton
+	titleQueue       []wiiudownloader.TitleEntry
+	progressWindow   wiiudownloader.ProgressWindow
+	addToQueueButton *gtk.Button
 }
 
 func NewMainWindow(entries []wiiudownloader.TitleEntry) *MainWindow {
@@ -183,6 +184,8 @@ func (mw *MainWindow) ShowAll() {
 		log.Fatal("Unable to create scrolled window:", err)
 	}
 	scrollable.SetPolicy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
+	selection, _ := mw.treeView.GetSelection()
+	selection.Connect("changed", mw.onSelectionChanged)
 	scrollable.Add(mw.treeView)
 
 	mainvBox.PackStart(scrollable, true, true, 0)
@@ -192,7 +195,7 @@ func (mw *MainWindow) ShowAll() {
 		log.Fatal("Unable to create box:", err)
 	}
 
-	addToQueueButton, err := gtk.ButtonNewWithLabel("Add to queue")
+	mw.addToQueueButton, err = gtk.ButtonNewWithLabel("Add to queue")
 	if err != nil {
 		log.Fatal("Unable to create button:", err)
 	}
@@ -202,7 +205,7 @@ func (mw *MainWindow) ShowAll() {
 		log.Fatal("Unable to create button:", err)
 	}
 
-	addToQueueButton.Connect("clicked", mw.onAddToQueueClicked)
+	mw.addToQueueButton.Connect("clicked", mw.onAddToQueueClicked)
 	downloadQueueButton.Connect("clicked", func() {
 		mw.progressWindow, err = wiiudownloader.CreateProgressWindow(mw.window)
 		if err != nil {
@@ -211,7 +214,7 @@ func (mw *MainWindow) ShowAll() {
 		mw.progressWindow.Window.ShowAll()
 		go mw.onDownloadQueueClicked()
 	})
-	bottomhBox.PackStart(addToQueueButton, false, false, 0)
+	bottomhBox.PackStart(mw.addToQueueButton, false, false, 0)
 	bottomhBox.PackStart(downloadQueueButton, false, false, 0)
 
 	mainvBox.PackEnd(bottomhBox, false, false, 0)
@@ -259,6 +262,30 @@ func (mw *MainWindow) onCategoryToggled(button *gtk.ToggleButton) {
 	button.Activate()
 }
 
+func (mw *MainWindow) onSelectionChanged() {
+	selection, err := mw.treeView.GetSelection()
+	if err != nil {
+		log.Fatal("Unable to get selection:", err)
+	}
+	model, iter, _ := selection.GetSelected()
+	if iter != nil {
+		tid, _ := model.ToTreeModel().GetValue(iter, TITLE_ID_COLUMN)
+		name, _ := model.ToTreeModel().GetValue(iter, NAME_COLUMN)
+		if tid != nil {
+			if tidStr, err := tid.GetString(); err == nil {
+				tidNum, _ := strconv.ParseUint(tidStr, 16, 64)
+				nameStr, _ := name.GetString()
+				isInQueue := mw.isTitleInQueue(wiiudownloader.TitleEntry{TitleID: tidNum, Name: nameStr})
+				if isInQueue {
+					mw.addToQueueButton.SetLabel("Remove from queue")
+				} else {
+					mw.addToQueueButton.SetLabel("Add to queue")
+				}
+			}
+		}
+	}
+}
+
 func (mw *MainWindow) isTitleInQueue(title wiiudownloader.TitleEntry) bool {
 	for _, entry := range mw.titleQueue {
 		if entry.TitleID == title.TitleID {
@@ -297,11 +324,19 @@ func (mw *MainWindow) onAddToQueueClicked() {
 		if tid != nil {
 			if tidStr, err := tid.GetString(); err == nil {
 				nameStr, _ := name.GetString()
-				mw.addToQueue(tidStr, nameStr)
+				tidNum, _ := strconv.ParseUint(tidStr, 16, 64)
+				titleInQueue := mw.isTitleInQueue(wiiudownloader.TitleEntry{TitleID: tidNum, Name: nameStr})
+				if titleInQueue {
+					mw.removeFromQueue(tidStr)
+					mw.addToQueueButton.SetLabel("Add to queue")
+				} else {
+					mw.addToQueue(tidStr, nameStr)
+					mw.addToQueueButton.SetLabel("Remove from queue")
+				}
 				store, _ := mw.treeView.GetModel()
 				path, _ := store.(*gtk.ListStore).GetPath(iter)
 				queueModel, _ := mw.treeView.GetModel()
-				queueModel.(*gtk.ListStore).SetValue(iter, IN_QUEUE_COLUMN, true)
+				queueModel.(*gtk.ListStore).SetValue(iter, IN_QUEUE_COLUMN, !titleInQueue)
 				mw.treeView.SetCursor(path, mw.treeView.GetColumn(IN_QUEUE_COLUMN), false)
 			}
 		}

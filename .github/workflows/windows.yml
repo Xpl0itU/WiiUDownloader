@@ -19,6 +19,7 @@ jobs:
           install: zip git mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-python mingw-w64-ucrt-x86_64-gtk3 mingw-w64-ucrt-x86_64-go mingw-w64-ucrt-x86_64-ntldd-git
       - name: Build
         run: |
+          python3 -m pip install pip-system-certs
           python3 grabTitles.py
           go build cmd/WiiUDownloader/*.go
       - name: Deploy WiiUDownloader

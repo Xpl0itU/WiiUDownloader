@@ -16,8 +16,10 @@ urllib.request.install_opener(opener)
 
 checkAndDeleteFile("gtitles/gtitles.c")
 urllib.request.urlretrieve("https://napi.nbg01.v10lator.de/db", "gtitles/gtitles.c")
-os.system("gcc -c -Wall -fpic -Igtitles -o gtitles/gitles.o gtitles/gtitles.c")
-os.system("gcc -shared -o gtitles/libgtitles.so gtitles/gitles.o")
+os.system("gcc -c -Wall -fpic -Igtitles -o gtitles/gtitles.o gtitles/gtitles.c")
+os.system("ar rcs libgtitles.a gtitles/gtitles.o")
+os.system("gcc -shared -o gtitles/libgtitles.so gtitles/gtitles.o")
 
 os.system("gcc -c -Wall -fpic -Icdecrypt cdecrypt/*.c")
+os.system("ar rcs libcdecrypt.a cdecrypt/*.o")
 os.system("gcc -shared -o cdecrypt/libcdecrypt.so cdecrypt/*.o")

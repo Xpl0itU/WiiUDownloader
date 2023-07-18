@@ -2,8 +2,8 @@ package wiiudownloader
 
 /*
 #cgo CFLAGS: -I${SRCDIR}/gtitles
-#cgo LDFLAGS: -Wl,-rpath,${SRCDIR}/gtitles
-#cgo LDFLAGS: -L${SRCDIR}/gtitles
+#cgo LDFLAGS: -Wl,-rpath,${SRCDIR}
+#cgo LDFLAGS: -L${SRCDIR}
 #cgo LDFLAGS: -lgtitles
 #include <gtitles.h>
 #include <ctype.h>

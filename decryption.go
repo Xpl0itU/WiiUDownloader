@@ -2,8 +2,8 @@ package wiiudownloader
 
 /*
 #cgo CFLAGS: -I${SRCDIR}/cdecrypt
-#cgo LDFLAGS: -Wl,-rpath,${SRCDIR}/cdecrypt
-#cgo LDFLAGS: -L${SRCDIR}/cdecrypt
+#cgo LDFLAGS: -Wl,-rpath,${SRCDIR}
+#cgo LDFLAGS: -L${SRCDIR}
 #cgo LDFLAGS: -lcdecrypt
 #include <cdecrypt.h>
 #include <ctype.h>

@@ -5,3 +5,5 @@
 *.dll
 gtitles.c
 output/
+main
+*.a

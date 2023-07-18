@@ -12,15 +12,17 @@ import (
 
 const (
 	NAME_COLUMN     = 0
-	TITLE_ID_COLUMN = 1
-	REGION_COLUMN   = 2
+	KIND_COLUMN     = 1
+	TITLE_ID_COLUMN = 2
+	REGION_COLUMN   = 3
 )
 
 type MainWindow struct {
-	window      *gtk.Window
-	treeView    *gtk.TreeView
-	titles      []wiiudownloader.TitleEntry
-	searchEntry *gtk.Entry
+	window          *gtk.Window
+	treeView        *gtk.TreeView
+	titles          []wiiudownloader.TitleEntry
+	searchEntry     *gtk.Entry
+	categoryButtons []*gtk.ToggleButton
 }
 
 func NewMainWindow(entries []wiiudownloader.TitleEntry) *MainWindow {
@@ -53,8 +55,27 @@ func NewMainWindow(entries []wiiudownloader.TitleEntry) *MainWindow {
 	return &mainWindow
 }
 
+func (mw *MainWindow) updateTitles(titles []wiiudownloader.TitleEntry) {
+	store, err := gtk.ListStoreNew(glib.TYPE_STRING, glib.TYPE_STRING, glib.TYPE_STRING, glib.TYPE_STRING)
+	if err != nil {
+		log.Fatal("Unable to create list store:", err)
+	}
+
+	for _, entry := range titles {
+		iter := store.Append()
+		err = store.Set(iter,
+			[]int{NAME_COLUMN, KIND_COLUMN, TITLE_ID_COLUMN, REGION_COLUMN},
+			[]interface{}{entry.Name, wiiudownloader.GetFormattedKind(entry.TitleID), fmt.Sprintf("%016x", entry.TitleID), wiiudownloader.GetFormattedRegion(entry.Region)},
+		)
+		if err != nil {
+			log.Fatal("Unable to set values:", err)
+		}
+	}
+	mw.treeView.SetModel(store)
+}
+
 func (mw *MainWindow) ShowAll() {
-	store, err := gtk.ListStoreNew(glib.TYPE_STRING, glib.TYPE_STRING, glib.TYPE_STRING)
+	store, err := gtk.ListStoreNew(glib.TYPE_STRING, glib.TYPE_STRING, glib.TYPE_STRING, glib.TYPE_STRING)
 	if err != nil {
 		log.Fatal("Unable to create list store:", err)
 	}
@@ -62,24 +83,36 @@ func (mw *MainWindow) ShowAll() {
 	for _, entry := range mw.titles {
 		iter := store.Append()
 		err = store.Set(iter,
-			[]int{NAME_COLUMN, TITLE_ID_COLUMN, REGION_COLUMN},
-			[]interface{}{entry.Name, fmt.Sprintf("%016x", entry.TitleID), wiiudownloader.GetFormattedRegion(entry.Region)},
+			[]int{NAME_COLUMN, KIND_COLUMN, TITLE_ID_COLUMN, REGION_COLUMN},
+			[]interface{}{entry.Name, wiiudownloader.GetFormattedKind(entry.TitleID), fmt.Sprintf("%016x", entry.TitleID), wiiudownloader.GetFormattedRegion(entry.Region)},
 		)
 		if err != nil {
 			log.Fatal("Unable to set values:", err)
 		}
 	}
 
-	mw.treeView, err = gtk.TreeViewNewWithModel(store)
+	mw.treeView, err = gtk.TreeViewNew()
 	if err != nil {
 		log.Fatal("Unable to create tree view:", err)
 	}
+
+	mw.treeView.SetModel(store)
 
 	renderer, err := gtk.CellRendererTextNew()
 	if err != nil {
 		log.Fatal("Unable to create cell renderer:", err)
 	}
 	column, err := gtk.TreeViewColumnNewWithAttribute("Name", renderer, "text", NAME_COLUMN)
+	if err != nil {
+		log.Fatal("Unable to create tree view column:", err)
+	}
+	mw.treeView.AppendColumn(column)
+
+	renderer, err = gtk.CellRendererTextNew()
+	if err != nil {
+		log.Fatal("Unable to create cell renderer:", err)
+	}
+	column, err = gtk.TreeViewColumnNewWithAttribute("Kind", renderer, "text", KIND_COLUMN)
 	if err != nil {
 		log.Fatal("Unable to create tree view column:", err)
 	}
@@ -103,12 +136,33 @@ func (mw *MainWindow) ShowAll() {
 
 	mw.treeView.Connect("row-activated", mw.onRowActivated)
 
-	box, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
+	mainvBox, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
+	if err != nil {
+		log.Fatal("Unable to create box:", err)
+	}
+	tophBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
 	if err != nil {
 		log.Fatal("Unable to create box:", err)
 	}
 
-	box.PackStart(mw.searchEntry, false, false, 0)
+	mw.categoryButtons = make([]*gtk.ToggleButton, 0)
+	for _, cat := range []string{"Game", "Update", "DLC", "Demo", "All"} {
+		button, err := gtk.ToggleButtonNewWithLabel(cat)
+		if err != nil {
+			log.Fatal("Unable to create toggle button:", err)
+			continue
+		}
+		tophBox.PackStart(button, false, false, 0)
+		button.Connect("pressed", mw.onCategoryToggled)
+		buttonLabel, _ := button.GetLabel()
+		if buttonLabel == "Game" {
+			button.SetActive(true)
+		}
+		mw.categoryButtons = append(mw.categoryButtons, button)
+	}
+	tophBox.PackEnd(mw.searchEntry, false, false, 0)
+
+	mainvBox.PackStart(tophBox, false, false, 0)
 
 	scrollable, err := gtk.ScrolledWindowNew(nil, nil)
 	if err != nil {
@@ -117,9 +171,9 @@ func (mw *MainWindow) ShowAll() {
 	scrollable.SetPolicy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
 	scrollable.Add(mw.treeView)
 
-	box.PackStart(scrollable, true, true, 0)
+	mainvBox.PackStart(scrollable, true, true, 0)
 
-	mw.window.Add(box)
+	mw.window.Add(mainvBox)
 
 	mw.window.ShowAll()
 }
@@ -166,14 +220,23 @@ func (mw *MainWindow) filterTitles(filterText string) {
 			strings.Contains(strings.ToLower(fmt.Sprintf("%016x", entry.TitleID)), strings.ToLower(filterText)) {
 			iter := storeRef.Append()
 			err := storeRef.Set(iter,
-				[]int{NAME_COLUMN, TITLE_ID_COLUMN, REGION_COLUMN},
-				[]interface{}{entry.Name, fmt.Sprintf("%016x", entry.TitleID), wiiudownloader.GetFormattedRegion(entry.Region)},
+				[]int{NAME_COLUMN, KIND_COLUMN, TITLE_ID_COLUMN, REGION_COLUMN},
+				[]interface{}{entry.Name, wiiudownloader.GetFormattedKind(entry.TitleID), fmt.Sprintf("%016x", entry.TitleID), wiiudownloader.GetFormattedRegion(entry.Region)},
 			)
 			if err != nil {
 				log.Fatal("Unable to set values:", err)
 			}
 		}
 	}
+}
+
+func (mw *MainWindow) onCategoryToggled(button *gtk.ToggleButton) {
+	category, _ := button.GetLabel()
+	mw.updateTitles(wiiudownloader.GetTitleEntries(wiiudownloader.GetCategoryFromFormattedCategory(category)))
+	for _, catButton := range mw.categoryButtons {
+		catButton.SetActive(false)
+	}
+	button.Activate()
 }
 
 func Main() {

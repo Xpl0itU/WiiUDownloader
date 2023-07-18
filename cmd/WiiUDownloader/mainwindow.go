@@ -8,6 +8,7 @@ import (
 	wiiudownloader "github.com/Xpl0itU/WiiUDownloader"
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
+	"github.com/sqweek/dialog"
 )
 
 const (
@@ -187,15 +188,20 @@ func (mw *MainWindow) onRowActivated() {
 	model, iter, _ := selection.GetSelected()
 	if iter != nil {
 		tid, _ := model.ToTreeModel().GetValue(iter, TITLE_ID_COLUMN)
+		name, _ := model.ToTreeModel().GetValue(iter, NAME_COLUMN)
 		if tid != nil {
 			if tidStr, err := tid.GetString(); err == nil {
-				fmt.Println("Cell Value:", tidStr)
+				nameStr, _ := name.GetString()
+				selectedPath, err := dialog.Directory().Title("Select a path to save the games to").Browse()
+				if err != nil {
+					return
+				}
 				progressWindow, err := wiiudownloader.CreateProgressWindow(mw.window)
 				if err != nil {
 					return
 				}
 				progressWindow.Window.ShowAll()
-				go wiiudownloader.DownloadTitle(tidStr, "output", true, &progressWindow)
+				go wiiudownloader.DownloadTitle(tidStr, fmt.Sprintf("%s/%s [%s]", selectedPath, nameStr, tidStr), true, &progressWindow)
 			}
 		}
 	}

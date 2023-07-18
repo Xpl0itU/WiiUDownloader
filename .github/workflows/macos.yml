@@ -1,0 +1,36 @@
+name: macOS
+on: push
+
+jobs:
+  build:
+    runs-on: macos-11
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v3
+        with:
+          submodules: 'recursive'
+      - name: Install Dependencies
+        run: |
+          brew install create-dmg dylibbundler gtk+3
+      - name: Build
+        run: |
+          python3 grabTitles.py
+          go build cmd/WiiUDownloader/*.go
+      - name: Package
+        run: |
+          python3 data/create_bundle.py
+          create-dmg \
+            --volname "WiiUDownloader" \
+            --window-pos 200 120 \
+            --window-size 800 400 \
+            --icon-size 100 \
+            --icon "WiiUDownloader.app" 200 190 \
+            --hide-extension "WiiUDownloader.app" \
+            --app-drop-link 600 185 \
+            "WiiUDownloader-macOS-Universal.dmg" \
+            "out/"
+      - name: Upload macOS Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: WiiUDownloader-macOS-Universal
+          path: WiiUDownloader-macOS-Universal.dmg

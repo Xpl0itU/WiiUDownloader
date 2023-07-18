@@ -1,0 +1,40 @@
+name: Linux
+on: push
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v3
+        with:
+          submodules: 'recursive'
+      - name: Docker Layer Caching
+        uses: jpribyl/action-docker-layer-caching@v0.1.1
+        continue-on-error: true
+        with:
+          key: wiiudownloader-docker-cache-{hash}
+          restore-keys: |
+            wiiudownloader-docker-cache-
+      - name: Build Docker container
+        run: |
+          docker build . --file Dockerfile.linux --tag builder
+      - name: Build artifacts
+        run: |
+          docker run --rm -v ${PWD}:/project builder python3 grabTitles.py
+          docker run --rm -v ${PWD}:/project builder go build cmd/WiiUDownloader/*.go
+      - name: Deploy WiiUDownloader
+        run: |
+          docker run --privileged --rm -e DEPLOY_GTK_VERSION=3 -e OUTPUT="WiiUDownloader-Linux-x86_64.AppImage" -e UPDATE_INFORMATION="gh-releases-zsync|Xpl0itU|WiiUDownloader|latest|WiiUDownloader-*.AppImage.zsync" -v ${PWD}:/project builder linuxdeploy.AppImage --plugin gtk --plugin checkrt --output=appimage --create-desktop-file --executable=main --appdir dist --icon-file data/WiiUDownloader.png
+      - name: Upload Linux Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: WiiUDownloader-Linux
+          path: WiiUDownloader-*.AppImage
+          if-no-files-found: warn
+      - name: Upload AppImage zsync
+        uses: actions/upload-artifact@v3
+        with:
+          name: WiiUDownloader-Linux-zsync
+          path: WiiUDownloader-*.AppImage.zsync
+          if-no-files-found: warn

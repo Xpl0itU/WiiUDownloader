@@ -21,5 +21,5 @@ os.system("ar rcs libgtitles.a gtitles/gtitles.o")
 os.system("gcc -shared -o gtitles/libgtitles.so gtitles/gtitles.o")
 
 os.system("gcc -c -Wall -fpic -Icdecrypt cdecrypt/*.c")
-os.system("ar rcs libcdecrypt.a cdecrypt/*.o")
-os.system("gcc -shared -o cdecrypt/libcdecrypt.so cdecrypt/*.o")
+os.system("ar rcs libcdecrypt.a *.o")
+os.system("gcc -shared -o cdecrypt/libcdecrypt.so *.o")

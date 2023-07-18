@@ -14,10 +14,11 @@ import (
 )
 
 const (
-	NAME_COLUMN     = 0
-	KIND_COLUMN     = 1
-	TITLE_ID_COLUMN = 2
-	REGION_COLUMN   = 3
+	IN_QUEUE_COLUMN = 0
+	NAME_COLUMN     = 1
+	KIND_COLUMN     = 2
+	TITLE_ID_COLUMN = 3
+	REGION_COLUMN   = 4
 )
 
 type MainWindow struct {
@@ -61,7 +62,7 @@ func NewMainWindow(entries []wiiudownloader.TitleEntry) *MainWindow {
 }
 
 func (mw *MainWindow) updateTitles(titles []wiiudownloader.TitleEntry) {
-	store, err := gtk.ListStoreNew(glib.TYPE_STRING, glib.TYPE_STRING, glib.TYPE_STRING, glib.TYPE_STRING)
+	store, err := gtk.ListStoreNew(glib.TYPE_BOOLEAN, glib.TYPE_STRING, glib.TYPE_STRING, glib.TYPE_STRING, glib.TYPE_STRING)
 	if err != nil {
 		log.Fatal("Unable to create list store:", err)
 	}
@@ -69,8 +70,8 @@ func (mw *MainWindow) updateTitles(titles []wiiudownloader.TitleEntry) {
 	for _, entry := range titles {
 		iter := store.Append()
 		err = store.Set(iter,
-			[]int{NAME_COLUMN, KIND_COLUMN, TITLE_ID_COLUMN, REGION_COLUMN},
-			[]interface{}{entry.Name, wiiudownloader.GetFormattedKind(entry.TitleID), fmt.Sprintf("%016x", entry.TitleID), wiiudownloader.GetFormattedRegion(entry.Region)},
+			[]int{IN_QUEUE_COLUMN, NAME_COLUMN, KIND_COLUMN, TITLE_ID_COLUMN, REGION_COLUMN},
+			[]interface{}{mw.isTitleInQueue(entry), entry.Name, wiiudownloader.GetFormattedKind(entry.TitleID), fmt.Sprintf("%016x", entry.TitleID), wiiudownloader.GetFormattedRegion(entry.Region)},
 		)
 		if err != nil {
 			log.Fatal("Unable to set values:", err)
@@ -80,7 +81,7 @@ func (mw *MainWindow) updateTitles(titles []wiiudownloader.TitleEntry) {
 }
 
 func (mw *MainWindow) ShowAll() {
-	store, err := gtk.ListStoreNew(glib.TYPE_STRING, glib.TYPE_STRING, glib.TYPE_STRING, glib.TYPE_STRING)
+	store, err := gtk.ListStoreNew(glib.TYPE_BOOLEAN, glib.TYPE_STRING, glib.TYPE_STRING, glib.TYPE_STRING, glib.TYPE_STRING)
 	if err != nil {
 		log.Fatal("Unable to create list store:", err)
 	}
@@ -88,8 +89,8 @@ func (mw *MainWindow) ShowAll() {
 	for _, entry := range mw.titles {
 		iter := store.Append()
 		err = store.Set(iter,
-			[]int{NAME_COLUMN, KIND_COLUMN, TITLE_ID_COLUMN, REGION_COLUMN},
-			[]interface{}{entry.Name, wiiudownloader.GetFormattedKind(entry.TitleID), fmt.Sprintf("%016x", entry.TitleID), wiiudownloader.GetFormattedRegion(entry.Region)},
+			[]int{IN_QUEUE_COLUMN, NAME_COLUMN, KIND_COLUMN, TITLE_ID_COLUMN, REGION_COLUMN},
+			[]interface{}{mw.isTitleInQueue(entry), entry.Name, wiiudownloader.GetFormattedKind(entry.TitleID), fmt.Sprintf("%016x", entry.TitleID), wiiudownloader.GetFormattedRegion(entry.Region)},
 		)
 		if err != nil {
 			log.Fatal("Unable to set values:", err)
@@ -103,11 +104,21 @@ func (mw *MainWindow) ShowAll() {
 
 	mw.treeView.SetModel(store)
 
+	toggleRenderer, err := gtk.CellRendererToggleNew()
+	if err != nil {
+		log.Fatal("Unable to create cell renderer toggle:", err)
+	}
+	column, err := gtk.TreeViewColumnNewWithAttribute("Queue", toggleRenderer, "active", IN_QUEUE_COLUMN)
+	if err != nil {
+		log.Fatal("Unable to create tree view column:", err)
+	}
+	mw.treeView.AppendColumn(column)
+
 	renderer, err := gtk.CellRendererTextNew()
 	if err != nil {
 		log.Fatal("Unable to create cell renderer:", err)
 	}
-	column, err := gtk.TreeViewColumnNewWithAttribute("Name", renderer, "text", NAME_COLUMN)
+	column, err = gtk.TreeViewColumnNewWithAttribute("Name", renderer, "text", NAME_COLUMN)
 	if err != nil {
 		log.Fatal("Unable to create tree view column:", err)
 	}
@@ -248,6 +259,15 @@ func (mw *MainWindow) onCategoryToggled(button *gtk.ToggleButton) {
 	button.Activate()
 }
 
+func (mw *MainWindow) isTitleInQueue(title wiiudownloader.TitleEntry) bool {
+	for _, entry := range mw.titleQueue {
+		if entry.TitleID == title.TitleID {
+			return true
+		}
+	}
+	return false
+}
+
 func (mw *MainWindow) addToQueue(tid string, name string) {
 	titleID, err := strconv.ParseUint(tid, 16, 64)
 	if err != nil {
@@ -278,6 +298,11 @@ func (mw *MainWindow) onAddToQueueClicked() {
 			if tidStr, err := tid.GetString(); err == nil {
 				nameStr, _ := name.GetString()
 				mw.addToQueue(tidStr, nameStr)
+				store, _ := mw.treeView.GetModel()
+				path, _ := store.(*gtk.ListStore).GetPath(iter)
+				queueModel, _ := mw.treeView.GetModel()
+				queueModel.(*gtk.ListStore).SetValue(iter, IN_QUEUE_COLUMN, true)
+				mw.treeView.SetCursor(path, mw.treeView.GetColumn(IN_QUEUE_COLUMN), false)
 			}
 		}
 	}

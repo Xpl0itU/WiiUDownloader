@@ -30,6 +30,7 @@ type MainWindow struct {
 	titleQueue       []wiiudownloader.TitleEntry
 	progressWindow   wiiudownloader.ProgressWindow
 	addToQueueButton *gtk.Button
+	decryptContents  bool
 }
 
 func NewMainWindow(entries []wiiudownloader.TitleEntry) *MainWindow {
@@ -205,6 +206,11 @@ func (mw *MainWindow) ShowAll() {
 		log.Fatal("Unable to create button:", err)
 	}
 
+	decryptContentsCheckbox, err := gtk.CheckButtonNewWithLabel("Decrypt contents")
+	if err != nil {
+		log.Fatal("Unable to create button:", err)
+	}
+
 	mw.addToQueueButton.Connect("clicked", mw.onAddToQueueClicked)
 	downloadQueueButton.Connect("clicked", func() {
 		mw.progressWindow, err = wiiudownloader.CreateProgressWindow(mw.window)
@@ -214,8 +220,10 @@ func (mw *MainWindow) ShowAll() {
 		mw.progressWindow.Window.ShowAll()
 		go mw.onDownloadQueueClicked()
 	})
+	decryptContentsCheckbox.Connect("clicked", mw.onDecryptContentsClicked)
 	bottomhBox.PackStart(mw.addToQueueButton, false, false, 0)
 	bottomhBox.PackStart(downloadQueueButton, false, false, 0)
+	bottomhBox.PackStart(decryptContentsCheckbox, false, false, 0)
 
 	mainvBox.PackEnd(bottomhBox, false, false, 0)
 
@@ -283,6 +291,14 @@ func (mw *MainWindow) onSelectionChanged() {
 				}
 			}
 		}
+	}
+}
+
+func (mw *MainWindow) onDecryptContentsClicked() {
+	if mw.decryptContents {
+		mw.decryptContents = false
+	} else {
+		mw.decryptContents = true
 	}
 }
 
@@ -358,13 +374,14 @@ func (mw *MainWindow) onDownloadQueueClicked() {
 			defer wg.Done()
 
 			tidStr := fmt.Sprintf("%016x", title.TitleID)
-			wiiudownloader.DownloadTitle(tidStr, fmt.Sprintf("%s/%s [%s]", selectedPath, title.Name, tidStr), true, progressWindow)
+			wiiudownloader.DownloadTitle(tidStr, fmt.Sprintf("%s/%s [%s]", selectedPath, title.Name, tidStr), mw.decryptContents, progressWindow)
 			mw.removeFromQueue(tidStr)
 		}(title, selectedPath, &mw.progressWindow)
 
 		wg.Wait()
 	}
 	mw.progressWindow.Window.Close()
+	mw.onAddToQueueClicked()
 }
 
 func Main() {

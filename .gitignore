@@ -1,0 +1,6 @@
+.DS_Store
+*.d
+*.o
+*.so
+*.dll
+gtitles.c

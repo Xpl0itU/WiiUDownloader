@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"strings"
 
 	wiiudownloader "github.com/Xpl0itU/WiiUDownloader"
 	"github.com/gotk3/gotk3/glib"
@@ -16,9 +17,10 @@ const (
 )
 
 type MainWindow struct {
-	window   *gtk.Window
-	treeView *gtk.TreeView
-	titles   []wiiudownloader.TitleEntry
+	window      *gtk.Window
+	treeView    *gtk.TreeView
+	titles      []wiiudownloader.TitleEntry
+	searchEntry *gtk.Entry
 }
 
 func NewMainWindow(entries []wiiudownloader.TitleEntry) *MainWindow {
@@ -35,10 +37,20 @@ func NewMainWindow(entries []wiiudownloader.TitleEntry) *MainWindow {
 		gtk.MainQuit()
 	})
 
-	return &MainWindow{
-		window: win,
-		titles: entries,
+	searchEntry, err := gtk.EntryNew()
+	if err != nil {
+		log.Fatal("Unable to create search entry:", err)
 	}
+
+	mainWindow := MainWindow{
+		window:      win,
+		titles:      entries,
+		searchEntry: searchEntry,
+	}
+
+	searchEntry.Connect("changed", mainWindow.onSearchEntryChanged)
+
+	return &mainWindow
 }
 
 func (mw *MainWindow) ShowAll() {
@@ -91,6 +103,13 @@ func (mw *MainWindow) ShowAll() {
 
 	mw.treeView.Connect("row-activated", mw.onRowActivated)
 
+	box, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
+	if err != nil {
+		log.Fatal("Unable to create box:", err)
+	}
+
+	box.PackStart(mw.searchEntry, false, false, 0)
+
 	scrollable, err := gtk.ScrolledWindowNew(nil, nil)
 	if err != nil {
 		log.Fatal("Unable to create scrolled window:", err)
@@ -98,7 +117,9 @@ func (mw *MainWindow) ShowAll() {
 	scrollable.SetPolicy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
 	scrollable.Add(mw.treeView)
 
-	mw.window.Add(scrollable)
+	box.PackStart(scrollable, true, true, 0)
+
+	mw.window.Add(box)
 
 	mw.window.ShowAll()
 }
@@ -121,6 +142,35 @@ func (mw *MainWindow) onRowActivated() {
 				}
 				progressWindow.Window.ShowAll()
 				go wiiudownloader.DownloadTitle(tidStr, "output", true, &progressWindow)
+			}
+		}
+	}
+}
+
+func (mw *MainWindow) onSearchEntryChanged() {
+	text, _ := mw.searchEntry.GetText()
+	mw.filterTitles(text)
+}
+
+func (mw *MainWindow) filterTitles(filterText string) {
+	store, err := mw.treeView.GetModel()
+	if err != nil {
+		log.Fatal("Unable to get tree view model:", err)
+	}
+
+	storeRef := store.(*gtk.ListStore)
+	storeRef.Clear()
+
+	for _, entry := range mw.titles {
+		if strings.Contains(strings.ToLower(entry.Name), strings.ToLower(filterText)) ||
+			strings.Contains(strings.ToLower(fmt.Sprintf("%016x", entry.TitleID)), strings.ToLower(filterText)) {
+			iter := storeRef.Append()
+			err := storeRef.Set(iter,
+				[]int{NAME_COLUMN, TITLE_ID_COLUMN, REGION_COLUMN},
+				[]interface{}{entry.Name, fmt.Sprintf("%016x", entry.TitleID), wiiudownloader.GetFormattedRegion(entry.Region)},
+			)
+			if err != nil {
+				log.Fatal("Unable to set values:", err)
 			}
 		}
 	}

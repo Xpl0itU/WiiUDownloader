@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
+	"sync"
 
 	wiiudownloader "github.com/Xpl0itU/WiiUDownloader"
 	"github.com/gotk3/gotk3/glib"
@@ -24,6 +26,8 @@ type MainWindow struct {
 	titles          []wiiudownloader.TitleEntry
 	searchEntry     *gtk.Entry
 	categoryButtons []*gtk.ToggleButton
+	titleQueue      []wiiudownloader.TitleEntry
+	progressWindow  wiiudownloader.ProgressWindow
 }
 
 func NewMainWindow(entries []wiiudownloader.TitleEntry) *MainWindow {
@@ -135,8 +139,6 @@ func (mw *MainWindow) ShowAll() {
 	}
 	mw.treeView.AppendColumn(column)
 
-	mw.treeView.Connect("row-activated", mw.onRowActivated)
-
 	mainvBox, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
 	if err != nil {
 		log.Fatal("Unable to create box:", err)
@@ -174,37 +176,38 @@ func (mw *MainWindow) ShowAll() {
 
 	mainvBox.PackStart(scrollable, true, true, 0)
 
+	bottomhBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
+	if err != nil {
+		log.Fatal("Unable to create box:", err)
+	}
+
+	addToQueueButton, err := gtk.ButtonNewWithLabel("Add to queue")
+	if err != nil {
+		log.Fatal("Unable to create button:", err)
+	}
+
+	downloadQueueButton, err := gtk.ButtonNewWithLabel("Download queue")
+	if err != nil {
+		log.Fatal("Unable to create button:", err)
+	}
+
+	addToQueueButton.Connect("clicked", mw.onAddToQueueClicked)
+	downloadQueueButton.Connect("clicked", func() {
+		mw.progressWindow, err = wiiudownloader.CreateProgressWindow(mw.window)
+		if err != nil {
+			return
+		}
+		mw.progressWindow.Window.ShowAll()
+		go mw.onDownloadQueueClicked()
+	})
+	bottomhBox.PackStart(addToQueueButton, false, false, 0)
+	bottomhBox.PackStart(downloadQueueButton, false, false, 0)
+
+	mainvBox.PackEnd(bottomhBox, false, false, 0)
+
 	mw.window.Add(mainvBox)
 
 	mw.window.ShowAll()
-}
-
-func (mw *MainWindow) onRowActivated() {
-	selection, err := mw.treeView.GetSelection()
-	if err != nil {
-		log.Fatal("Unable to get selection:", err)
-	}
-
-	model, iter, _ := selection.GetSelected()
-	if iter != nil {
-		tid, _ := model.ToTreeModel().GetValue(iter, TITLE_ID_COLUMN)
-		name, _ := model.ToTreeModel().GetValue(iter, NAME_COLUMN)
-		if tid != nil {
-			if tidStr, err := tid.GetString(); err == nil {
-				nameStr, _ := name.GetString()
-				selectedPath, err := dialog.Directory().Title("Select a path to save the games to").Browse()
-				if err != nil {
-					return
-				}
-				progressWindow, err := wiiudownloader.CreateProgressWindow(mw.window)
-				if err != nil {
-					return
-				}
-				progressWindow.Window.ShowAll()
-				go wiiudownloader.DownloadTitle(tidStr, fmt.Sprintf("%s/%s [%s]", selectedPath, nameStr, tidStr), true, &progressWindow)
-			}
-		}
-	}
 }
 
 func (mw *MainWindow) onSearchEntryChanged() {
@@ -243,6 +246,65 @@ func (mw *MainWindow) onCategoryToggled(button *gtk.ToggleButton) {
 		catButton.SetActive(false)
 	}
 	button.Activate()
+}
+
+func (mw *MainWindow) addToQueue(tid string, name string) {
+	titleID, err := strconv.ParseUint(tid, 16, 64)
+	if err != nil {
+		log.Fatal("Unable to parse title ID:", err)
+	}
+	mw.titleQueue = append(mw.titleQueue, wiiudownloader.TitleEntry{TitleID: titleID, Name: name})
+}
+
+func (mw *MainWindow) removeFromQueue(tid string) {
+	for i, entry := range mw.titleQueue {
+		if fmt.Sprintf("%016x", entry.TitleID) == tid {
+			mw.titleQueue = append(mw.titleQueue[:i], mw.titleQueue[i+1:]...)
+			return
+		}
+	}
+}
+
+func (mw *MainWindow) onAddToQueueClicked() {
+	selection, err := mw.treeView.GetSelection()
+	if err != nil {
+		log.Fatal("Unable to get selection:", err)
+	}
+	model, iter, _ := selection.GetSelected()
+	if iter != nil {
+		tid, _ := model.ToTreeModel().GetValue(iter, TITLE_ID_COLUMN)
+		name, _ := model.ToTreeModel().GetValue(iter, NAME_COLUMN)
+		if tid != nil {
+			if tidStr, err := tid.GetString(); err == nil {
+				nameStr, _ := name.GetString()
+				mw.addToQueue(tidStr, nameStr)
+			}
+		}
+	}
+}
+
+func (mw *MainWindow) onDownloadQueueClicked() {
+	var wg sync.WaitGroup
+
+	selectedPath, err := dialog.Directory().Title("Select a path to save the games to").Browse()
+	if err != nil {
+		return
+	}
+
+	for _, title := range mw.titleQueue {
+		wg.Add(1)
+
+		go func(title wiiudownloader.TitleEntry, selectedPath string, progressWindow *wiiudownloader.ProgressWindow) {
+			defer wg.Done()
+
+			tidStr := fmt.Sprintf("%016x", title.TitleID)
+			wiiudownloader.DownloadTitle(tidStr, fmt.Sprintf("%s/%s [%s]", selectedPath, title.Name, tidStr), true, progressWindow)
+			mw.removeFromQueue(tidStr)
+		}(title, selectedPath, &mw.progressWindow)
+
+		wg.Wait()
+	}
+	mw.progressWindow.Window.Close()
 }
 
 func Main() {

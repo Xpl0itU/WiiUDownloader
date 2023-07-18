@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -75,7 +76,7 @@ func downloadFile(progressWindow *ProgressWindow, client *grab.Client, url strin
 		return err
 	}
 
-	progressWindow.label.SetText(fmt.Sprintf("File: %s", resp.Filename))
+	progressWindow.label.SetText(path.Base(resp.Filename))
 
 	go func() {
 		for !resp.IsComplete() {
@@ -216,12 +217,9 @@ func DownloadTitle(titleID string, outputDirectory string, doDecryption bool, pr
 
 	if doDecryption {
 		if err := decryptContents(outputDir, &progress); err != nil {
-			progressWindow.Window.Close()
 			return err
 		}
 	}
-
-	progressWindow.Window.Close()
 
 	return nil
 }

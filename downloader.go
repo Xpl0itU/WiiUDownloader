@@ -66,36 +66,43 @@ func CreateProgressWindow(parent *gtk.Window) (ProgressWindow, error) {
 }
 
 func downloadFile(progressWindow *ProgressWindow, client *grab.Client, url string, outputPath string) error {
+	done := false
 	req, err := grab.NewRequest(outputPath, url)
 	if err != nil {
 		return err
 	}
 
 	resp := client.Do(req)
-	if err := resp.Err(); err != nil {
-		return err
-	}
 
 	progressWindow.label.SetText(path.Base(resp.Filename))
 
-	go func() {
+	go func(err *error) {
 		for !resp.IsComplete() {
 			glib.IdleAdd(func() {
-				progress := float64(resp.BytesComplete()) / float64(resp.Size())
-				progressWindow.bar.SetFraction(progress)
-				progressWindow.percentLabel.SetText(fmt.Sprintf("%.0f%%", progress*100))
-				for gtk.EventsPending() {
-					gtk.MainIteration()
-				}
+				progressWindow.bar.SetFraction(resp.Progress())
+				progressWindow.percentLabel.SetText(fmt.Sprintf("%.0f%%", 100*resp.Progress()))
 			})
 		}
+
+		*err = resp.Err()
 
 		progressWindow.bar.SetFraction(1)
 
 		glib.IdleAdd(func() {
 			progressWindow.Window.SetTitle("Download Complete")
 		})
-	}()
+		done = true
+	}(&err)
+
+	for {
+		if done {
+			break
+		}
+	}
+
+	if err != nil {
+		return err
+	}
 
 	return nil
 }

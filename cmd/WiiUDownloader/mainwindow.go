@@ -42,7 +42,7 @@ func NewMainWindow(entries []wiiudownloader.TitleEntry) *MainWindow {
 	}
 
 	win.SetTitle("WiiUDownloaderGo")
-	win.SetDefaultSize(400, 300)
+	win.SetDefaultSize(716, 400)
 	win.Connect("destroy", func() {
 		gtk.MainQuit()
 	})
@@ -359,7 +359,32 @@ func (mw *MainWindow) onAddToQueueClicked() {
 	}
 }
 
+func (mw *MainWindow) updateTitlesInQueue() {
+	store, err := mw.treeView.GetModel()
+	if err != nil {
+		log.Fatal("Unable to get tree view model:", err)
+	}
+
+	storeRef := store.(*gtk.ListStore)
+
+	iter, _ := storeRef.GetIterFirst()
+	for iter != nil {
+		tid, _ := storeRef.GetValue(iter, TITLE_ID_COLUMN)
+		if tid != nil {
+			if tidStr, err := tid.GetString(); err == nil {
+				tidNum, _ := strconv.ParseUint(tidStr, 16, 64)
+				isInQueue := mw.isTitleInQueue(wiiudownloader.TitleEntry{TitleID: tidNum})
+				storeRef.SetValue(iter, IN_QUEUE_COLUMN, isInQueue)
+			}
+		}
+		if !storeRef.IterNext(iter) {
+			break
+		}
+	}
+}
+
 func (mw *MainWindow) onDownloadQueueClicked() {
+	queueCancelled := false
 	var wg sync.WaitGroup
 
 	selectedPath, err := dialog.Directory().Title("Select a path to save the games to").Browse()
@@ -374,14 +399,21 @@ func (mw *MainWindow) onDownloadQueueClicked() {
 			defer wg.Done()
 
 			tidStr := fmt.Sprintf("%016x", title.TitleID)
-			wiiudownloader.DownloadTitle(tidStr, fmt.Sprintf("%s/%s [%s]", selectedPath, title.Name, tidStr), mw.decryptContents, progressWindow)
+			if err := wiiudownloader.DownloadTitle(tidStr, fmt.Sprintf("%s/%s [%s]", selectedPath, title.Name, tidStr), mw.decryptContents, progressWindow); err != nil {
+				queueCancelled = true
+			}
 			mw.removeFromQueue(tidStr)
 		}(title, selectedPath, &mw.progressWindow)
 
+		if queueCancelled {
+			break
+		}
+
 		wg.Wait()
 	}
+	mw.titleQueue = []wiiudownloader.TitleEntry{} // Clear the queue
 	mw.progressWindow.Window.Close()
-	mw.onAddToQueueClicked()
+	mw.updateTitlesInQueue()
 }
 
 func Main() {

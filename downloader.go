@@ -21,6 +21,8 @@ type ProgressWindow struct {
 	label        *gtk.Label
 	bar          *gtk.ProgressBar
 	percentLabel *gtk.Label
+	cancelButton *gtk.Button
+	cancelled    bool
 }
 
 func CreateProgressWindow(parent *gtk.Window) (ProgressWindow, error) {
@@ -56,16 +58,33 @@ func CreateProgressWindow(parent *gtk.Window) (ProgressWindow, error) {
 	}
 	box.PackStart(percentLabel, false, false, 0)
 
+	cancelButton, err := gtk.ButtonNewWithLabel("Cancel")
+	if err != nil {
+		return ProgressWindow{}, err
+	}
+
+	bottomhBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 5)
+	if err != nil {
+		return ProgressWindow{}, err
+	}
+	bottomhBox.PackEnd(cancelButton, false, false, 0)
+	box.PackEnd(bottomhBox, false, false, 0)
+
 	return ProgressWindow{
 		Window:       win,
 		box:          box,
 		label:        filenameLabel,
 		bar:          progressBar,
 		percentLabel: percentLabel,
+		cancelButton: cancelButton,
+		cancelled:    false,
 	}, nil
 }
 
 func downloadFile(progressWindow *ProgressWindow, client *grab.Client, url string, outputPath string) error {
+	if progressWindow.cancelled {
+		return fmt.Errorf("cancelled")
+	}
 	done := false
 	req, err := grab.NewRequest(outputPath, url)
 	if err != nil {
@@ -82,13 +101,14 @@ func downloadFile(progressWindow *ProgressWindow, client *grab.Client, url strin
 				progressWindow.bar.SetFraction(resp.Progress())
 				progressWindow.percentLabel.SetText(fmt.Sprintf("%.0f%%", 100*resp.Progress()))
 			})
+
+			if progressWindow.cancelled {
+				resp.Cancel()
+				break
+			}
 		}
 
 		*err = resp.Err()
-
-		glib.IdleAdd(func() {
-			progressWindow.Window.SetTitle("Download Complete")
-		})
 		done = true
 	}(&err)
 
@@ -106,6 +126,9 @@ func downloadFile(progressWindow *ProgressWindow, client *grab.Client, url strin
 }
 
 func DownloadTitle(titleID string, outputDirectory string, doDecryption bool, progressWindow *ProgressWindow) error {
+	progressWindow.cancelButton.Connect("clicked", func() {
+		progressWindow.cancelled = true
+	})
 	outputDir := strings.TrimRight(outputDirectory, "/\\")
 	baseURL := fmt.Sprintf("http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/%s", titleID)
 	titleKeyBytes, err := hex.DecodeString(titleID)
@@ -214,9 +237,12 @@ func DownloadTitle(titleID string, outputDirectory string, doDecryption bool, pr
 				return err
 			}
 		}
+		if progressWindow.cancelled {
+			break
+		}
 	}
 
-	if doDecryption {
+	if doDecryption && !progressWindow.cancelled {
 		if err := decryptContents(outputDir, progressWindow); err != nil {
 			return err
 		}

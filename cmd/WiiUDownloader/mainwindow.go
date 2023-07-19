@@ -10,7 +10,6 @@ import (
 	wiiudownloader "github.com/Xpl0itU/WiiUDownloader"
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
-	"github.com/sqweek/dialog"
 )
 
 const (
@@ -255,8 +254,19 @@ func (mw *MainWindow) ShowAll() {
 		if err != nil {
 			return
 		}
+		dialog, err := gtk.FileChooserNativeDialogNew("Select a path to save the games to", mw.window, gtk.FILE_CHOOSER_ACTION_SELECT_FOLDER, "Select", "Cancel")
+		if err != nil {
+			log.Fatal("Unable to create dialog:", err)
+		}
+		res := dialog.Run()
+		if res != int(gtk.RESPONSE_ACCEPT) {
+			mw.progressWindow.Window.Close()
+			return
+		}
+
+		selectedPath := dialog.FileChooser.GetFilename()
 		mw.progressWindow.Window.ShowAll()
-		go mw.onDownloadQueueClicked()
+		go mw.onDownloadQueueClicked(selectedPath)
 	})
 	decryptContentsCheckbox.Connect("clicked", mw.onDecryptContentsClicked)
 	bottomhBox.PackStart(mw.addToQueueButton, false, false, 0)
@@ -331,6 +341,9 @@ func (mw *MainWindow) filterTitles(filterText string) {
 	for _, entry := range mw.titles {
 		if strings.Contains(strings.ToLower(entry.Name), strings.ToLower(filterText)) ||
 			strings.Contains(strings.ToLower(fmt.Sprintf("%016x", entry.TitleID)), strings.ToLower(filterText)) {
+			if (mw.currentRegion & entry.Region) == 0 {
+				continue
+			}
 			iter := storeRef.Append()
 			err := storeRef.Set(iter,
 				[]int{NAME_COLUMN, KIND_COLUMN, TITLE_ID_COLUMN, REGION_COLUMN},
@@ -353,11 +366,17 @@ func (mw *MainWindow) onCategoryToggled(button *gtk.ToggleButton) {
 }
 
 func (mw *MainWindow) onDecryptContentsMenuItemClicked() {
-	selectedPath, err := dialog.Directory().Title("Select the path to decrypt").Browse()
+	dialog, err := gtk.FileChooserNativeDialogNew("Select the path to decrypt", mw.window, gtk.FILE_CHOOSER_ACTION_SELECT_FOLDER, "Select", "Cancel")
 	if err != nil {
+		log.Fatal("Unable to create dialog:", err)
+	}
+	res := dialog.Run()
+	if res != int(gtk.RESPONSE_ACCEPT) {
 		mw.progressWindow.Window.Close()
 		return
 	}
+
+	selectedPath := dialog.FileChooser.GetFilename()
 
 	wiiudownloader.DecryptContents(selectedPath, &mw.progressWindow, false)
 
@@ -511,17 +530,12 @@ func (mw *MainWindow) updateTitlesInQueue() {
 	}
 }
 
-func (mw *MainWindow) onDownloadQueueClicked() {
+func (mw *MainWindow) onDownloadQueueClicked(selectedPath string) {
 	if len(mw.titleQueue) == 0 {
 		return
 	}
 	queueCancelled := false
 	var wg sync.WaitGroup
-
-	selectedPath, err := dialog.Directory().Title("Select a path to save the games to").Browse()
-	if err != nil {
-		return
-	}
 
 	for _, title := range mw.titleQueue {
 		wg.Add(1)

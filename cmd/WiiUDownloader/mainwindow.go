@@ -266,7 +266,15 @@ func (mw *MainWindow) ShowAll() {
 
 		selectedPath := dialog.FileChooser.GetFilename()
 		mw.progressWindow.Window.ShowAll()
-		go mw.onDownloadQueueClicked(selectedPath)
+
+		go func() {
+			err := mw.onDownloadQueueClicked(selectedPath)
+			if err != nil {
+				glib.IdleAdd(func() {
+					mw.showError(err)
+				})
+			}
+		}()
 	})
 	decryptContentsCheckbox.Connect("clicked", mw.onDecryptContentsClicked)
 	bottomhBox.PackStart(mw.addToQueueButton, false, false, 0)
@@ -535,12 +543,21 @@ func (mw *MainWindow) updateTitlesInQueue() {
 	}
 }
 
-func (mw *MainWindow) onDownloadQueueClicked(selectedPath string) {
+func (mw *MainWindow) showError(err error) {
+	mw.progressWindow.Window.Close()
+	errorDialog := gtk.MessageDialogNew(mw.window, gtk.DIALOG_MODAL, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, err.Error())
+	errorDialog.Run()
+	errorDialog.Destroy()
+}
+
+func (mw *MainWindow) onDownloadQueueClicked(selectedPath string) error {
 	if len(mw.titleQueue) == 0 {
-		return
+		return nil
 	}
 	queueCancelled := false
+	errorHappened := false
 	var wg sync.WaitGroup
+	ch := make(chan error, 1)
 
 	for _, title := range mw.titleQueue {
 		wg.Add(1)
@@ -552,11 +569,13 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string) {
 			titlePath := fmt.Sprintf("%s/%s [%s] [%s]", selectedPath, title.Name, wiiudownloader.GetFormattedKind(title.TitleID), tidStr)
 			if err := wiiudownloader.DownloadTitle(tidStr, titlePath, mw.decryptContents, progressWindow, mw.getDeleteEncryptedContents()); err != nil {
 				queueCancelled = true
+				errorHappened = true
+				ch <- err
 			}
 			mw.removeFromQueue(tidStr)
 		}(title, selectedPath, &mw.progressWindow)
 
-		if queueCancelled {
+		if queueCancelled || errorHappened {
 			break
 		}
 
@@ -566,6 +585,10 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string) {
 	mw.progressWindow.Window.Close()
 	mw.updateTitlesInQueue()
 	mw.onSelectionChanged()
+	if errorHappened {
+		return <-ch
+	}
+	return nil
 }
 
 func Main() {

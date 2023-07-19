@@ -86,8 +86,6 @@ func downloadFile(progressWindow *ProgressWindow, client *grab.Client, url strin
 
 		*err = resp.Err()
 
-		progressWindow.bar.SetFraction(1)
-
 		glib.IdleAdd(func() {
 			progressWindow.Window.SetTitle("Download Complete")
 		})

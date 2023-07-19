@@ -106,8 +106,6 @@ func downloadFile(progressWindow *ProgressWindow, client *grab.Client, url strin
 }
 
 func DownloadTitle(titleID string, outputDirectory string, doDecryption bool, progressWindow *ProgressWindow) error {
-	progress := 0
-	currentFile := ""
 	outputDir := strings.TrimRight(outputDirectory, "/\\")
 	baseURL := fmt.Sprintf("http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/%s", titleID)
 	titleKeyBytes, err := hex.DecodeString(titleID)
@@ -196,16 +194,14 @@ func DownloadTitle(titleID string, outputDirectory string, doDecryption bool, pr
 		if err := binary.Read(bytes.NewReader(tmdData[offset:offset+4]), binary.BigEndian, &id); err != nil {
 			return err
 		}
-		currentFile = fmt.Sprintf("%08X.app", id)
-		appPath := filepath.Join(outputDir, currentFile)
+		appPath := filepath.Join(outputDir, fmt.Sprintf("%08X.app", id))
 		downloadURL = fmt.Sprintf("%s/%08X", baseURL, id)
 		if err := downloadFile(progressWindow, client, downloadURL, appPath); err != nil {
 			return err
 		}
 
 		if tmdData[offset+7]&0x2 == 2 {
-			currentFile = fmt.Sprintf("%08X.h3", id)
-			h3Path := filepath.Join(outputDir, currentFile)
+			h3Path := filepath.Join(outputDir, fmt.Sprintf("%08X.h3", id))
 			downloadURL = fmt.Sprintf("%s/%08X.h3", baseURL, id)
 			if err := downloadFile(progressWindow, client, downloadURL, h3Path); err != nil {
 				return err
@@ -221,7 +217,7 @@ func DownloadTitle(titleID string, outputDirectory string, doDecryption bool, pr
 	}
 
 	if doDecryption {
-		if err := decryptContents(outputDir, &progress); err != nil {
+		if err := decryptContents(outputDir, progressWindow); err != nil {
 			return err
 		}
 	}

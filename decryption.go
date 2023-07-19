@@ -22,11 +22,13 @@ var (
 	decryptionError = false
 )
 
-func decryptContents(path string, progress *int) error {
+func decryptContents(path string, progress *ProgressWindow) error {
 	wg.Add(1)
-	go runDecryption(path, progress)
+	progressInt := 0
+	go runDecryption(path, &progressInt)
 	for !decryptionDone {
-		fmt.Println(*progress)
+		progress.bar.SetFraction(float64(progressInt) / 100)
+		progress.percentLabel.SetText(fmt.Sprintf("Decrypting... (%d%%)", progressInt))
 		time.Sleep(500 * time.Millisecond)
 	}
 

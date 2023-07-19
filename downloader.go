@@ -2,6 +2,8 @@ package wiiudownloader
 
 import (
 	"bytes"
+	"crypto/aes"
+	"crypto/cipher"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
@@ -93,11 +95,12 @@ func downloadFile(progressWindow *ProgressWindow, client *grab.Client, url strin
 
 	resp := client.Do(req)
 
-	progressWindow.label.SetText(path.Base(outputPath))
+	filePath := path.Base(outputPath)
 
 	go func(err *error) {
 		for !resp.IsComplete() {
 			glib.IdleAdd(func() {
+				progressWindow.label.SetText(filePath)
 				progressWindow.bar.SetFraction(resp.Progress())
 				progressWindow.percentLabel.SetText(fmt.Sprintf("%.0f%%", 100*resp.Progress()))
 			})
@@ -113,6 +116,9 @@ func downloadFile(progressWindow *ProgressWindow, client *grab.Client, url strin
 	}(&err)
 
 	for {
+		for gtk.EventsPending() {
+			gtk.MainIteration()
+		}
 		if done {
 			break
 		}
@@ -131,7 +137,7 @@ func DownloadTitle(titleID string, outputDirectory string, doDecryption bool, pr
 	})
 	outputDir := strings.TrimRight(outputDirectory, "/\\")
 	baseURL := fmt.Sprintf("http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/%s", titleID)
-	titleKeyBytes, err := hex.DecodeString(titleID)
+	titleIDBytes, err := hex.DecodeString(titleID)
 	if err != nil {
 		return err
 	}
@@ -210,29 +216,50 @@ func DownloadTitle(titleID string, outputDirectory string, doDecryption bool, pr
 	defer certFile.Close()
 	fmt.Printf("[Info] Certificate saved to ./%v \n", certPath)
 
+	c, err := aes.NewCipher(commonKey)
+	if err != nil {
+		return fmt.Errorf("failed to create AES cipher: %w", err)
+	}
+
+	decryptedTitleKey := make([]byte, len(encryptedTitleKey))
+	cbc := cipher.NewCBCDecrypter(c, append(titleIDBytes, make([]byte, 8)...))
+	cbc.CryptBlocks(decryptedTitleKey, encryptedTitleKey)
+
+	cipherHashTree, err := aes.NewCipher(decryptedTitleKey)
+	if err != nil {
+		return fmt.Errorf("failed to create AES cipher: %w", err)
+	}
+
+	var id uint32
+	tmdDataReader := bytes.NewReader(tmdData)
+
 	for i := 0; i < int(contentCount); i++ {
 		offset := 2820 + (48 * i)
-		var id uint32
-		if err := binary.Read(bytes.NewReader(tmdData[offset:offset+4]), binary.BigEndian, &id); err != nil {
+		tmdDataReader.Seek(int64(offset), 0)
+		if err := binary.Read(tmdDataReader, binary.BigEndian, &id); err != nil {
 			return err
 		}
-		appPath := filepath.Join(outputDir, fmt.Sprintf("%08X.app", id))
+		filePath := filepath.Join(outputDir, fmt.Sprintf("%08X.app", id))
 		downloadURL = fmt.Sprintf("%s/%08X", baseURL, id)
-		if err := downloadFile(progressWindow, client, downloadURL, appPath); err != nil {
+		if err := downloadFile(progressWindow, client, downloadURL, filePath); err != nil {
 			return err
 		}
 
 		if tmdData[offset+7]&0x2 == 2 {
-			h3Path := filepath.Join(outputDir, fmt.Sprintf("%08X.h3", id))
+			filePath = filepath.Join(outputDir, fmt.Sprintf("%08X.h3", id))
 			downloadURL = fmt.Sprintf("%s/%08X.h3", baseURL, id)
-			if err := downloadFile(progressWindow, client, downloadURL, h3Path); err != nil {
+			if err := downloadFile(progressWindow, client, downloadURL, filePath); err != nil {
 				return err
 			}
 			var content contentInfo
 			content.Hash = tmdData[offset+16 : offset+0x14]
 			content.ID = fmt.Sprintf("%08X", id)
-			binary.Read(bytes.NewReader(tmdData[offset+8:offset+15]), binary.BigEndian, &content.Size)
-			if err := checkContentHashes(outputDirectory, encryptedTitleKey, titleKeyBytes, content); err != nil {
+			tmdDataReader.Seek(int64(offset+8), 0)
+			if err := binary.Read(tmdDataReader, binary.BigEndian, &content.Size); err != nil {
+				return err
+			}
+			if err := checkContentHashes(outputDirectory, content, &cipherHashTree); err != nil {
+				fmt.Println(err)
 				return err
 			}
 		}

@@ -355,6 +355,7 @@ func (mw *MainWindow) onCategoryToggled(button *gtk.ToggleButton) {
 func (mw *MainWindow) onDecryptContentsMenuItemClicked() {
 	selectedPath, err := dialog.Directory().Title("Select the path to decrypt").Browse()
 	if err != nil {
+		mw.progressWindow.Window.Close()
 		return
 	}
 
@@ -383,6 +384,7 @@ func (mw *MainWindow) isSelectionInQueue() bool {
 			if !isInQueue.(bool) {
 				allTitlesInQueue = false
 			}
+			inQueue.Unset()
 		}
 	})
 	return allTitlesInQueue
@@ -469,6 +471,7 @@ func (mw *MainWindow) onAddToQueueClicked() {
 				nameStr, _ := name.GetString()
 				mw.addToQueue(tidStr, nameStr)
 				mw.addToQueueButton.SetLabel("Remove from queue")
+				name.Unset()
 			} else {
 				mw.removeFromQueue(tidStr)
 				mw.addToQueueButton.SetLabel("Add to queue")
@@ -477,6 +480,8 @@ func (mw *MainWindow) onAddToQueueClicked() {
 			queueModel, _ := mw.treeView.GetModel()
 			queueModel.(*gtk.ListStore).SetValue(row, IN_QUEUE_COLUMN, addToQueue)
 			mw.treeView.SetCursor(path, mw.treeView.GetColumn(IN_QUEUE_COLUMN), false)
+			inQueue.Unset()
+			tid.Unset()
 		}
 	})
 }
@@ -497,6 +502,7 @@ func (mw *MainWindow) updateTitlesInQueue() {
 				tidNum, _ := strconv.ParseUint(tidStr, 16, 64)
 				isInQueue := mw.isTitleInQueue(wiiudownloader.TitleEntry{TitleID: tidNum})
 				storeRef.SetValue(iter, IN_QUEUE_COLUMN, isInQueue)
+				tid.Unset()
 			}
 		}
 		if !storeRef.IterNext(iter) {

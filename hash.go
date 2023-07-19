@@ -11,16 +11,8 @@ import (
 
 var commonKey = []byte{0xD7, 0xB0, 0x04, 0x02, 0x65, 0x9B, 0xA2, 0xAB, 0xD2, 0xCB, 0x0D, 0xB2, 0x7F, 0xA2, 0xB6, 0x56}
 
-func checkContentHashes(path string, encryptedTitleKey []byte, titleID []byte, content contentInfo) error {
-	c, err := aes.NewCipher(commonKey)
-	if err != nil {
-		return fmt.Errorf("failed to create AES cipher: %w", err)
-	}
-
-	decryptedTitleKey := make([]byte, len(encryptedTitleKey))
-	cbc := cipher.NewCBCDecrypter(c, append(titleID, make([]byte, 8)...))
-	cbc.CryptBlocks(decryptedTitleKey, encryptedTitleKey)
-
+func checkContentHashes(path string, content contentInfo, cipherHashTree *cipher.Block) error {
+	cHashTree := *cipherHashTree
 	h3Data, err := os.ReadFile(fmt.Sprintf("%s/%s.h3", path, content.ID))
 	if err != nil {
 		return fmt.Errorf("failed to read H3 hash tree file: %w", err)
@@ -29,6 +21,7 @@ func checkContentHashes(path string, encryptedTitleKey []byte, titleID []byte, c
 	if err != nil {
 		return fmt.Errorf("failed to open encrypted file: %w", err)
 	}
+	defer encryptedFile.Close()
 
 	h3Hash := sha1.Sum(h3Data)
 	if !reflect.DeepEqual(h3Hash[:8], content.Hash[:8]) {
@@ -36,22 +29,18 @@ func checkContentHashes(path string, encryptedTitleKey []byte, titleID []byte, c
 	}
 
 	chunkCount := int(content.Size / 0x10000)
-	decryptedContent := make([]byte, content.Size)
+	decryptedContent := make([]byte, 0x400)
 
 	h0HashNum := 0
 	h1HashNum := 0
 	h2HashNum := 0
 	h3HashNum := 0
 
+	buffer := make([]byte, 0x400)
+	iv := make([]byte, aes.BlockSize)
 	for chunkNum := 0; chunkNum < chunkCount; chunkNum++ {
-		cipherHashTree, err := aes.NewCipher(decryptedTitleKey)
-		if err != nil {
-			return fmt.Errorf("failed to create AES cipher: %w", err)
-		}
-		hashTree := cipher.NewCBCDecrypter(cipherHashTree, make([]byte, aes.BlockSize))
-		buffer := make([]byte, 0x400)
 		encryptedFile.Read(buffer)
-		hashTree.CryptBlocks(decryptedContent, buffer)
+		cipher.NewCBCDecrypter(cHashTree, iv).CryptBlocks(decryptedContent, buffer)
 
 		h0Hashes := decryptedContent[0:0x140]
 		h1Hashes := decryptedContent[0x140:0x280]

@@ -22,13 +22,13 @@ var (
 	decryptionError = false
 )
 
-func decryptContents(path string, progress *ProgressWindow) error {
+func decryptContents(path string, progress *ProgressWindow, deleteEncryptedContents bool) error {
 	wg.Add(1)
-	progressInt := 0
-	go runDecryption(path, &progressInt)
+	progressInt := 1
+	go runDecryption(path, &progressInt, deleteEncryptedContents)
+	progress.percentLabel.SetText("Decrypting...")
 	for !decryptionDone {
 		progress.bar.SetFraction(float64(progressInt) / 100)
-		progress.percentLabel.SetText(fmt.Sprintf("Decrypting... (%d%%)", progressInt))
 		time.Sleep(500 * time.Millisecond)
 	}
 
@@ -42,13 +42,16 @@ func decryptContents(path string, progress *ProgressWindow) error {
 	return nil
 }
 
-func runDecryption(path string, progress *int) {
+func runDecryption(path string, progress *int, deleteEncryptedContents bool) {
 	defer wg.Done()
 	argv := make([]*C.char, 2)
 	argv[0] = C.CString("WiiUDownloader")
 	argv[1] = C.CString(path)
 	if int(C.cdecrypt_main(2, (**C.char)(unsafe.Pointer(&argv[0])), (*C.int)(unsafe.Pointer(progress)))) != 0 {
 		decryptionError = true
+	}
+	if deleteEncryptedContents {
+		doDeleteEncryptedContents(path)
 	}
 	decryptionDone = true
 }

@@ -93,7 +93,7 @@ func downloadFile(progressWindow *ProgressWindow, client *grab.Client, url strin
 
 	resp := client.Do(req)
 
-	progressWindow.label.SetText(path.Base(resp.Filename))
+	progressWindow.label.SetText(path.Base(outputPath))
 
 	go func(err *error) {
 		for !resp.IsComplete() {
@@ -125,7 +125,7 @@ func downloadFile(progressWindow *ProgressWindow, client *grab.Client, url strin
 	return nil
 }
 
-func DownloadTitle(titleID string, outputDirectory string, doDecryption bool, progressWindow *ProgressWindow) error {
+func DownloadTitle(titleID string, outputDirectory string, doDecryption bool, progressWindow *ProgressWindow, deleteEncryptedContents bool) error {
 	progressWindow.cancelButton.Connect("clicked", func() {
 		progressWindow.cancelled = true
 	})
@@ -164,7 +164,6 @@ func DownloadTitle(titleID string, outputDirectory string, doDecryption bool, pr
 		if err != nil {
 			return err
 		}
-		fmt.Println(titleKey)
 		if err := generateTicket(tikPath, titleID, titleKey, titleVersion); err != nil {
 			return err
 		}
@@ -243,7 +242,7 @@ func DownloadTitle(titleID string, outputDirectory string, doDecryption bool, pr
 	}
 
 	if doDecryption && !progressWindow.cancelled {
-		if err := decryptContents(outputDir, progressWindow); err != nil {
+		if err := decryptContents(outputDir, progressWindow, deleteEncryptedContents); err != nil {
 			return err
 		}
 	}

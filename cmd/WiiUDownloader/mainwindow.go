@@ -22,16 +22,17 @@ const (
 )
 
 type MainWindow struct {
-	window           *gtk.Window
-	treeView         *gtk.TreeView
-	titles           []wiiudownloader.TitleEntry
-	searchEntry      *gtk.Entry
-	categoryButtons  []*gtk.ToggleButton
-	titleQueue       []wiiudownloader.TitleEntry
-	progressWindow   wiiudownloader.ProgressWindow
-	addToQueueButton *gtk.Button
-	decryptContents  bool
-	currentRegion    uint8
+	window                          *gtk.Window
+	treeView                        *gtk.TreeView
+	titles                          []wiiudownloader.TitleEntry
+	searchEntry                     *gtk.Entry
+	categoryButtons                 []*gtk.ToggleButton
+	titleQueue                      []wiiudownloader.TitleEntry
+	progressWindow                  wiiudownloader.ProgressWindow
+	addToQueueButton                *gtk.Button
+	decryptContents                 bool
+	currentRegion                   uint8
+	deleteEncryptedContentsCheckbox *gtk.CheckButton
 }
 
 func NewMainWindow(entries []wiiudownloader.TitleEntry) *MainWindow {
@@ -219,6 +220,12 @@ func (mw *MainWindow) ShowAll() {
 		log.Fatal("Unable to create button:", err)
 	}
 
+	mw.deleteEncryptedContentsCheckbox, err = gtk.CheckButtonNewWithLabel("Delete encrypted contents after decryption")
+	if err != nil {
+		log.Fatal("Unable to create button:", err)
+	}
+	mw.deleteEncryptedContentsCheckbox.SetSensitive(false)
+
 	mw.addToQueueButton.Connect("clicked", mw.onAddToQueueClicked)
 	downloadQueueButton.Connect("clicked", func() {
 		mw.progressWindow, err = wiiudownloader.CreateProgressWindow(mw.window)
@@ -231,7 +238,12 @@ func (mw *MainWindow) ShowAll() {
 	decryptContentsCheckbox.Connect("clicked", mw.onDecryptContentsClicked)
 	bottomhBox.PackStart(mw.addToQueueButton, false, false, 0)
 	bottomhBox.PackStart(downloadQueueButton, false, false, 0)
-	bottomhBox.PackStart(decryptContentsCheckbox, false, false, 0)
+
+	checkboxvBox, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
+	checkboxvBox.PackStart(decryptContentsCheckbox, false, false, 0)
+	checkboxvBox.PackEnd(mw.deleteEncryptedContentsCheckbox, false, false, 0)
+
+	bottomhBox.PackStart(checkboxvBox, false, false, 0)
 
 	japanButton, err := gtk.CheckButtonNewWithLabel("Japan")
 	japanButton.SetActive(true)
@@ -344,9 +356,20 @@ func (mw *MainWindow) onSelectionChanged() {
 func (mw *MainWindow) onDecryptContentsClicked() {
 	if mw.decryptContents {
 		mw.decryptContents = false
+		mw.deleteEncryptedContentsCheckbox.SetSensitive(false)
 	} else {
 		mw.decryptContents = true
+		mw.deleteEncryptedContentsCheckbox.SetSensitive(true)
 	}
+}
+
+func (mw *MainWindow) getDeleteEncryptedContents() bool {
+	if mw.deleteEncryptedContentsCheckbox.GetSensitive() {
+		if mw.deleteEncryptedContentsCheckbox.GetActive() {
+			return true
+		}
+	}
+	return false
 }
 
 func (mw *MainWindow) isTitleInQueue(title wiiudownloader.TitleEntry) bool {
@@ -446,7 +469,8 @@ func (mw *MainWindow) onDownloadQueueClicked() {
 			defer wg.Done()
 
 			tidStr := fmt.Sprintf("%016x", title.TitleID)
-			if err := wiiudownloader.DownloadTitle(tidStr, fmt.Sprintf("%s/%s [%s]", selectedPath, title.Name, tidStr), mw.decryptContents, progressWindow); err != nil {
+			titlePath := fmt.Sprintf("%s/%s [%s]", selectedPath, title.Name, tidStr)
+			if err := wiiudownloader.DownloadTitle(tidStr, titlePath, mw.decryptContents, progressWindow, mw.getDeleteEncryptedContents()); err != nil {
 				queueCancelled = true
 			}
 			mw.removeFromQueue(tidStr)

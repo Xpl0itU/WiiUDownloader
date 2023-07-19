@@ -20,7 +20,7 @@ jobs:
       - name: Build
         run: |
           python3 grabTitles.py
-          go build cmd/WiiUDownloader/*.go
+          go build -ldflags -H=windowsgui cmd/WiiUDownloader/*.go
       - name: Deploy WiiUDownloader
         run: |
           mkdir dist

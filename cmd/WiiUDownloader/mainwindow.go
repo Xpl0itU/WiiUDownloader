@@ -31,6 +31,7 @@ type MainWindow struct {
 	progressWindow   wiiudownloader.ProgressWindow
 	addToQueueButton *gtk.Button
 	decryptContents  bool
+	currentRegion    uint8
 }
 
 func NewMainWindow(entries []wiiudownloader.TitleEntry) *MainWindow {
@@ -53,9 +54,10 @@ func NewMainWindow(entries []wiiudownloader.TitleEntry) *MainWindow {
 	}
 
 	mainWindow := MainWindow{
-		window:      win,
-		titles:      entries,
-		searchEntry: searchEntry,
+		window:        win,
+		titles:        entries,
+		searchEntry:   searchEntry,
+		currentRegion: wiiudownloader.MCP_REGION_EUROPE | wiiudownloader.MCP_REGION_JAPAN | wiiudownloader.MCP_REGION_USA,
 	}
 
 	searchEntry.Connect("changed", mainWindow.onSearchEntryChanged)
@@ -70,6 +72,9 @@ func (mw *MainWindow) updateTitles(titles []wiiudownloader.TitleEntry) {
 	}
 
 	for _, entry := range titles {
+		if (mw.currentRegion & entry.Region) == 0 {
+			continue
+		}
 		iter := store.Append()
 		err = store.Set(iter,
 			[]int{IN_QUEUE_COLUMN, NAME_COLUMN, KIND_COLUMN, TITLE_ID_COLUMN, REGION_COLUMN},
@@ -89,6 +94,9 @@ func (mw *MainWindow) ShowAll() {
 	}
 
 	for _, entry := range mw.titles {
+		if (mw.currentRegion & entry.Region) == 0 {
+			continue
+		}
 		iter := store.Append()
 		err = store.Set(iter,
 			[]int{IN_QUEUE_COLUMN, NAME_COLUMN, KIND_COLUMN, TITLE_ID_COLUMN, REGION_COLUMN},
@@ -225,11 +233,50 @@ func (mw *MainWindow) ShowAll() {
 	bottomhBox.PackStart(downloadQueueButton, false, false, 0)
 	bottomhBox.PackStart(decryptContentsCheckbox, false, false, 0)
 
+	japanButton, err := gtk.CheckButtonNewWithLabel("Japan")
+	japanButton.SetActive(true)
+	if err != nil {
+		log.Fatal("Unable to create button:", err)
+	}
+	japanButton.Connect("clicked", func() {
+		mw.onRegionChange(japanButton, wiiudownloader.MCP_REGION_JAPAN)
+	})
+	bottomhBox.PackEnd(japanButton, false, false, 0)
+
+	usaButton, err := gtk.CheckButtonNewWithLabel("USA")
+	usaButton.SetActive(true)
+	if err != nil {
+		log.Fatal("Unable to create button:", err)
+	}
+	usaButton.Connect("clicked", func() {
+		mw.onRegionChange(usaButton, wiiudownloader.MCP_REGION_USA)
+	})
+	bottomhBox.PackEnd(usaButton, false, false, 0)
+
+	europeButton, err := gtk.CheckButtonNewWithLabel("Europe")
+	europeButton.SetActive(true)
+	if err != nil {
+		log.Fatal("Unable to create button:", err)
+	}
+	europeButton.Connect("clicked", func() {
+		mw.onRegionChange(europeButton, wiiudownloader.MCP_REGION_EUROPE)
+	})
+	bottomhBox.PackEnd(europeButton, false, false, 0)
+
 	mainvBox.PackEnd(bottomhBox, false, false, 0)
 
 	mw.window.Add(mainvBox)
 
 	mw.window.ShowAll()
+}
+
+func (mw *MainWindow) onRegionChange(button *gtk.CheckButton, region uint8) {
+	if button.GetActive() {
+		mw.currentRegion = region | mw.currentRegion
+	} else {
+		mw.currentRegion = region ^ mw.currentRegion
+	}
+	mw.updateTitles(mw.titles)
 }
 
 func (mw *MainWindow) onSearchEntryChanged() {

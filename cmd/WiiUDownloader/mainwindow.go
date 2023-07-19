@@ -310,6 +310,11 @@ func (mw *MainWindow) ShowAll() {
 
 	mainvBox.PackEnd(bottomhBox, false, false, 0)
 
+	mainvBox.SetMarginBottom(2)
+	mainvBox.SetMarginEnd(2)
+	mainvBox.SetMarginStart(2)
+	mainvBox.SetMarginTop(2)
+
 	mw.window.Add(mainvBox)
 
 	mw.window.ShowAll()

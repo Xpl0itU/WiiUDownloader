@@ -1,5 +1,11 @@
 name: macOS
-on: push
+on:
+  push:
+    tags:
+      - '*'
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -30,7 +36,12 @@ jobs:
             "WiiUDownloader-macOS-Universal.dmg" \
             "out/"
       - name: Upload macOS Artifact
-        uses: actions/upload-artifact@v3
+        uses: ncipollo/release-action@v1
         with:
-          name: WiiUDownloader-macOS-Universal
-          path: WiiUDownloader-macOS-Universal.dmg
+          allowUpdates: True
+          makeLatest: True
+          omitBody: True
+          omitBodyDuringUpdate: True
+          omitNameDuringUpdate: True
+          artifacts: "WiiUDownloader-macOS-Universal.dmg"
+          token: ${{ secrets.GITHUB_TOKEN }}

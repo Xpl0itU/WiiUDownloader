@@ -1,5 +1,11 @@
 name: MSYS2
-on: push
+on:
+  push:
+    tags:
+      - '*'
+
+permissions:
+  contents: write
 
 jobs:
   msys2-ucrt64:
@@ -39,8 +45,12 @@ jobs:
           cp main.exe dist/WiiUDownloader.exe
           cd dist && zip -9 -r ../WiiUDownloader-Windows.zip .
       - name: Upload Windows Artifact
-        uses: actions/upload-artifact@v3
+        uses: ncipollo/release-action@v1
         with:
-          name: WiiUDownloader-Windows
-          path: WiiUDownloader-Windows.zip
-          if-no-files-found: warn
+          allowUpdates: True
+          makeLatest: True
+          omitBody: True
+          omitBodyDuringUpdate: True
+          omitNameDuringUpdate: True
+          artifacts: "WiiUDownloader-Windows.zip"
+          token: ${{ secrets.GITHUB_TOKEN }}

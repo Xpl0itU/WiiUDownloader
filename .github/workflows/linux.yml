@@ -1,5 +1,11 @@
 name: Linux
-on: push
+on:
+  push:
+    tags:
+      - '*'
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -28,14 +34,12 @@ jobs:
           mv main WiiUDownloader
           docker run --privileged --rm -e DEPLOY_GTK_VERSION=3 -e OUTPUT="WiiUDownloader-Linux-x86_64.AppImage" -e UPDATE_INFORMATION="gh-releases-zsync|Xpl0itU|WiiUDownloader|latest|WiiUDownloader-*.AppImage.zsync" -v ${PWD}:/project builder linuxdeploy.AppImage --plugin gtk --plugin checkrt --output=appimage --create-desktop-file --executable=WiiUDownloader --appdir dist --icon-file data/WiiUDownloader.png
       - name: Upload Linux Artifact
-        uses: actions/upload-artifact@v3
+        uses: ncipollo/release-action@v1
         with:
-          name: WiiUDownloader-Linux
-          path: WiiUDownloader-*.AppImage
-          if-no-files-found: warn
-      - name: Upload AppImage zsync
-        uses: actions/upload-artifact@v3
-        with:
-          name: WiiUDownloader-Linux-zsync
-          path: WiiUDownloader-*.AppImage.zsync
-          if-no-files-found: warn
+          allowUpdates: True
+          makeLatest: True
+          omitBody: True
+          omitBodyDuringUpdate: True
+          omitNameDuringUpdate: True
+          artifacts: "WiiUDownloader-*.AppImage"
+          token: ${{ secrets.GITHUB_TOKEN }}

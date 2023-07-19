@@ -9,7 +9,10 @@ package wiiudownloader
 #include <ctype.h>
 */
 import "C"
-import "unsafe"
+import (
+	"strconv"
+	"unsafe"
+)
 
 const (
 	MCP_REGION_JAPAN  = 0x01
@@ -149,4 +152,17 @@ func GetCategoryFromFormattedCategory(formattedCategory string) uint8 {
 	default:
 		return TITLE_CATEGORY_ALL
 	}
+}
+
+func getTitleEntryFromTid(tid string) TitleEntry {
+	titleID, err := strconv.ParseUint(tid, 16, 64)
+	if err != nil {
+		return TitleEntry{}
+	}
+	for _, entry := range GetTitleEntries(TITLE_CATEGORY_ALL) {
+		if entry.TitleID == titleID {
+			return entry
+		}
+	}
+	return TitleEntry{}
 }

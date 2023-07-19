@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cavaliergopher/grab/v3"
+	"github.com/dustin/go-humanize"
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
 )
@@ -21,9 +22,8 @@ import (
 type ProgressWindow struct {
 	Window       *gtk.Window
 	box          *gtk.Box
-	label        *gtk.Label
+	gameLabel    *gtk.Label
 	bar          *gtk.ProgressBar
-	percentLabel *gtk.Label
 	cancelButton *gtk.Button
 	cancelled    bool
 }
@@ -33,7 +33,7 @@ func CreateProgressWindow(parent *gtk.Window) (ProgressWindow, error) {
 	if err != nil {
 		return ProgressWindow{}, err
 	}
-	win.SetTitle("File Download")
+	win.SetTitle("WiiUDownloader - Downloading")
 
 	win.SetTransientFor(parent)
 
@@ -43,23 +43,18 @@ func CreateProgressWindow(parent *gtk.Window) (ProgressWindow, error) {
 	}
 	win.Add(box)
 
-	filenameLabel, err := gtk.LabelNew("File: ")
+	gameLabel, err := gtk.LabelNew("")
 	if err != nil {
 		return ProgressWindow{}, err
 	}
-	box.PackStart(filenameLabel, false, false, 0)
+	box.PackStart(gameLabel, false, false, 0)
 
 	progressBar, err := gtk.ProgressBarNew()
 	if err != nil {
 		return ProgressWindow{}, err
 	}
+	progressBar.SetShowText(true)
 	box.PackStart(progressBar, false, false, 0)
-
-	percentLabel, err := gtk.LabelNew("0%")
-	if err != nil {
-		return ProgressWindow{}, err
-	}
-	box.PackStart(percentLabel, false, false, 0)
 
 	cancelButton, err := gtk.ButtonNewWithLabel("Cancel")
 	if err != nil {
@@ -71,14 +66,17 @@ func CreateProgressWindow(parent *gtk.Window) (ProgressWindow, error) {
 		return ProgressWindow{}, err
 	}
 	bottomhBox.PackEnd(cancelButton, false, false, 0)
+	box.SetMarginBottom(5)
+	box.SetMarginEnd(5)
+	box.SetMarginStart(5)
+	box.SetMarginTop(5)
 	box.PackEnd(bottomhBox, false, false, 0)
 
 	return ProgressWindow{
 		Window:       win,
 		box:          box,
-		label:        filenameLabel,
+		gameLabel:    gameLabel,
 		bar:          progressBar,
-		percentLabel: percentLabel,
 		cancelButton: cancelButton,
 		cancelled:    false,
 	}, nil
@@ -93,6 +91,11 @@ func downloadFile(progressWindow *ProgressWindow, client *grab.Client, downloadU
 	filePath := path.Base(dstPath)
 
 	resp := client.Do(req)
+	progressWindow.bar.SetFraction(resp.Progress())
+	progressWindow.bar.SetText(fmt.Sprintf("Downloading %s (%s/%s) (%s/s)", filePath, humanize.Bytes(uint64(resp.BytesComplete())), humanize.Bytes(uint64(resp.Size())), humanize.Bytes(uint64(resp.BytesPerSecond()))))
+	for gtk.EventsPending() {
+		gtk.MainIteration()
+	}
 	t := time.NewTicker(500 * time.Millisecond)
 	defer t.Stop()
 
@@ -101,9 +104,11 @@ Loop:
 		select {
 		case <-t.C:
 			glib.IdleAdd(func() {
-				progressWindow.label.SetText(filePath)
 				progressWindow.bar.SetFraction(resp.Progress())
-				progressWindow.percentLabel.SetText(fmt.Sprintf("%.0f%%", 100*resp.Progress()))
+				progressWindow.bar.SetText(fmt.Sprintf("Downloading %s (%s/%s) (%s/s)", filePath, humanize.Bytes(uint64(resp.BytesComplete())), humanize.Bytes(uint64(resp.Size())), humanize.Bytes(uint64(resp.BytesPerSecond()))))
+				for gtk.EventsPending() {
+					gtk.MainIteration()
+				}
 			})
 			if progressWindow.cancelled {
 				resp.Cancel()
@@ -123,6 +128,8 @@ func DownloadTitle(titleID string, outputDirectory string, doDecryption bool, pr
 	progressWindow.cancelButton.Connect("clicked", func() {
 		progressWindow.cancelled = true
 	})
+
+	progressWindow.gameLabel.SetText(getTitleEntryFromTid(titleID).Name)
 	outputDir := strings.TrimRight(outputDirectory, "/\\")
 	baseURL := fmt.Sprintf("http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/%s", titleID)
 	titleIDBytes, err := hex.DecodeString(titleID)

@@ -42,7 +42,7 @@ func NewMainWindow(entries []wiiudownloader.TitleEntry) *MainWindow {
 		log.Fatal("Unable to create window:", err)
 	}
 
-	win.SetTitle("WiiUDownloaderGo")
+	win.SetTitle("WiiUDownloader")
 	win.SetDefaultSize(716, 400)
 	win.Connect("destroy", func() {
 		gtk.MainQuit()
@@ -544,7 +544,7 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string) {
 			defer wg.Done()
 
 			tidStr := fmt.Sprintf("%016x", title.TitleID)
-			titlePath := fmt.Sprintf("%s/%s [%s]", selectedPath, title.Name, tidStr)
+			titlePath := fmt.Sprintf("%s/%s [%s] [%s]", selectedPath, title.Name, wiiudownloader.GetFormattedKind(title.TitleID), tidStr)
 			if err := wiiudownloader.DownloadTitle(tidStr, titlePath, mw.decryptContents, progressWindow, mw.getDeleteEncryptedContents()); err != nil {
 				queueCancelled = true
 			}

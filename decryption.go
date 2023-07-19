@@ -26,7 +26,7 @@ func DecryptContents(path string, progress *ProgressWindow, deleteEncryptedConte
 	wg.Add(1)
 	progressInt := 1
 	go runDecryption(path, &progressInt, deleteEncryptedContents)
-	progress.percentLabel.SetText("Decrypting...")
+	progress.bar.SetText("Decrypting...")
 	for !decryptionDone {
 		progress.bar.SetFraction(float64(progressInt) / 100)
 		time.Sleep(500 * time.Millisecond)

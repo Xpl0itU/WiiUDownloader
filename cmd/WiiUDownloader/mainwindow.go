@@ -113,6 +113,12 @@ func (mw *MainWindow) ShowAll() {
 		log.Fatal("Unable to create tree view:", err)
 	}
 
+	selection, err := mw.treeView.GetSelection()
+	if err != nil {
+		log.Fatal("Unable to get selection:", err)
+	}
+	selection.SetMode(gtk.SELECTION_MULTIPLE)
+
 	mw.treeView.SetModel(store)
 
 	toggleRenderer, err := gtk.CellRendererToggleNew()
@@ -212,7 +218,6 @@ func (mw *MainWindow) ShowAll() {
 		log.Fatal("Unable to create scrolled window:", err)
 	}
 	scrollable.SetPolicy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
-	selection, _ := mw.treeView.GetSelection()
 	selection.Connect("changed", mw.onSelectionChanged)
 	scrollable.Add(mw.treeView)
 
@@ -358,27 +363,36 @@ func (mw *MainWindow) onDecryptContentsMenuItemClicked() {
 	mw.progressWindow.Window.Close()
 }
 
-func (mw *MainWindow) onSelectionChanged() {
+func (mw *MainWindow) isSelectionInQueue() bool {
 	selection, err := mw.treeView.GetSelection()
 	if err != nil {
 		log.Fatal("Unable to get selection:", err)
 	}
-	model, iter, _ := selection.GetSelected()
-	if iter != nil {
-		tid, _ := model.ToTreeModel().GetValue(iter, TITLE_ID_COLUMN)
-		name, _ := model.ToTreeModel().GetValue(iter, NAME_COLUMN)
-		if tid != nil {
-			if tidStr, err := tid.GetString(); err == nil {
-				tidNum, _ := strconv.ParseUint(tidStr, 16, 64)
-				nameStr, _ := name.GetString()
-				isInQueue := mw.isTitleInQueue(wiiudownloader.TitleEntry{TitleID: tidNum, Name: nameStr})
-				if isInQueue {
-					mw.addToQueueButton.SetLabel("Remove from queue")
-				} else {
-					mw.addToQueueButton.SetLabel("Add to queue")
-				}
+	treeModel, err := mw.treeView.GetModel()
+	if err != nil {
+		log.Fatal("Unable to get model:", err)
+	}
+	allTitlesInQueue := true
+	pathlist := selection.GetSelectedRows(treeModel)
+	pathlist.Foreach(func(item interface{}) {
+		path, _ := item.(*gtk.TreePath)
+		row, _ := treeModel.ToTreeModel().GetIter(path)
+		if row != nil {
+			inQueue, _ := treeModel.ToTreeModel().GetValue(row, IN_QUEUE_COLUMN)
+			isInQueue, _ := inQueue.GoValue()
+			if !isInQueue.(bool) {
+				allTitlesInQueue = false
 			}
 		}
+	})
+	return allTitlesInQueue
+}
+
+func (mw *MainWindow) onSelectionChanged() {
+	if mw.isSelectionInQueue() {
+		mw.addToQueueButton.SetLabel("Remove from queue")
+	} else {
+		mw.addToQueueButton.SetLabel("Add to queue")
 	}
 }
 
@@ -432,30 +446,39 @@ func (mw *MainWindow) onAddToQueueClicked() {
 	if err != nil {
 		log.Fatal("Unable to get selection:", err)
 	}
-	model, iter, _ := selection.GetSelected()
-	if iter != nil {
-		tid, _ := model.ToTreeModel().GetValue(iter, TITLE_ID_COLUMN)
-		name, _ := model.ToTreeModel().GetValue(iter, NAME_COLUMN)
-		if tid != nil {
-			if tidStr, err := tid.GetString(); err == nil {
-				nameStr, _ := name.GetString()
-				tidNum, _ := strconv.ParseUint(tidStr, 16, 64)
-				titleInQueue := mw.isTitleInQueue(wiiudownloader.TitleEntry{TitleID: tidNum, Name: nameStr})
-				if titleInQueue {
-					mw.removeFromQueue(tidStr)
-					mw.addToQueueButton.SetLabel("Add to queue")
-				} else {
-					mw.addToQueue(tidStr, nameStr)
-					mw.addToQueueButton.SetLabel("Remove from queue")
-				}
-				store, _ := mw.treeView.GetModel()
-				path, _ := store.(*gtk.ListStore).GetPath(iter)
-				queueModel, _ := mw.treeView.GetModel()
-				queueModel.(*gtk.ListStore).SetValue(iter, IN_QUEUE_COLUMN, !titleInQueue)
-				mw.treeView.SetCursor(path, mw.treeView.GetColumn(IN_QUEUE_COLUMN), false)
-			}
-		}
+	treeModel, err := mw.treeView.GetModel()
+	if err != nil {
+		log.Fatal("Unable to get model:", err)
 	}
+	pathlist := selection.GetSelectedRows(treeModel)
+	addToQueue := !mw.isSelectionInQueue()
+	pathlist.Foreach(func(item interface{}) {
+		path, _ := item.(*gtk.TreePath)
+		row, _ := treeModel.ToTreeModel().GetIter(path)
+		if row != nil {
+			inQueue, _ := treeModel.ToTreeModel().GetValue(row, IN_QUEUE_COLUMN)
+			isInQueue, _ := inQueue.GoValue()
+			if addToQueue == isInQueue.(bool) {
+				return
+			}
+			inQueue.SetBool(addToQueue)
+			tid, _ := treeModel.ToTreeModel().GetValue(row, TITLE_ID_COLUMN)
+			tidStr, _ := tid.GetString()
+			if addToQueue {
+				name, _ := treeModel.ToTreeModel().GetValue(row, NAME_COLUMN)
+				nameStr, _ := name.GetString()
+				mw.addToQueue(tidStr, nameStr)
+				mw.addToQueueButton.SetLabel("Remove from queue")
+			} else {
+				mw.removeFromQueue(tidStr)
+				mw.addToQueueButton.SetLabel("Add to queue")
+			}
+			inQueue.SetBool(addToQueue)
+			queueModel, _ := mw.treeView.GetModel()
+			queueModel.(*gtk.ListStore).SetValue(row, IN_QUEUE_COLUMN, addToQueue)
+			mw.treeView.SetCursor(path, mw.treeView.GetColumn(IN_QUEUE_COLUMN), false)
+		}
+	})
 }
 
 func (mw *MainWindow) updateTitlesInQueue() {
@@ -483,6 +506,9 @@ func (mw *MainWindow) updateTitlesInQueue() {
 }
 
 func (mw *MainWindow) onDownloadQueueClicked() {
+	if len(mw.titleQueue) == 0 {
+		return
+	}
 	queueCancelled := false
 	var wg sync.WaitGroup
 
@@ -514,6 +540,7 @@ func (mw *MainWindow) onDownloadQueueClicked() {
 	mw.titleQueue = []wiiudownloader.TitleEntry{} // Clear the queue
 	mw.progressWindow.Window.Close()
 	mw.updateTitlesInQueue()
+	mw.onSelectionChanged()
 }
 
 func Main() {

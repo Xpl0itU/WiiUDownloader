@@ -11,6 +11,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/cavaliergopher/grab/v3"
 	"github.com/gotk3/gotk3/glib"
@@ -83,51 +84,38 @@ func CreateProgressWindow(parent *gtk.Window) (ProgressWindow, error) {
 	}, nil
 }
 
-func downloadFile(progressWindow *ProgressWindow, client *grab.Client, url string, outputPath string) error {
-	if progressWindow.cancelled {
-		return fmt.Errorf("cancelled")
-	}
-	done := false
-	req, err := grab.NewRequest(outputPath, url)
+func downloadFile(progressWindow *ProgressWindow, client *grab.Client, downloadURL string, dstPath string) error {
+	req, err := grab.NewRequest(dstPath, downloadURL)
 	if err != nil {
 		return err
 	}
 
+	filePath := path.Base(dstPath)
+
 	resp := client.Do(req)
+	t := time.NewTicker(500 * time.Millisecond)
+	defer t.Stop()
 
-	filePath := path.Base(outputPath)
-
-	go func(err *error) {
-		for !resp.IsComplete() {
+Loop:
+	for {
+		select {
+		case <-t.C:
 			glib.IdleAdd(func() {
 				progressWindow.label.SetText(filePath)
 				progressWindow.bar.SetFraction(resp.Progress())
 				progressWindow.percentLabel.SetText(fmt.Sprintf("%.0f%%", 100*resp.Progress()))
 			})
-
 			if progressWindow.cancelled {
 				resp.Cancel()
-				break
+				break Loop
 			}
-		}
-
-		*err = resp.Err()
-		done = true
-	}(&err)
-
-	for {
-		for gtk.EventsPending() {
-			gtk.MainIteration()
-		}
-		if done {
-			break
+		case <-resp.Done:
+			if err := resp.Err(); err != nil {
+				return fmt.Errorf("download error: %+v", err)
+			}
+			break Loop
 		}
 	}
-
-	if err != nil {
-		return err
-	}
-
 	return nil
 }
 

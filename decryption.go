@@ -22,7 +22,7 @@ var (
 	decryptionError = false
 )
 
-func decryptContents(path string, progress *ProgressWindow, deleteEncryptedContents bool) error {
+func DecryptContents(path string, progress *ProgressWindow, deleteEncryptedContents bool) error {
 	wg.Add(1)
 	progressInt := 1
 	go runDecryption(path, &progressInt, deleteEncryptedContents)

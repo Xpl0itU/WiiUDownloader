@@ -242,7 +242,7 @@ func DownloadTitle(titleID string, outputDirectory string, doDecryption bool, pr
 	}
 
 	if doDecryption && !progressWindow.cancelled {
-		if err := decryptContents(outputDir, progressWindow, deleteEncryptedContents); err != nil {
+		if err := DecryptContents(outputDir, progressWindow, deleteEncryptedContents); err != nil {
 			return err
 		}
 	}

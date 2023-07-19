@@ -165,6 +165,24 @@ func (mw *MainWindow) ShowAll() {
 	if err != nil {
 		log.Fatal("Unable to create box:", err)
 	}
+	menuBar, _ := gtk.MenuBarNew()
+	toolsSubMenu, _ := gtk.MenuNew()
+
+	toolsMenu, _ := gtk.MenuItemNewWithLabel("Tools")
+	decryptContentsMenuItem, _ := gtk.MenuItemNewWithLabel("Decrypt contents")
+	decryptContentsMenuItem.Connect("activate", func() {
+		mw.progressWindow, err = wiiudownloader.CreateProgressWindow(mw.window)
+		if err != nil {
+			return
+		}
+		mw.progressWindow.Window.ShowAll()
+		go mw.onDecryptContentsMenuItemClicked()
+	})
+	toolsSubMenu.Append(decryptContentsMenuItem)
+
+	toolsMenu.SetSubmenu(toolsSubMenu)
+	menuBar.Append(toolsMenu)
+	mainvBox.PackStart(menuBar, false, false, 0)
 	tophBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
 	if err != nil {
 		log.Fatal("Unable to create box:", err)
@@ -327,6 +345,17 @@ func (mw *MainWindow) onCategoryToggled(button *gtk.ToggleButton) {
 		catButton.SetActive(false)
 	}
 	button.Activate()
+}
+
+func (mw *MainWindow) onDecryptContentsMenuItemClicked() {
+	selectedPath, err := dialog.Directory().Title("Select the path to decrypt").Browse()
+	if err != nil {
+		return
+	}
+
+	wiiudownloader.DecryptContents(selectedPath, &mw.progressWindow, false)
+
+	mw.progressWindow.Window.Close()
 }
 
 func (mw *MainWindow) onSelectionChanged() {

@@ -27,6 +27,7 @@ jobs:
           python3 data/create_bundle.py
           mkdir -p out/WiiUDownloader.app/Contents/MacOS/lib/share/glib-2.0/schemas
           cp $(brew --prefix)/share/glib-2.0/schemas/* out/WiiUDownloader.app/Contents/MacOS/lib/share/glib-2.0/schemas
+          sudo codesign --force --sign -  out/WiiUDownloader.app
           create-dmg \
             --volname "WiiUDownloader" \
             --window-pos 200 120 \

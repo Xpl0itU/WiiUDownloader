@@ -4,13 +4,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	wiiudownloader "github.com/Xpl0itU/WiiUDownloader"
 )
 
 func main() {
 	// Check if user is running macOS
-	if os.Getenv("GOOS") != "darwin" {
+	if runtime.GOOS == "darwin" {
 		execPath, err := os.Executable()
 		if err != nil {
 			fmt.Println("Error:", err)

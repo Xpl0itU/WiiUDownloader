@@ -180,8 +180,19 @@ func (mw *MainWindow) ShowAll() {
 		if err != nil {
 			return
 		}
+		dialog, err := gtk.FileChooserNativeDialogNew("Select the path to decrypt", mw.window, gtk.FILE_CHOOSER_ACTION_SELECT_FOLDER, "Select", "Cancel")
+		if err != nil {
+			log.Fatal("Unable to create dialog:", err)
+		}
+		res := dialog.Run()
+		if res != int(gtk.RESPONSE_ACCEPT) {
+			mw.progressWindow.Window.Close()
+			return
+		}
+
+		selectedPath := dialog.FileChooser.GetFilename()
 		mw.progressWindow.Window.ShowAll()
-		go mw.onDecryptContentsMenuItemClicked()
+		go mw.onDecryptContentsMenuItemClicked(selectedPath)
 	})
 	toolsSubMenu.Append(decryptContentsMenuItem)
 
@@ -378,19 +389,7 @@ func (mw *MainWindow) onCategoryToggled(button *gtk.ToggleButton) {
 	button.Activate()
 }
 
-func (mw *MainWindow) onDecryptContentsMenuItemClicked() {
-	dialog, err := gtk.FileChooserNativeDialogNew("Select the path to decrypt", mw.window, gtk.FILE_CHOOSER_ACTION_SELECT_FOLDER, "Select", "Cancel")
-	if err != nil {
-		log.Fatal("Unable to create dialog:", err)
-	}
-	res := dialog.Run()
-	if res != int(gtk.RESPONSE_ACCEPT) {
-		mw.progressWindow.Window.Close()
-		return
-	}
-
-	selectedPath := dialog.FileChooser.GetFilename()
-
+func (mw *MainWindow) onDecryptContentsMenuItemClicked(selectedPath string) {
 	wiiudownloader.DecryptContents(selectedPath, &mw.progressWindow, false)
 
 	mw.progressWindow.Window.Close()

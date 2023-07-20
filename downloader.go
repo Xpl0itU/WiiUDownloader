@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -88,7 +87,7 @@ func downloadFile(progressWindow *ProgressWindow, client *grab.Client, downloadU
 		return err
 	}
 
-	filePath := path.Base(dstPath)
+	filePath := filepath.Base(dstPath)
 
 	resp := client.Do(req)
 	progressWindow.bar.SetFraction(resp.Progress())

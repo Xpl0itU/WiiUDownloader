@@ -3,6 +3,7 @@ package wiiudownloader
 import (
 	"fmt"
 	"os"
+	"path"
 
 	"github.com/cavaliergopher/grab/v3"
 )
@@ -30,15 +31,16 @@ func getDefaultCert(progressWindow *ProgressWindow, client *grab.Client) ([]byte
 	if len(cetkData) >= 0x350+0x300 {
 		return cetkData[0x350 : 0x350+0x300], nil
 	}
-	if err := downloadFile(progressWindow, client, "http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/000500101000400a/cetk", "cetk"); err != nil {
+	cetkDir := path.Join(os.TempDir(), "cetk")
+	if err := downloadFile(progressWindow, client, "http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/000500101000400a/cetk", cetkDir); err != nil {
 		return nil, err
 	}
-	cetkData, err := os.ReadFile("cetk")
+	cetkData, err := os.ReadFile(cetkDir)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := os.Remove("cetk"); err != nil {
+	if err := os.Remove(cetkDir); err != nil {
 		return nil, err
 	}
 

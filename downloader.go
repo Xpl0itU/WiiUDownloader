@@ -254,7 +254,9 @@ func DownloadTitle(titleID string, outputDirectory string, doDecryption bool, pr
 				return err
 			}
 			if err := checkContentHashes(outputDirectory, content, &cipherHashTree); err != nil {
-				fmt.Println(err)
+				if progressWindow.cancelled {
+					break
+				}
 				return err
 			}
 		}

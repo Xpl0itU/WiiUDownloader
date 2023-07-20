@@ -20,7 +20,7 @@ func main() {
 
 		bundlePath := filepath.Join(filepath.Dir(filepath.Dir(execPath)))
 		filePath := filepath.Join(bundlePath, "MacOS/lib/share/glib-2.0/schemas")
-		if _, err := os.Stat("/path/to/whatever"); os.IsExist(err) {
+		if _, err := os.Stat(filePath); os.IsExist(err) {
 			os.Setenv("GSETTINGS_SCHEMA_DIR", filePath)
 		}
 	}

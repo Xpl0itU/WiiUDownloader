@@ -141,7 +141,9 @@ func DownloadTitle(titleID string, outputDirectory string, doDecryption bool, pr
 		progressWindow.cancelled = true
 	})
 
-	progressWindow.gameLabel.SetText(getTitleEntryFromTid(titleID).Name)
+	titleEntry := getTitleEntryFromTid(titleID)
+
+	progressWindow.gameLabel.SetText(titleEntry.Name)
 	outputDir := strings.TrimRight(outputDirectory, "/\\")
 	baseURL := fmt.Sprintf("http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/%s", titleID)
 	titleIDBytes, err := hex.DecodeString(titleID)
@@ -177,7 +179,7 @@ func DownloadTitle(titleID string, outputDirectory string, doDecryption bool, pr
 		if err != nil {
 			return err
 		}
-		if err := generateTicket(tikPath, titleID, titleKey, titleVersion); err != nil {
+		if err := generateTicket(tikPath, titleEntry.TitleID, titleKey, titleVersion); err != nil {
 			return err
 		}
 	}

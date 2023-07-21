@@ -5,7 +5,6 @@ import (
 	"crypto/cipher"
 	"crypto/md5"
 	"crypto/sha1"
-	"encoding/hex"
 
 	"golang.org/x/crypto/pbkdf2"
 )
@@ -33,7 +32,7 @@ func encryptAES(data []byte, key []byte, iv []byte) ([]byte, error) {
 	return encrypted, nil
 }
 
-func generateKey(tid string) (string, error) {
+func generateKey(tid string) ([]byte, error) {
 	tmp := []byte(tid)
 	for tmp[0] == '0' && tmp[1] == '0' {
 		tmp = tmp[2:]
@@ -61,10 +60,10 @@ func generateKey(tid string) (string, error) {
 
 	encrypted, err := encryptAES(key, commonKey, iv)
 	if err != nil {
-		return "", err
+		return []byte{}, err
 	}
 
-	return hex.EncodeToString(encrypted), nil
+	return encrypted, nil
 }
 
 func pbkdf2WithSHA1(password, salt []byte, iterations, keyLength int) []byte {

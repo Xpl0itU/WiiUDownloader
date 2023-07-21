@@ -612,7 +612,7 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string) error {
 			defer wg.Done()
 
 			tidStr := fmt.Sprintf("%016x", title.TitleID)
-			titlePath := fmt.Sprintf("%s/%s [%s] [%s]", selectedPath, title.Name, wiiudownloader.GetFormattedKind(title.TitleID), tidStr)
+			titlePath := fmt.Sprintf("%s/%s [%s] [%s]", selectedPath, normalizeFilename(title.Name), wiiudownloader.GetFormattedKind(title.TitleID), tidStr)
 			if err := wiiudownloader.DownloadTitle(tidStr, titlePath, mw.decryptContents, progressWindow, mw.getDeleteEncryptedContents(), mw.logger); err != nil {
 				queueCancelled = true
 				errorHappened = true

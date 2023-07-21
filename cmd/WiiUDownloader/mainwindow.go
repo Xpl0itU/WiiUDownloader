@@ -12,11 +12,11 @@ import (
 )
 
 const (
-	IN_QUEUE_COLUMN = 0
-	NAME_COLUMN     = 1
-	KIND_COLUMN     = 2
-	TITLE_ID_COLUMN = 3
-	REGION_COLUMN   = 4
+	IN_QUEUE_COLUMN = iota
+	NAME_COLUMN
+	KIND_COLUMN
+	TITLE_ID_COLUMN
+	REGION_COLUMN
 )
 
 type MainWindow struct {

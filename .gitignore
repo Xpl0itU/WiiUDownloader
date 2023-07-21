@@ -8,3 +8,4 @@ output/
 main
 *.a
 out/
+log.txt

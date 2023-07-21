@@ -10,23 +10,28 @@ import (
 )
 
 func main() {
+	logger, err := wiiudownloader.NewLogger("log.txt")
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
 	// Check if user is running macOS
 	if runtime.GOOS == "darwin" {
 		execPath, err := os.Executable()
 		if err != nil {
-			fmt.Println("Error:", err)
+			logger.Error(err.Error())
 			return
 		}
 
 		bundlePath := filepath.Join(filepath.Dir(filepath.Dir(execPath)))
 		filePath := filepath.Join(bundlePath, "Resources/lib/share/glib-schemas")
 		if _, err := os.Stat(filePath); os.IsNotExist(err) {
-			fmt.Println("glib-schemas not found")
+			logger.Warning("glib-schemas not found")
 		} else {
 			os.Setenv("GSETTINGS_SCHEMA_DIR", filePath)
 		}
 	}
-	win := NewMainWindow(wiiudownloader.GetTitleEntries(wiiudownloader.TITLE_CATEGORY_GAME))
+	win := NewMainWindow(wiiudownloader.GetTitleEntries(wiiudownloader.TITLE_CATEGORY_GAME), logger)
 
 	win.ShowAll()
 	Main()

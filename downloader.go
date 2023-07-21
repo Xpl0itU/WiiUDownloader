@@ -123,11 +123,10 @@ func downloadFile(progressWindow *ProgressWindow, client *grab.Client, downloadU
 			case <-resp.Done:
 				if err := resp.Err(); err != nil {
 					if doRetries && attempt < maxRetries {
-						fmt.Printf("[Error] Download attempt %d failed: %+v\n", attempt, err)
 						time.Sleep(retryDelay)
 						break Loop
 					}
-					return fmt.Errorf("download error: %+v", err)
+					return fmt.Errorf("download error after %d attempts: %+v", attempt, err)
 				}
 				break Loop
 			}
@@ -137,7 +136,7 @@ func downloadFile(progressWindow *ProgressWindow, client *grab.Client, downloadU
 	return nil
 }
 
-func DownloadTitle(titleID string, outputDirectory string, doDecryption bool, progressWindow *ProgressWindow, deleteEncryptedContents bool) error {
+func DownloadTitle(titleID string, outputDirectory string, doDecryption bool, progressWindow *ProgressWindow, deleteEncryptedContents bool, logger *Logger) error {
 	progressWindow.cancelButton.Connect("clicked", func() {
 		progressWindow.cancelled = true
 	})
@@ -222,7 +221,7 @@ func DownloadTitle(titleID string, outputDirectory string, doDecryption bool, pr
 		return err
 	}
 	defer certFile.Close()
-	fmt.Printf("[Info] Certificate saved to ./%v \n", certPath)
+	logger.Info("Certificate saved to ./%v \n", certPath)
 
 	c, err := aes.NewCipher(commonKey)
 	if err != nil {

@@ -192,7 +192,14 @@ func (mw *MainWindow) ShowAll() {
 
 		selectedPath := dialog.FileChooser.GetFilename()
 		mw.progressWindow.Window.ShowAll()
-		go mw.onDecryptContentsMenuItemClicked(selectedPath)
+		go func() {
+			err := mw.onDecryptContentsMenuItemClicked(selectedPath)
+			if err != nil {
+				glib.IdleAdd(func() {
+					mw.showError(err)
+				})
+			}
+		}()
 	})
 	toolsSubMenu.Append(decryptContentsMenuItem)
 
@@ -389,10 +396,11 @@ func (mw *MainWindow) onCategoryToggled(button *gtk.ToggleButton) {
 	button.Activate()
 }
 
-func (mw *MainWindow) onDecryptContentsMenuItemClicked(selectedPath string) {
-	wiiudownloader.DecryptContents(selectedPath, &mw.progressWindow, false)
+func (mw *MainWindow) onDecryptContentsMenuItemClicked(selectedPath string) error {
+	err := wiiudownloader.DecryptContents(selectedPath, &mw.progressWindow, false)
 
 	mw.progressWindow.Window.Close()
+	return err
 }
 
 func (mw *MainWindow) isSelectionInQueue() bool {

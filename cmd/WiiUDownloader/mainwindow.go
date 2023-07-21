@@ -390,7 +390,8 @@ func (mw *MainWindow) filterTitles(filterText string) {
 
 func (mw *MainWindow) onCategoryToggled(button *gtk.ToggleButton) {
 	category, _ := button.GetLabel()
-	mw.updateTitles(wiiudownloader.GetTitleEntries(wiiudownloader.GetCategoryFromFormattedCategory(category)))
+	mw.titles = wiiudownloader.GetTitleEntries(wiiudownloader.GetCategoryFromFormattedCategory(category))
+	mw.updateTitles(mw.titles)
 	for _, catButton := range mw.categoryButtons {
 		catButton.SetActive(false)
 	}

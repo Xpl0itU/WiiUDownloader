@@ -32,7 +32,7 @@ func getDefaultCert(progressWindow *ProgressWindow, client *grab.Client) ([]byte
 		return cetkData[0x350 : 0x350+0x300], nil
 	}
 	cetkDir := path.Join(os.TempDir(), "cetk")
-	if err := downloadFile(progressWindow, client, "http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/000500101000400a/cetk", cetkDir); err != nil {
+	if err := downloadFile(progressWindow, client, "http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/000500101000400a/cetk", cetkDir, true); err != nil {
 		return nil, err
 	}
 	cetkData, err := os.ReadFile(cetkDir)

@@ -32,6 +32,7 @@ type MainWindow struct {
 	currentRegion                   uint8
 	deleteEncryptedContentsCheckbox *gtk.CheckButton
 	logger                          *wiiudownloader.Logger
+	lastSearchText                  string
 }
 
 func NewMainWindow(entries []wiiudownloader.TitleEntry, logger *wiiudownloader.Logger) *MainWindow {
@@ -54,11 +55,12 @@ func NewMainWindow(entries []wiiudownloader.TitleEntry, logger *wiiudownloader.L
 	}
 
 	mainWindow := MainWindow{
-		window:        win,
-		titles:        entries,
-		searchEntry:   searchEntry,
-		currentRegion: wiiudownloader.MCP_REGION_EUROPE | wiiudownloader.MCP_REGION_JAPAN | wiiudownloader.MCP_REGION_USA,
-		logger:        logger,
+		window:         win,
+		titles:         entries,
+		searchEntry:    searchEntry,
+		currentRegion:  wiiudownloader.MCP_REGION_EUROPE | wiiudownloader.MCP_REGION_JAPAN | wiiudownloader.MCP_REGION_USA,
+		logger:         logger,
+		lastSearchText: "",
 	}
 
 	searchEntry.Connect("changed", mainWindow.onSearchEntryChanged)
@@ -354,10 +356,12 @@ func (mw *MainWindow) onRegionChange(button *gtk.CheckButton, region uint8) {
 		mw.currentRegion = region ^ mw.currentRegion
 	}
 	mw.updateTitles(mw.titles)
+	mw.filterTitles(mw.lastSearchText)
 }
 
 func (mw *MainWindow) onSearchEntryChanged() {
 	text, _ := mw.searchEntry.GetText()
+	mw.lastSearchText = text
 	mw.filterTitles(text)
 }
 
@@ -389,9 +393,14 @@ func (mw *MainWindow) filterTitles(filterText string) {
 }
 
 func (mw *MainWindow) onCategoryToggled(button *gtk.ToggleButton) {
-	category, _ := button.GetLabel()
+	category, err := button.GetLabel()
+	if err != nil {
+		mw.logger.Fatal("Unable to get label:", err)
+		return
+	}
 	mw.titles = wiiudownloader.GetTitleEntries(wiiudownloader.GetCategoryFromFormattedCategory(category))
 	mw.updateTitles(mw.titles)
+	mw.filterTitles(mw.lastSearchText)
 	for _, catButton := range mw.categoryButtons {
 		catButton.SetActive(false)
 	}

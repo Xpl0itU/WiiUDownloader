@@ -13,10 +13,10 @@ import (
 
 const (
 	IN_QUEUE_COLUMN = iota
-	NAME_COLUMN
 	KIND_COLUMN
 	TITLE_ID_COLUMN
 	REGION_COLUMN
+	NAME_COLUMN
 )
 
 type MainWindow struct {
@@ -78,8 +78,8 @@ func (mw *MainWindow) updateTitles(titles []wiiudownloader.TitleEntry) {
 		}
 		iter := store.Append()
 		err = store.Set(iter,
-			[]int{IN_QUEUE_COLUMN, NAME_COLUMN, KIND_COLUMN, TITLE_ID_COLUMN, REGION_COLUMN},
-			[]interface{}{mw.isTitleInQueue(entry), entry.Name, wiiudownloader.GetFormattedKind(entry.TitleID), fmt.Sprintf("%016x", entry.TitleID), wiiudownloader.GetFormattedRegion(entry.Region)},
+			[]int{IN_QUEUE_COLUMN, KIND_COLUMN, TITLE_ID_COLUMN, REGION_COLUMN, NAME_COLUMN},
+			[]interface{}{mw.isTitleInQueue(entry), wiiudownloader.GetFormattedKind(entry.TitleID), fmt.Sprintf("%016x", entry.TitleID), wiiudownloader.GetFormattedRegion(entry.Region), entry.Name},
 		)
 		if err != nil {
 			mw.logger.Fatal("Unable to set values:", err)
@@ -100,8 +100,8 @@ func (mw *MainWindow) ShowAll() {
 		}
 		iter := store.Append()
 		err = store.Set(iter,
-			[]int{IN_QUEUE_COLUMN, NAME_COLUMN, KIND_COLUMN, TITLE_ID_COLUMN, REGION_COLUMN},
-			[]interface{}{mw.isTitleInQueue(entry), entry.Name, wiiudownloader.GetFormattedKind(entry.TitleID), fmt.Sprintf("%016x", entry.TitleID), wiiudownloader.GetFormattedRegion(entry.Region)},
+			[]int{IN_QUEUE_COLUMN, KIND_COLUMN, TITLE_ID_COLUMN, REGION_COLUMN, NAME_COLUMN},
+			[]interface{}{mw.isTitleInQueue(entry), wiiudownloader.GetFormattedKind(entry.TitleID), fmt.Sprintf("%016x", entry.TitleID), wiiudownloader.GetFormattedRegion(entry.Region), entry.Name},
 		)
 		if err != nil {
 			mw.logger.Fatal("Unable to set values:", err)
@@ -135,16 +135,6 @@ func (mw *MainWindow) ShowAll() {
 	if err != nil {
 		mw.logger.Fatal("Unable to create cell renderer:", err)
 	}
-	column, err = gtk.TreeViewColumnNewWithAttribute("Name", renderer, "text", NAME_COLUMN)
-	if err != nil {
-		mw.logger.Fatal("Unable to create tree view column:", err)
-	}
-	mw.treeView.AppendColumn(column)
-
-	renderer, err = gtk.CellRendererTextNew()
-	if err != nil {
-		mw.logger.Fatal("Unable to create cell renderer:", err)
-	}
 	column, err = gtk.TreeViewColumnNewWithAttribute("Kind", renderer, "text", KIND_COLUMN)
 	if err != nil {
 		mw.logger.Fatal("Unable to create tree view column:", err)
@@ -162,6 +152,16 @@ func (mw *MainWindow) ShowAll() {
 	mw.treeView.AppendColumn(column)
 
 	column, err = gtk.TreeViewColumnNewWithAttribute("Region", renderer, "text", REGION_COLUMN)
+	if err != nil {
+		mw.logger.Fatal("Unable to create tree view column:", err)
+	}
+	mw.treeView.AppendColumn(column)
+
+	renderer, err = gtk.CellRendererTextNew()
+	if err != nil {
+		mw.logger.Fatal("Unable to create cell renderer:", err)
+	}
+	column, err = gtk.TreeViewColumnNewWithAttribute("Name", renderer, "text", NAME_COLUMN)
 	if err != nil {
 		mw.logger.Fatal("Unable to create tree view column:", err)
 	}
@@ -377,9 +377,9 @@ func (mw *MainWindow) filterTitles(filterText string) {
 				continue
 			}
 			iter := storeRef.Append()
-			err := storeRef.Set(iter,
-				[]int{NAME_COLUMN, KIND_COLUMN, TITLE_ID_COLUMN, REGION_COLUMN},
-				[]interface{}{entry.Name, wiiudownloader.GetFormattedKind(entry.TitleID), fmt.Sprintf("%016x", entry.TitleID), wiiudownloader.GetFormattedRegion(entry.Region)},
+			err = storeRef.Set(iter,
+				[]int{IN_QUEUE_COLUMN, KIND_COLUMN, TITLE_ID_COLUMN, REGION_COLUMN, NAME_COLUMN},
+				[]interface{}{mw.isTitleInQueue(entry), wiiudownloader.GetFormattedKind(entry.TitleID), fmt.Sprintf("%016x", entry.TitleID), wiiudownloader.GetFormattedRegion(entry.Region), entry.Name},
 			)
 			if err != nil {
 				mw.logger.Fatal("Unable to set values:", err)

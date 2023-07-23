@@ -601,11 +601,13 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string) error {
 	if len(mw.titleQueue) == 0 {
 		return nil
 	}
-	queueCancelled := false
-	errorHappened := false
-	var wg sync.WaitGroup
-	ch := make(chan error, 1)
 
+	queueStatusChan := make(chan bool, 1)
+	errorChan := make(chan error, 1)
+
+	var wg sync.WaitGroup
+
+queueProcessingLoop:
 	for _, title := range mw.titleQueue {
 		wg.Add(1)
 
@@ -615,26 +617,36 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string) error {
 			tidStr := fmt.Sprintf("%016x", title.TitleID)
 			titlePath := fmt.Sprintf("%s/%s [%s] [%s]", selectedPath, normalizeFilename(title.Name), wiiudownloader.GetFormattedKind(title.TitleID), tidStr)
 			if err := wiiudownloader.DownloadTitle(tidStr, titlePath, mw.decryptContents, progressWindow, mw.getDeleteEncryptedContents(), mw.logger); err != nil {
-				queueCancelled = true
-				errorHappened = true
-				ch <- err
+				errorChan <- err
+				return
 			}
-			mw.removeFromQueue(tidStr)
+
+			queueStatusChan <- true
 		}(title, selectedPath, &mw.progressWindow)
 
-		if queueCancelled || errorHappened {
-			break
-		}
+		select {
+		case err := <-errorChan:
+			queueStatusChan <- false
+			wg.Wait()
+			mw.titleQueue = []wiiudownloader.TitleEntry{}
+			mw.progressWindow.Window.Close()
+			mw.updateTitlesInQueue()
+			mw.onSelectionChanged()
+			return err
 
-		wg.Wait()
+		case queueStatus := <-queueStatusChan:
+			if !queueStatus {
+				wg.Wait()
+				break queueProcessingLoop
+			}
+		}
 	}
+
 	mw.titleQueue = []wiiudownloader.TitleEntry{} // Clear the queue
 	mw.progressWindow.Window.Close()
 	mw.updateTitlesInQueue()
 	mw.onSelectionChanged()
-	if errorHappened {
-		return <-ch
-	}
+
 	return nil
 }
 

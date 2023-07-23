@@ -632,6 +632,8 @@ queueProcessingLoop:
 			mw.progressWindow.Window.Close()
 			mw.updateTitlesInQueue()
 			mw.onSelectionChanged()
+			close(queueStatusChan)
+			close(errorChan)
 			return err
 
 		case queueStatus := <-queueStatusChan:
@@ -646,6 +648,9 @@ queueProcessingLoop:
 	mw.progressWindow.Window.Close()
 	mw.updateTitlesInQueue()
 	mw.onSelectionChanged()
+
+	close(queueStatusChan)
+	close(errorChan)
 
 	return nil
 }

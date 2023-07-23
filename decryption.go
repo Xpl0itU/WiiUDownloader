@@ -7,51 +7,62 @@ package wiiudownloader
 #cgo LDFLAGS: -lcdecrypt
 #include <cdecrypt.h>
 #include <ctype.h>
+#include <stdlib.h>
+
+// Declare a separate C function that calls the Go function progressCallback
+extern void callProgressCallback(int progress);
 */
 import "C"
 import (
 	"fmt"
-	"sync"
-	"time"
 	"unsafe"
 )
 
-var (
-	wg              sync.WaitGroup
-	decryptionDone  = false
-	decryptionError = false
-)
+//export callProgressCallback
+func callProgressCallback(progress C.int) {
+	progressChan <- int(progress)
+}
+
+var progressChan = make(chan int)
 
 func DecryptContents(path string, progress *ProgressWindow, deleteEncryptedContents bool) error {
-	wg.Add(1)
-	progressInt := 1
-	go runDecryption(path, &progressInt, deleteEncryptedContents)
+	errorChan := make(chan error)
+	defer close(errorChan)
+
+	go runDecryption(path, errorChan, deleteEncryptedContents)
+
 	progress.bar.SetText("Decrypting...")
-	for !decryptionDone {
+
+	for progressInt := range progressChan {
 		progress.bar.SetFraction(float64(progressInt) / 100)
-		time.Sleep(500 * time.Millisecond)
 	}
 
-	wg.Wait()
-
-	if decryptionError {
-		decryptionDone = false
-		decryptionError = false
-		return fmt.Errorf("decryption failed")
+	if err := <-errorChan; err != nil {
+		return err
 	}
+
 	return nil
 }
 
-func runDecryption(path string, progress *int, deleteEncryptedContents bool) {
-	defer wg.Done()
+func runDecryption(path string, errorChan chan<- error, deleteEncryptedContents bool) {
 	argv := make([]*C.char, 2)
 	argv[0] = C.CString("WiiUDownloader")
 	argv[1] = C.CString(path)
-	if int(C.cdecrypt_main(2, (**C.char)(unsafe.Pointer(&argv[0])), (*C.int)(unsafe.Pointer(progress)))) != 0 {
-		decryptionError = true
+	defer C.free(unsafe.Pointer(argv[0]))
+	defer C.free(unsafe.Pointer(argv[1]))
+
+	// Register the C callback function with C
+	C.set_progress_callback(C.ProgressCallback(C.callProgressCallback))
+
+	if int(C.cdecrypt_main(2, (**C.char)(unsafe.Pointer(&argv[0])))) != 0 {
+		errorChan <- fmt.Errorf("decryption failed")
+		return
 	}
+
 	if deleteEncryptedContents {
 		doDeleteEncryptedContents(path)
 	}
-	decryptionDone = true
+
+	close(progressChan) // Indicate the completion of the decryption process
+	errorChan <- nil
 }

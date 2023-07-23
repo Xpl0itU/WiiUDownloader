@@ -148,6 +148,18 @@ struct FEntry {
   uint16_t ContentID;
 };
 
+ProgressCallback progressCallback = NULL;
+
+void set_progress_callback(ProgressCallback cb) {
+    progressCallback = cb;
+}
+
+void report_progress(int progress) {
+    if (progressCallback != NULL) {
+        progressCallback(progress);
+    }
+}
+
 static bool file_dump(const char *path, void *buf, size_t len) {
   assert(buf != NULL);
   assert(len != 0);
@@ -346,7 +358,7 @@ out:
 }
 #undef BLOCK_SIZE
 
-int cdecrypt_main(int argc, char **argv, int *progress) {
+int cdecrypt_main(int argc, char **argv) {
   int r = EXIT_FAILURE;
   char str[PATH_MAX], *tmd_path = NULL, *tik_path = NULL;
   FILE *src = NULL;
@@ -526,7 +538,7 @@ int cdecrypt_main(int argc, char **argv, int *progress) {
   uint32_t level = 0;
 
   for (uint32_t i = 1; i < entries; i++) {
-    *progress = (i * 100) / entries;
+    report_progress((i * 100) / entries);
     if (level > 0) {
       while ((level >= 1) && (l_entry[level - 1] == i))
         level--;

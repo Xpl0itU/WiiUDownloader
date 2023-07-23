@@ -173,11 +173,23 @@ func (mw *MainWindow) ShowAll() {
 	if err != nil {
 		mw.logger.Fatal("Unable to create box:", err)
 	}
-	menuBar, _ := gtk.MenuBarNew()
-	toolsSubMenu, _ := gtk.MenuNew()
+	menuBar, err := gtk.MenuBarNew()
+	if err != nil {
+		mw.logger.Fatal("Unable to create menu bar:", err)
+	}
+	toolsSubMenu, err := gtk.MenuNew()
+	if err != nil {
+		mw.logger.Fatal("Unable to create menu:", err)
+	}
 
-	toolsMenu, _ := gtk.MenuItemNewWithLabel("Tools")
-	decryptContentsMenuItem, _ := gtk.MenuItemNewWithLabel("Decrypt contents")
+	toolsMenu, err := gtk.MenuItemNewWithLabel("Tools")
+	if err != nil {
+		mw.logger.Fatal("Unable to create menu item:", err)
+	}
+	decryptContentsMenuItem, err := gtk.MenuItemNewWithLabel("Decrypt contents")
+	if err != nil {
+		mw.logger.Fatal("Unable to create menu item:", err)
+	}
 	decryptContentsMenuItem.Connect("activate", func() {
 		mw.progressWindow, err = wiiudownloader.CreateProgressWindow(mw.window)
 		if err != nil {
@@ -219,11 +231,13 @@ func (mw *MainWindow) ShowAll() {
 		button, err := gtk.ToggleButtonNewWithLabel(cat)
 		if err != nil {
 			mw.logger.Fatal("Unable to create toggle button:", err)
-			continue
 		}
 		tophBox.PackStart(button, false, false, 0)
 		button.Connect("pressed", mw.onCategoryToggled)
-		buttonLabel, _ := button.GetLabel()
+		buttonLabel, err := button.GetLabel()
+		if err != nil {
+			mw.logger.Fatal("Unable to get label:", err)
+		}
 		if buttonLabel == "Game" {
 			button.SetActive(true)
 		}
@@ -301,7 +315,10 @@ func (mw *MainWindow) ShowAll() {
 	bottomhBox.PackStart(mw.addToQueueButton, false, false, 0)
 	bottomhBox.PackStart(downloadQueueButton, false, false, 0)
 
-	checkboxvBox, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
+	checkboxvBox, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
+	if err != nil {
+		mw.logger.Fatal("Unable to create box:", err)
+	}
 	checkboxvBox.PackStart(decryptContentsCheckbox, false, false, 0)
 	checkboxvBox.PackEnd(mw.deleteEncryptedContentsCheckbox, false, false, 0)
 
@@ -360,7 +377,10 @@ func (mw *MainWindow) onRegionChange(button *gtk.CheckButton, region uint8) {
 }
 
 func (mw *MainWindow) onSearchEntryChanged() {
-	text, _ := mw.searchEntry.GetText()
+	text, err := mw.searchEntry.GetText()
+	if err != nil {
+		mw.logger.Fatal("Unable to get text:", err)
+	}
 	mw.lastSearchText = text
 	mw.filterTitles(text)
 }
@@ -396,7 +416,6 @@ func (mw *MainWindow) onCategoryToggled(button *gtk.ToggleButton) {
 	category, err := button.GetLabel()
 	if err != nil {
 		mw.logger.Fatal("Unable to get label:", err)
-		return
 	}
 	mw.titles = wiiudownloader.GetTitleEntries(wiiudownloader.GetCategoryFromFormattedCategory(category))
 	mw.updateTitles(mw.titles)
@@ -419,36 +438,57 @@ func (mw *MainWindow) isSelectionInQueue() bool {
 	if err != nil {
 		mw.logger.Fatal("Unable to get selection:", err)
 	}
-	treeModel, err := mw.treeView.GetModel()
+	model, err := mw.treeView.GetModel()
 	if err != nil {
 		mw.logger.Fatal("Unable to get model:", err)
 	}
-	allTitlesInQueue := true
+	treeModel := model.ToTreeModel()
+	if treeModel == nil {
+		return false
+	}
+
 	pathlist := selection.GetSelectedRows(treeModel)
+	if pathlist == nil {
+		return false
+	}
+
+	allTitlesInQueue := true
+
 	for l := pathlist; l != nil; l = l.Next() {
-		path, ok := l.Data().(*gtk.TreePath)
-		if !ok {
+		if l == nil {
 			continue
 		}
-		row, err := treeModel.ToTreeModel().GetIter(path)
+		lData := l.Data()
+		if lData == nil {
+			continue
+		}
+		path, ok := lData.(*gtk.TreePath)
+		if !ok || path == nil || path.GetDepth() <= 0 {
+			continue
+		}
+
+		row, err := treeModel.GetIter(path)
 		if err != nil {
 			continue
 		}
-		if row != nil {
-			inQueue, err := treeModel.ToTreeModel().GetValue(row, IN_QUEUE_COLUMN)
-			if err != nil {
-				continue
-			}
-			isInQueue, err := inQueue.GoValue()
-			if err != nil {
-				continue
-			}
-			if !isInQueue.(bool) {
-				allTitlesInQueue = false
-			}
-			inQueue.Unset()
+
+		inQueue, err := treeModel.GetValue(row, IN_QUEUE_COLUMN)
+		if err != nil {
+			continue
 		}
+		isInQueue, err := inQueue.GoValue()
+		if err != nil {
+			continue
+		}
+
+		if !isInQueue.(bool) {
+			allTitlesInQueue = false
+			break
+		}
+
+		inQueue.Unset()
 	}
+
 	return allTitlesInQueue
 }
 
@@ -510,67 +550,102 @@ func (mw *MainWindow) onAddToQueueClicked() {
 	if err != nil {
 		mw.logger.Fatal("Unable to get selection:", err)
 	}
-	treeModel, err := mw.treeView.GetModel()
+	model, err := mw.treeView.GetModel()
 	if err != nil {
 		mw.logger.Fatal("Unable to get model:", err)
 	}
+	treeModel := model.ToTreeModel()
+	if treeModel == nil {
+		return
+	}
 	addToQueue := !mw.isSelectionInQueue()
 	pathlist := selection.GetSelectedRows(treeModel)
+	if pathlist == nil {
+		return
+	}
+
+	var toUpdateRows []*gtk.TreeIter
+	var toUpdateInQueueVals []bool
+
 	for l := pathlist; l != nil; l = l.Next() {
-		path, ok := l.Data().(*gtk.TreePath)
-		if !ok {
+		if l == nil {
 			continue
 		}
-		row, err := treeModel.ToTreeModel().GetIter(path)
+		treePath := l.Data()
+		if treePath == nil {
+			continue
+		}
+		path, ok := treePath.(*gtk.TreePath)
+		if !ok || path == nil || path.GetDepth() <= 0 {
+			continue
+		}
+		row, err := treeModel.GetIter(path)
 		if err != nil {
 			continue
 		}
-		if row != nil {
-			inQueue, err := treeModel.ToTreeModel().GetValue(row, IN_QUEUE_COLUMN)
-			if err != nil {
-				continue
-			}
-			isInQueue, err := inQueue.GoValue()
-			if err != nil {
-				continue
-			}
-			if addToQueue == isInQueue.(bool) {
-				continue
-			}
-			inQueue.SetBool(addToQueue)
-			tid, err := treeModel.ToTreeModel().GetValue(row, TITLE_ID_COLUMN)
-			if err != nil {
-				continue
-			}
-			tidStr, err := tid.GetString()
-			if err != nil {
-				continue
-			}
-			if addToQueue {
-				name, err := treeModel.ToTreeModel().GetValue(row, NAME_COLUMN)
-				if err != nil {
-					continue
-				}
-				nameStr, err := name.GetString()
-				if err != nil {
-					continue
-				}
-				mw.addToQueue(tidStr, nameStr)
-				mw.addToQueueButton.SetLabel("Remove from queue")
-				name.Unset()
-			} else {
-				mw.removeFromQueue(tidStr)
-				mw.addToQueueButton.SetLabel("Add to queue")
-			}
-			inQueue.SetBool(addToQueue)
-			queueModel, err := mw.treeView.GetModel()
-			if err != nil {
-				continue
-			}
-			queueModel.(*gtk.ListStore).SetValue(row, IN_QUEUE_COLUMN, addToQueue)
-			inQueue.Unset()
-			tid.Unset()
+
+		inQueue, err := treeModel.GetValue(row, IN_QUEUE_COLUMN)
+		if err != nil {
+			continue
 		}
+		isInQueue, err := inQueue.GoValue()
+		if err != nil {
+			continue
+		}
+
+		if addToQueue != isInQueue.(bool) {
+			toUpdateRows = append(toUpdateRows, row)
+			toUpdateInQueueVals = append(toUpdateInQueueVals, addToQueue)
+		}
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			mw.logger.Fatal("Error updating model:", r)
+		}
+	}()
+
+	for i, row := range toUpdateRows {
+		inQueueVal := toUpdateInQueueVals[i]
+		inQueue, err := treeModel.GetValue(row, IN_QUEUE_COLUMN)
+		if err != nil {
+			continue
+		}
+		inQueue.SetBool(inQueueVal)
+
+		tid, err := treeModel.GetValue(row, TITLE_ID_COLUMN)
+		if err != nil {
+			continue
+		}
+		tidStr, err := tid.GetString()
+		if err != nil {
+			continue
+		}
+
+		if inQueueVal {
+			name, err := treeModel.GetValue(row, NAME_COLUMN)
+			if err != nil {
+				continue
+			}
+			nameStr, err := name.GetString()
+			if err != nil {
+				continue
+			}
+			mw.addToQueue(tidStr, nameStr)
+			mw.addToQueueButton.SetLabel("Remove from queue")
+			name.Unset()
+		} else {
+			mw.removeFromQueue(tidStr)
+			mw.addToQueueButton.SetLabel("Add to queue")
+		}
+
+		queueModel, err := mw.treeView.GetModel()
+		if err != nil {
+			continue
+		}
+		queueModel.(*gtk.ListStore).SetValue(row, IN_QUEUE_COLUMN, inQueueVal)
+		inQueue.Unset()
+		tid.Unset()
 	}
 }
 
@@ -582,12 +657,21 @@ func (mw *MainWindow) updateTitlesInQueue() {
 
 	storeRef := store.(*gtk.ListStore)
 
-	iter, _ := storeRef.GetIterFirst()
+	iter, ok := storeRef.GetIterFirst()
+	if !ok {
+		mw.logger.Fatal("Unable to get first iter:", err)
+	}
 	for iter != nil {
-		tid, _ := storeRef.GetValue(iter, TITLE_ID_COLUMN)
+		tid, err := storeRef.GetValue(iter, TITLE_ID_COLUMN)
+		if err != nil {
+			continue
+		}
 		if tid != nil {
 			if tidStr, err := tid.GetString(); err == nil {
-				tidNum, _ := strconv.ParseUint(tidStr, 16, 64)
+				tidNum, err := strconv.ParseUint(tidStr, 16, 64)
+				if err != nil {
+					continue
+				}
 				isInQueue := mw.isTitleInQueue(wiiudownloader.TitleEntry{TitleID: tidNum})
 				storeRef.SetValue(iter, IN_QUEUE_COLUMN, isInQueue)
 				tid.Unset()

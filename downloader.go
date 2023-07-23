@@ -223,7 +223,7 @@ func DownloadTitle(titleID string, outputDirectory string, doDecryption bool, pr
 		return err
 	}
 	defer certFile.Close()
-	logger.Info("Certificate saved to ./%v \n", certPath)
+	logger.Info("Certificate saved to %v \n", certPath)
 
 	c, err := aes.NewCipher(commonKey)
 	if err != nil {

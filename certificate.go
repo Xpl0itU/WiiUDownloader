@@ -1,6 +1,7 @@
 package wiiudownloader
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path"
@@ -48,4 +49,27 @@ func getDefaultCert(progressWindow *ProgressWindow, client *grab.Client) ([]byte
 		return cetkData[0x350 : 0x350+0x300], nil
 	}
 	return nil, fmt.Errorf("failed to download OSv10 cetk, length: %d", len(cetkData))
+}
+
+func GenerateCert(tmdData []byte, contentCount uint16, progressWindow *ProgressWindow, client *grab.Client) (bytes.Buffer, error) {
+	cert := bytes.Buffer{}
+
+	cert0, err := getCert(tmdData, 0, contentCount)
+	if err != nil {
+		return bytes.Buffer{}, err
+	}
+	cert.Write(cert0)
+
+	cert1, err := getCert(tmdData, 1, contentCount)
+	if err != nil {
+		return bytes.Buffer{}, err
+	}
+	cert.Write(cert1)
+
+	defaultCert, err := getDefaultCert(progressWindow, client)
+	if err != nil {
+		return bytes.Buffer{}, err
+	}
+	cert.Write(defaultCert)
+	return cert, nil
 }

@@ -1,12 +1,17 @@
 package main
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 
 	wiiudownloader "github.com/Xpl0itU/WiiUDownloader"
+	"github.com/cavaliergopher/grab/v3"
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
 )
@@ -217,6 +222,72 @@ func (mw *MainWindow) ShowAll() {
 		}()
 	})
 	toolsSubMenu.Append(decryptContentsMenuItem)
+
+	generateFakeTicketCert, err := gtk.MenuItemNewWithLabel("Generate fake ticket and cert")
+	if err != nil {
+		mw.logger.Fatal("Unable to create menu item:", err)
+	}
+	generateFakeTicketCert.Connect("activate", func() {
+		dialog, err := gtk.FileChooserNativeDialogNew("Select the game's title.tmd", mw.window, gtk.FILE_CHOOSER_ACTION_OPEN, "Select", "Cancel")
+		if err != nil {
+			mw.logger.Fatal("Unable to create dialog:", err)
+		}
+		tmdFilter, err := gtk.FileFilterNew()
+		if err != nil {
+			return
+		}
+		tmdFilter.AddPattern("*.tmd")
+		dialog.AddFilter(tmdFilter)
+		res := dialog.Run()
+		if res != int(gtk.RESPONSE_ACCEPT) {
+			return
+		}
+
+		tmdPath := dialog.FileChooser.GetFilename()
+		parentDir := filepath.Dir(tmdPath)
+		tmdData, err := os.ReadFile(tmdPath)
+		if err != nil {
+			return
+		}
+
+		var contentCount uint16
+		if err := binary.Read(bytes.NewReader(tmdData[478:480]), binary.BigEndian, &contentCount); err != nil {
+			return
+		}
+
+		var titleVersion uint16
+		if err := binary.Read(bytes.NewReader(tmdData[476:478]), binary.BigEndian, &titleVersion); err != nil {
+			return
+		}
+
+		var titleID uint64
+		if err := binary.Read(bytes.NewReader(tmdData[0x018C:0x0194]), binary.BigEndian, &titleID); err != nil {
+			return
+		}
+
+		titleKey, err := wiiudownloader.GenerateKey(fmt.Sprintf("%016x", titleID))
+		if err != nil {
+			return
+		}
+
+		wiiudownloader.GenerateTicket(filepath.Join(parentDir, "title.tik"), titleID, titleKey, titleVersion)
+
+		cert, err := wiiudownloader.GenerateCert(tmdData, contentCount, &mw.progressWindow, grab.NewClient())
+		if err != nil {
+			return
+		}
+
+		certPath := filepath.Join(parentDir, "title.cert")
+		certFile, err := os.Create(certPath)
+		if err != nil {
+			return
+		}
+		if err := binary.Write(certFile, binary.BigEndian, cert.Bytes()); err != nil {
+			return
+		}
+		defer certFile.Close()
+	})
+	toolsSubMenu.Append(generateFakeTicketCert)
 
 	toolsMenu.SetSubmenu(toolsSubMenu)
 	menuBar.Append(toolsMenu)

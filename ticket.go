@@ -6,7 +6,7 @@ import (
 	"os"
 )
 
-func generateTicket(path string, titleID uint64, titleKey []byte, titleVersion uint16) error {
+func GenerateTicket(path string, titleID uint64, titleKey []byte, titleVersion uint16) error {
 	ticketFile, err := os.Create(path)
 	if err != nil {
 		return err

@@ -175,11 +175,11 @@ func DownloadTitle(titleID string, outputDirectory string, doDecryption bool, pr
 	tikPath := filepath.Join(outputDir, "title.tik")
 	downloadURL = fmt.Sprintf("%s/%s", baseURL, "cetk")
 	if err := downloadFile(progressWindow, client, downloadURL, tikPath, false); err != nil {
-		titleKey, err := generateKey(titleID)
+		titleKey, err := GenerateKey(titleID)
 		if err != nil {
 			return err
 		}
-		if err := generateTicket(tikPath, titleEntry.TitleID, titleKey, titleVersion); err != nil {
+		if err := GenerateTicket(tikPath, titleEntry.TitleID, titleKey, titleVersion); err != nil {
 			return err
 		}
 	}
@@ -194,25 +194,10 @@ func DownloadTitle(titleID string, outputDirectory string, doDecryption bool, pr
 		return err
 	}
 
-	cert := bytes.Buffer{}
-
-	cert0, err := getCert(tmdData, 0, contentCount)
+	cert, err := GenerateCert(tmdData, contentCount, progressWindow, client)
 	if err != nil {
 		return err
 	}
-	cert.Write(cert0)
-
-	cert1, err := getCert(tmdData, 1, contentCount)
-	if err != nil {
-		return err
-	}
-	cert.Write(cert1)
-
-	defaultCert, err := getDefaultCert(progressWindow, client)
-	if err != nil {
-		return err
-	}
-	cert.Write(defaultCert)
 
 	certPath := filepath.Join(outputDir, "title.cert")
 	certFile, err := os.Create(certPath)

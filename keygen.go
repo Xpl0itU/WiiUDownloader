@@ -32,7 +32,7 @@ func encryptAES(data []byte, key []byte, iv []byte) ([]byte, error) {
 	return encrypted, nil
 }
 
-func generateKey(tid string) ([]byte, error) {
+func GenerateKey(tid string) ([]byte, error) {
 	tmp := []byte(tid)
 	for tmp[0] == '0' && tmp[1] == '0' {
 		tmp = tmp[2:]

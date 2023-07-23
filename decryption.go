@@ -23,10 +23,11 @@ func callProgressCallback(progress C.int) {
 	progressChan <- int(progress)
 }
 
-var progressChan = make(chan int)
+var progressChan chan int
 
 func DecryptContents(path string, progress *ProgressWindow, deleteEncryptedContents bool) error {
 	errorChan := make(chan error)
+	progressChan = make(chan int)
 	defer close(errorChan)
 
 	go runDecryption(path, errorChan, deleteEncryptedContents)

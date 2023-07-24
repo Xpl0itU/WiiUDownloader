@@ -535,10 +535,17 @@ func (mw *MainWindow) isSelectionInQueue() bool {
 		return false
 	}
 
-	allTitlesInQueue := true
+	for i := uint(0); i < selectionSelected.Length(); i++ {
+		path, ok := selectionSelected.Nth(i).Data().(*gtk.TreePath)
+		if !ok {
+			continue
+		}
 
-	iter, _ := treeModel.GetIterFirst()
-	for iter != nil {
+		iter, err := treeModel.GetIter(path)
+		if err != nil {
+			continue
+		}
+
 		inQueueVal, err := treeModel.GetValue(iter, IN_QUEUE_COLUMN)
 		if err != nil {
 			continue
@@ -549,16 +556,11 @@ func (mw *MainWindow) isSelectionInQueue() bool {
 		}
 
 		if !isInQueue.(bool) {
-			allTitlesInQueue = false
-			break
-		}
-
-		if !storeRef.IterNext(iter) {
-			break
+			return false
 		}
 	}
 
-	return allTitlesInQueue
+	return true
 }
 
 func (mw *MainWindow) onSelectionChanged() {
@@ -634,7 +636,7 @@ func (mw *MainWindow) onAddToQueueClicked() {
 	addToQueue := !mw.isSelectionInQueue()
 
 	selectionSelected := selection.GetSelectedRows(treeModel)
-	if selectionSelected == nil {
+	if selectionSelected == nil || selectionSelected.Length() == 0 {
 		return
 	}
 
@@ -646,54 +648,58 @@ func (mw *MainWindow) onAddToQueueClicked() {
 
 	iter, _ := treeModel.GetIterFirst()
 	for iter != nil {
-		inQueueVal, err := treeModel.GetValue(iter, IN_QUEUE_COLUMN)
-		if err != nil {
-			continue
-		}
-		isInQueue, err := inQueueVal.GoValue()
-		if err != nil {
-			continue
-		}
-
-		if addToQueue != isInQueue.(bool) {
-			inQueue, err := treeModel.GetValue(iter, IN_QUEUE_COLUMN)
+		isSelected := selection.IterIsSelected(iter)
+		if isSelected {
+			inQueueVal, err := treeModel.GetValue(iter, IN_QUEUE_COLUMN)
 			if err != nil {
 				continue
 			}
-			inQueue.SetBool(addToQueue)
-			tid, err := treeModel.GetValue(iter, TITLE_ID_COLUMN)
-			if err != nil {
-				continue
-			}
-			tidStr, err := tid.GetString()
+			isInQueue, err := inQueueVal.GoValue()
 			if err != nil {
 				continue
 			}
 
-			if addToQueue {
-				name, err := treeModel.GetValue(iter, NAME_COLUMN)
+			if addToQueue != isInQueue.(bool) {
+				inQueueVal.SetBool(addToQueue)
+
+				tid, err := treeModel.GetValue(iter, TITLE_ID_COLUMN)
 				if err != nil {
 					continue
 				}
-				nameStr, err := name.GetString()
+				tidStr, err := tid.GetString()
 				if err != nil {
 					continue
 				}
-				mw.addToQueue(tidStr, nameStr)
-				mw.addToQueueButton.SetLabel("Remove from queue")
-				name.Unset()
-			} else {
-				mw.removeFromQueue(tidStr)
-				mw.addToQueueButton.SetLabel("Add to queue")
-			}
 
-			storeRef.SetValue(iter, IN_QUEUE_COLUMN, addToQueue)
-			tid.Unset()
+				if addToQueue {
+					name, err := treeModel.GetValue(iter, NAME_COLUMN)
+					if err != nil {
+						continue
+					}
+					nameStr, err := name.GetString()
+					if err != nil {
+						continue
+					}
+					mw.addToQueue(tidStr, nameStr)
+					name.Unset()
+				} else {
+					mw.removeFromQueue(tidStr)
+				}
+
+				storeRef.SetValue(iter, IN_QUEUE_COLUMN, addToQueue)
+				tid.Unset()
+			}
 		}
 
 		if !storeRef.IterNext(iter) {
 			break
 		}
+	}
+
+	if addToQueue {
+		mw.addToQueueButton.SetLabel("Remove from queue")
+	} else {
+		mw.addToQueueButton.SetLabel("Add to queue")
 	}
 }
 

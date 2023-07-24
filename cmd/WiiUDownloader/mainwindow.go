@@ -356,6 +356,9 @@ func (mw *MainWindow) ShowAll() {
 
 	mw.addToQueueButton.Connect("clicked", mw.onAddToQueueClicked)
 	downloadQueueButton.Connect("clicked", func() {
+		if len(mw.titleQueue) == 0 {
+			return
+		}
 		mw.progressWindow, err = wiiudownloader.CreateProgressWindow(mw.window)
 		if err != nil {
 			return

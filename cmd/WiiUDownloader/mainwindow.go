@@ -206,7 +206,9 @@ func (mw *MainWindow) ShowAll() {
 		}
 		res := dialog.Run()
 		if res != int(gtk.RESPONSE_ACCEPT) {
-			mw.progressWindow.Window.Close()
+			if mw.progressWindow.Window.IsVisible() {
+				mw.progressWindow.Window.Close()
+			}
 			return
 		}
 
@@ -369,7 +371,9 @@ func (mw *MainWindow) ShowAll() {
 		}
 		res := dialog.Run()
 		if res != int(gtk.RESPONSE_ACCEPT) {
-			mw.progressWindow.Window.Close()
+			if mw.progressWindow.Window.IsVisible() {
+				mw.progressWindow.Window.Close()
+			}
 			return
 		}
 
@@ -503,7 +507,9 @@ func (mw *MainWindow) onCategoryToggled(button *gtk.ToggleButton) {
 func (mw *MainWindow) onDecryptContentsMenuItemClicked(selectedPath string) error {
 	err := wiiudownloader.DecryptContents(selectedPath, &mw.progressWindow, false)
 
-	mw.progressWindow.Window.Close()
+	if mw.progressWindow.Window.IsVisible() {
+		mw.progressWindow.Window.Close()
+	}
 	return err
 }
 
@@ -726,7 +732,9 @@ func (mw *MainWindow) updateTitlesInQueue() {
 }
 
 func (mw *MainWindow) showError(err error) {
-	mw.progressWindow.Window.Close()
+	if mw.progressWindow.Window.IsVisible() {
+		mw.progressWindow.Window.Close()
+	}
 	errorDialog := gtk.MessageDialogNew(mw.window, gtk.DIALOG_MODAL, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, err.Error())
 	errorDialog.Run()
 	errorDialog.Destroy()
@@ -764,7 +772,9 @@ queueProcessingLoop:
 			queueStatusChan <- false
 			wg.Wait()
 			mw.titleQueue = []wiiudownloader.TitleEntry{}
-			mw.progressWindow.Window.Close()
+			if mw.progressWindow.Window.IsVisible() {
+				mw.progressWindow.Window.Close()
+			}
 			mw.updateTitlesInQueue()
 			mw.onSelectionChanged()
 			close(queueStatusChan)
@@ -780,7 +790,9 @@ queueProcessingLoop:
 	}
 
 	mw.titleQueue = []wiiudownloader.TitleEntry{} // Clear the queue
-	mw.progressWindow.Window.Close()
+	if mw.progressWindow.Window.IsVisible() {
+		mw.progressWindow.Window.Close()
+	}
 	mw.updateTitlesInQueue()
 	mw.onSelectionChanged()
 

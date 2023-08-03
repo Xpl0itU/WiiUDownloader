@@ -25,7 +25,7 @@ func isDarkMode() bool {
 	case "linux":
 		cmd := exec.Command("gsettings", "get", "org.gnome.desktop.interface", "gtk-theme")
 		output, err := cmd.Output()
-		if err == nil && strings.TrimSpace(string(output)) == "'Adwaita-dark'" {
+		if err == nil && strings.Contains(string(output), "-dark") {
 			return true
 		}
 	}

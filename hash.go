@@ -6,6 +6,7 @@ import (
 	"crypto/sha1"
 	"fmt"
 	"os"
+	"path/filepath"
 	"reflect"
 )
 
@@ -13,11 +14,11 @@ var commonKey = []byte{0xD7, 0xB0, 0x04, 0x02, 0x65, 0x9B, 0xA2, 0xAB, 0xD2, 0xC
 
 func checkContentHashes(path string, content contentInfo, cipherHashTree *cipher.Block) error {
 	cHashTree := *cipherHashTree
-	h3Data, err := os.ReadFile(fmt.Sprintf("%s/%s.h3", path, content.ID))
+	h3Data, err := os.ReadFile(filepath.Join(path, fmt.Sprintf("%s.h3", content.ID)))
 	if err != nil {
 		return fmt.Errorf("failed to read H3 hash tree file: %w", err)
 	}
-	encryptedFile, err := os.Open(fmt.Sprintf("%s/%s.app", path, content.ID))
+	encryptedFile, err := os.Open(filepath.Join(path, fmt.Sprintf("%s.app", content.ID)))
 	if err != nil {
 		return fmt.Errorf("failed to open encrypted file: %w", err)
 	}

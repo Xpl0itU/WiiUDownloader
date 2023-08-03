@@ -24,7 +24,7 @@ func main() {
 		}
 
 		bundlePath := filepath.Join(filepath.Dir(filepath.Dir(execPath)))
-		filePath := filepath.Join(bundlePath, "Resources/lib/share/glib-schemas")
+		filePath := filepath.Join(bundlePath, "Resources", "lib", "share", "glib-schemas")
 		if _, err := os.Stat(filePath); os.IsNotExist(err) {
 			logger.Warning("glib-schemas not found")
 		} else {

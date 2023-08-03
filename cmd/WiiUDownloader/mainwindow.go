@@ -764,7 +764,7 @@ queueProcessingLoop:
 			defer wg.Done()
 
 			tidStr := fmt.Sprintf("%016x", title.TitleID)
-			titlePath := fmt.Sprintf("%s/%s [%s] [%s]", selectedPath, normalizeFilename(title.Name), wiiudownloader.GetFormattedKind(title.TitleID), tidStr)
+			titlePath := filepath.Join(selectedPath, fmt.Sprintf("%s [%s] [%s]", normalizeFilename(title.Name), wiiudownloader.GetFormattedKind(title.TitleID), tidStr))
 			if err := wiiudownloader.DownloadTitle(tidStr, titlePath, mw.decryptContents, progressWindow, mw.getDeleteEncryptedContents(), mw.logger); err != nil {
 				errorChan <- err
 				return

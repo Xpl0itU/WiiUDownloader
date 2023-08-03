@@ -43,6 +43,12 @@ type MainWindow struct {
 func NewMainWindow(entries []wiiudownloader.TitleEntry, logger *wiiudownloader.Logger) *MainWindow {
 	gtk.Init(nil)
 
+	gSettings, err := gtk.SettingsGetDefault()
+	if err != nil {
+		logger.Error(err.Error())
+	}
+	gSettings.SetProperty("gtk-application-prefer-dark-theme", isDarkMode())
+
 	win, err := gtk.WindowNew(gtk.WINDOW_TOPLEVEL)
 	if err != nil {
 		logger.Fatal("Unable to create window:", err)

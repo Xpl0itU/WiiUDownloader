@@ -21,7 +21,7 @@ jobs:
       - name: Build
         run: |
           python3 grabTitles.py
-          go build cmd/WiiUDownloader/*.go
+          go build cmd/WiiUDownloader/main.go cmd/WiiUDownloader/darkMode.go cmd/WiiUDownloader/mainwindow.go cmd/WiiUDownloader/utils.go
       - name: Package
         run: |
           python3 data/create_bundle.py

@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	wiiudownloader "github.com/Xpl0itU/WiiUDownloader"
+	"github.com/Xpl0itU/dialog"
 	"github.com/cavaliergopher/grab/v3"
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
@@ -206,19 +207,14 @@ func (mw *MainWindow) ShowAll() {
 		if err != nil {
 			return
 		}
-		dialog, err := gtk.FileChooserNativeDialogNew("Select the path to decrypt", mw.window, gtk.FILE_CHOOSER_ACTION_SELECT_FOLDER, "Select", "Cancel")
+		selectedPath, err := dialog.Directory().Title("Select a path to save the games to").Browse()
 		if err != nil {
-			mw.logger.Fatal("Unable to create dialog:", err)
-		}
-		res := dialog.Run()
-		if res != int(gtk.RESPONSE_ACCEPT) {
 			if mw.progressWindow.Window.IsVisible() {
 				mw.progressWindow.Window.Close()
 			}
 			return
 		}
 
-		selectedPath := dialog.FileChooser.GetFilename()
 		mw.progressWindow.Window.ShowAll()
 		go func() {
 			err := mw.onDecryptContentsMenuItemClicked(selectedPath)

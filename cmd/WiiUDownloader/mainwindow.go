@@ -367,19 +367,13 @@ func (mw *MainWindow) ShowAll() {
 		if err != nil {
 			return
 		}
-		dialog, err := gtk.FileChooserNativeDialogNew("Select a path to save the games to", mw.window, gtk.FILE_CHOOSER_ACTION_SELECT_FOLDER, "Select", "Cancel")
+		selectedPath, err := dialog.Directory().Title("Select a path to save the games to").Browse()
 		if err != nil {
-			mw.logger.Fatal("Unable to create dialog:", err)
-		}
-		res := dialog.Run()
-		if res != int(gtk.RESPONSE_ACCEPT) {
 			if mw.progressWindow.Window.IsVisible() {
 				mw.progressWindow.Window.Close()
 			}
 			return
 		}
-
-		selectedPath := dialog.FileChooser.GetFilename()
 		mw.progressWindow.Window.ShowAll()
 
 		go func() {

@@ -207,7 +207,7 @@ func (mw *MainWindow) ShowAll() {
 		if err != nil {
 			return
 		}
-		selectedPath, err := dialog.Directory().Title("Select a path to save the games to").Browse()
+		selectedPath, err := dialog.Directory().Title("Select the game path").Browse()
 		if err != nil {
 			if mw.progressWindow.Window.IsVisible() {
 				mw.progressWindow.Window.Close()
@@ -232,22 +232,10 @@ func (mw *MainWindow) ShowAll() {
 		mw.logger.Fatal("Unable to create menu item:", err)
 	}
 	generateFakeTicketCert.Connect("activate", func() {
-		dialog, err := gtk.FileChooserNativeDialogNew("Select the game's title.tmd", mw.window, gtk.FILE_CHOOSER_ACTION_OPEN, "Select", "Cancel")
-		if err != nil {
-			mw.logger.Fatal("Unable to create dialog:", err)
-		}
-		tmdFilter, err := gtk.FileFilterNew()
+		tmdPath, err := dialog.File().Title("Select the game's tmd file").Filter("tmd", "tmd").Load()
 		if err != nil {
 			return
 		}
-		tmdFilter.AddPattern("*.tmd")
-		dialog.AddFilter(tmdFilter)
-		res := dialog.Run()
-		if res != int(gtk.RESPONSE_ACCEPT) {
-			return
-		}
-
-		tmdPath := dialog.FileChooser.GetFilename()
 		parentDir := filepath.Dir(tmdPath)
 		tmdData, err := os.ReadFile(tmdPath)
 		if err != nil {

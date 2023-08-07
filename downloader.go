@@ -21,6 +21,7 @@ import (
 const (
 	maxRetries = 5
 	retryDelay = 5 * time.Second
+	bufferSize = 1048576
 )
 
 type ProgressWindow struct {
@@ -94,6 +95,7 @@ func downloadFile(progressWindow *ProgressWindow, client *grab.Client, downloadU
 		if err != nil {
 			return err
 		}
+		req.BufferSize = bufferSize
 
 		resp := client.Do(req)
 		progressWindow.bar.SetFraction(resp.Progress())
@@ -112,15 +114,18 @@ func downloadFile(progressWindow *ProgressWindow, client *grab.Client, downloadU
 				glib.IdleAdd(func() {
 					progressWindow.bar.SetFraction(resp.Progress())
 					progressWindow.bar.SetText(fmt.Sprintf("Downloading %s (%s/%s) (%s/s)", filePath, humanize.Bytes(uint64(resp.BytesComplete())), humanize.Bytes(uint64(resp.Size())), humanize.Bytes(uint64(resp.BytesPerSecond()))))
-					for gtk.EventsPending() {
-						gtk.MainIteration()
-					}
 				})
+				for gtk.EventsPending() {
+					gtk.MainIteration()
+				}
 				if progressWindow.cancelled {
 					resp.Cancel()
 					break Loop
 				}
 			case <-resp.Done:
+				for gtk.EventsPending() {
+					gtk.MainIteration()
+				}
 				if err := resp.Err(); err != nil {
 					if doRetries && attempt < maxRetries {
 						time.Sleep(retryDelay)
@@ -156,6 +161,7 @@ func DownloadTitle(titleID string, outputDirectory string, doDecryption bool, pr
 	}
 
 	client := grab.NewClient()
+	client.BufferSize = bufferSize
 	downloadURL := fmt.Sprintf("%s/%s", baseURL, "tmd")
 	tmdPath := filepath.Join(outputDir, "title.tmd")
 	if err := downloadFile(progressWindow, client, downloadURL, tmdPath, true); err != nil {

@@ -7,6 +7,9 @@ on:
 permissions:
   contents: write
 
+env:
+  GOPROXY: direct
+
 jobs:
   msys2-ucrt64:
     runs-on: windows-latest

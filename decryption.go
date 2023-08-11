@@ -15,6 +15,7 @@ extern void callProgressCallback(int progress);
 import "C"
 import (
 	"fmt"
+	"time"
 	"unsafe"
 
 	"github.com/gotk3/gotk3/gtk"
@@ -37,10 +38,13 @@ func DecryptContents(path string, progress *ProgressWindow, deleteEncryptedConte
 	progress.bar.SetText("Decrypting...")
 
 	for progressInt := range progressChan {
-		progress.bar.SetFraction(float64(progressInt) / 100)
-		for gtk.EventsPending() {
-			gtk.MainIteration()
+		if progressInt > 0 {
+			progress.bar.SetFraction(float64(progressInt) / 100)
+			for gtk.EventsPending() {
+				gtk.MainIteration()
+			}
 		}
+		time.Sleep(time.Millisecond * 10)
 	}
 
 	if err := <-errorChan; err != nil {

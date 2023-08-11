@@ -33,7 +33,7 @@ type ProgressWindow struct {
 	cancelled    bool
 }
 
-func CreateProgressWindow(parent *gtk.Window) (ProgressWindow, error) {
+func CreateProgressWindow(parent *gtk.ApplicationWindow) (ProgressWindow, error) {
 	win, err := gtk.WindowNew(gtk.WINDOW_TOPLEVEL)
 	if err != nil {
 		return ProgressWindow{}, err

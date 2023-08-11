@@ -7,6 +7,8 @@ import (
 	"runtime"
 
 	wiiudownloader "github.com/Xpl0itU/WiiUDownloader"
+	"github.com/gotk3/gotk3/glib"
+	"github.com/gotk3/gotk3/gtk"
 )
 
 func main() {
@@ -31,8 +33,18 @@ func main() {
 			os.Setenv("GSETTINGS_SCHEMA_DIR", filePath)
 		}
 	}
-	win := NewMainWindow(wiiudownloader.GetTitleEntries(wiiudownloader.TITLE_CATEGORY_GAME), logger)
+	gtk.Init(nil)
 
-	win.ShowAll()
-	Main()
+	app, err := gtk.ApplicationNew("io.github.xpl0itu.wiiudownloader", glib.APPLICATION_FLAGS_NONE)
+	if err != nil {
+		logger.Fatal(err.Error())
+	}
+	app.Connect("activate", func() {
+		win := NewMainWindow(app, wiiudownloader.GetTitleEntries(wiiudownloader.TITLE_CATEGORY_GAME), logger)
+		win.ShowAll()
+		app.AddWindow(win.window)
+		app.GetActiveWindow().Show()
+	})
+	app.Run(nil)
+	app.Quit()
 }

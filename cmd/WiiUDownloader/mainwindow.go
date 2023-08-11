@@ -26,7 +26,7 @@ const (
 )
 
 type MainWindow struct {
-	window                          *gtk.Window
+	window                          *gtk.ApplicationWindow
 	treeView                        *gtk.TreeView
 	titles                          []wiiudownloader.TitleEntry
 	searchEntry                     *gtk.Entry
@@ -41,16 +41,14 @@ type MainWindow struct {
 	lastSearchText                  string
 }
 
-func NewMainWindow(entries []wiiudownloader.TitleEntry, logger *wiiudownloader.Logger) *MainWindow {
-	gtk.Init(nil)
-
+func NewMainWindow(app *gtk.Application, entries []wiiudownloader.TitleEntry, logger *wiiudownloader.Logger) *MainWindow {
 	gSettings, err := gtk.SettingsGetDefault()
 	if err != nil {
 		logger.Error(err.Error())
 	}
 	gSettings.SetProperty("gtk-application-prefer-dark-theme", isDarkMode())
 
-	win, err := gtk.WindowNew(gtk.WINDOW_TOPLEVEL)
+	win, err := gtk.ApplicationWindowNew(app)
 	if err != nil {
 		logger.Fatal("Unable to create window:", err)
 	}
@@ -425,7 +423,7 @@ func (mw *MainWindow) ShowAll() {
 
 	mw.window.Add(mainvBox)
 
-	mw.window.ShowAll()
+	mainvBox.ShowAll()
 }
 
 func (mw *MainWindow) onRegionChange(button *gtk.CheckButton, region uint8) {
@@ -790,8 +788,4 @@ queueProcessingLoop:
 	close(errorChan)
 
 	return nil
-}
-
-func Main() {
-	gtk.Main()
 }

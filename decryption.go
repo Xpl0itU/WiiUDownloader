@@ -52,14 +52,11 @@ func DecryptContents(path string, progress *ProgressWindow, deleteEncryptedConte
 		time.Sleep(time.Millisecond * 10)
 	}
 
-	if err := <-errorChan; err != nil {
-		return err
-	}
-
-	return nil
+	return <-errorChan
 }
 
 func runDecryption(path string, errorChan chan<- error, deleteEncryptedContents bool) {
+	defer close(progressChan)
 	argv := make([]*C.char, 2)
 	argv[0] = C.CString("WiiUDownloader")
 	argv[1] = C.CString(path)
@@ -78,6 +75,5 @@ func runDecryption(path string, errorChan chan<- error, deleteEncryptedContents 
 		doDeleteEncryptedContents(path)
 	}
 
-	close(progressChan) // Indicate the completion of the decryption process
 	errorChan <- nil
 }

@@ -489,9 +489,11 @@ func (mw *MainWindow) onCategoryToggled(button *gtk.ToggleButton) {
 func (mw *MainWindow) onDecryptContentsMenuItemClicked(selectedPath string) error {
 	err := wiiudownloader.DecryptContents(selectedPath, &mw.progressWindow, false)
 
-	if mw.progressWindow.Window.IsVisible() {
-		mw.progressWindow.Window.Close()
-	}
+	glib.IdleAdd(func() {
+		if mw.progressWindow.Window.IsVisible() {
+			mw.progressWindow.Window.Close()
+		}
+	})
 	return err
 }
 
@@ -778,9 +780,11 @@ queueProcessingLoop:
 	}
 
 	mw.titleQueue = []wiiudownloader.TitleEntry{} // Clear the queue
-	if mw.progressWindow.Window.IsVisible() {
-		mw.progressWindow.Window.Close()
-	}
+	glib.IdleAdd(func() {
+		if mw.progressWindow.Window.IsVisible() {
+			mw.progressWindow.Window.Close()
+		}
+	})
 	mw.updateTitlesInQueue()
 	mw.onSelectionChanged()
 

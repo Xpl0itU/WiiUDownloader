@@ -18,6 +18,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
 )
 
@@ -35,11 +36,15 @@ func DecryptContents(path string, progress *ProgressWindow, deleteEncryptedConte
 
 	go runDecryption(path, errorChan, deleteEncryptedContents)
 
-	progress.bar.SetText("Decrypting...")
+	glib.IdleAdd(func() {
+		progress.bar.SetText("Decrypting...")
+	})
 
 	for progressInt := range progressChan {
 		if progressInt > 0 {
-			progress.bar.SetFraction(float64(progressInt) / 100)
+			glib.IdleAdd(func() {
+				progress.bar.SetFraction(float64(progressInt) / 100)
+			})
 			for gtk.EventsPending() {
 				gtk.MainIteration()
 			}

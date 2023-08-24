@@ -98,8 +98,10 @@ func downloadFile(progressWindow *ProgressWindow, client *grab.Client, downloadU
 		req.BufferSize = bufferSize
 
 		resp := client.Do(req)
-		progressWindow.bar.SetFraction(resp.Progress())
-		progressWindow.bar.SetText(fmt.Sprintf("Downloading %s (%s/%s) (%s/s)", filePath, humanize.Bytes(uint64(resp.BytesComplete())), humanize.Bytes(uint64(resp.Size())), humanize.Bytes(uint64(resp.BytesPerSecond()))))
+		glib.IdleAdd(func() {
+			progressWindow.bar.SetFraction(resp.Progress())
+			progressWindow.bar.SetText(fmt.Sprintf("Downloading %s (%s/%s) (%s/s)", filePath, humanize.Bytes(uint64(resp.BytesComplete())), humanize.Bytes(uint64(resp.Size())), humanize.Bytes(uint64(resp.BytesPerSecond()))))
+		})
 		for gtk.EventsPending() {
 			gtk.MainIteration()
 		}
@@ -148,7 +150,9 @@ func DownloadTitle(titleID string, outputDirectory string, doDecryption bool, pr
 
 	titleEntry := getTitleEntryFromTid(titleID)
 
-	progressWindow.gameLabel.SetText(titleEntry.Name)
+	glib.IdleAdd(func() {
+		progressWindow.gameLabel.SetText(titleEntry.Name)
+	})
 	outputDir := strings.TrimRight(outputDirectory, "/\\")
 	baseURL := fmt.Sprintf("http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/%s", titleID)
 	titleIDBytes, err := hex.DecodeString(titleID)

@@ -85,6 +85,6 @@ func checkContentHashes(path string, content contentInfo, cipherHashTree *cipher
 
 type contentInfo struct {
 	ID   string
-	Size int64
 	Hash []byte
+	Size int64
 }

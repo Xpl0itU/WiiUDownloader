@@ -28,17 +28,17 @@ const (
 type MainWindow struct {
 	window                          *gtk.ApplicationWindow
 	treeView                        *gtk.TreeView
-	titles                          []wiiudownloader.TitleEntry
+	logger                          *wiiudownloader.Logger
 	searchEntry                     *gtk.Entry
-	categoryButtons                 []*gtk.ToggleButton
-	titleQueue                      []wiiudownloader.TitleEntry
-	progressWindow                  wiiudownloader.ProgressWindow
+	deleteEncryptedContentsCheckbox *gtk.CheckButton
 	addToQueueButton                *gtk.Button
+	progressWindow                  wiiudownloader.ProgressWindow
+	lastSearchText                  string
+	titleQueue                      []wiiudownloader.TitleEntry
+	categoryButtons                 []*gtk.ToggleButton
+	titles                          []wiiudownloader.TitleEntry
 	decryptContents                 bool
 	currentRegion                   uint8
-	deleteEncryptedContentsCheckbox *gtk.CheckButton
-	logger                          *wiiudownloader.Logger
-	lastSearchText                  string
 }
 
 func NewMainWindow(app *gtk.Application, entries []wiiudownloader.TitleEntry, logger *wiiudownloader.Logger) *MainWindow {
@@ -759,8 +759,7 @@ queueProcessingLoop:
 			return err
 		}
 
-		queueStatus := <-queueStatusChan
-		if !queueStatus {
+		if !<-queueStatusChan {
 			break queueProcessingLoop
 		}
 	}

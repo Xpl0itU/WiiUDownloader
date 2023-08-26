@@ -14,7 +14,7 @@ extern void callProgressCallback(int progress);
 */
 import "C"
 import (
-	"fmt"
+	"errors"
 	"time"
 	"unsafe"
 
@@ -74,7 +74,7 @@ func runDecryption(path string, deleteEncryptedContents bool) error {
 	C.set_progress_callback(C.ProgressCallback(C.callProgressCallback))
 
 	if int(C.cdecrypt_main(2, (**C.char)(unsafe.Pointer(&argv[0])))) != 0 {
-		return fmt.Errorf("decryption failed")
+		return errors.New("decryption failed")
 	}
 
 	if deleteEncryptedContents {

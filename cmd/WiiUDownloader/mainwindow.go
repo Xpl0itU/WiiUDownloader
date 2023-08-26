@@ -89,11 +89,10 @@ func (mw *MainWindow) updateTitles(titles []wiiudownloader.TitleEntry) {
 			continue
 		}
 		iter := store.Append()
-		err = store.Set(iter,
+		if err := store.Set(iter,
 			[]int{IN_QUEUE_COLUMN, KIND_COLUMN, TITLE_ID_COLUMN, REGION_COLUMN, NAME_COLUMN},
 			[]interface{}{mw.isTitleInQueue(entry), wiiudownloader.GetFormattedKind(entry.TitleID), fmt.Sprintf("%016x", entry.TitleID), wiiudownloader.GetFormattedRegion(entry.Region), entry.Name},
-		)
-		if err != nil {
+		); err != nil {
 			mw.logger.Fatal("Unable to set values:", err)
 		}
 	}
@@ -215,8 +214,7 @@ func (mw *MainWindow) ShowAll() {
 
 		mw.progressWindow.Window.ShowAll()
 		go func() {
-			err := mw.onDecryptContentsMenuItemClicked(selectedPath)
-			if err != nil {
+			if err := mw.onDecryptContentsMenuItemClicked(selectedPath); err != nil {
 				glib.IdleAdd(func() {
 					mw.showError(err)
 				})
@@ -363,8 +361,7 @@ func (mw *MainWindow) ShowAll() {
 		mw.progressWindow.Window.ShowAll()
 
 		go func() {
-			err := mw.onDownloadQueueClicked(selectedPath)
-			if err != nil {
+			if err := mw.onDownloadQueueClicked(selectedPath); err != nil {
 				glib.IdleAdd(func() {
 					mw.showError(err)
 				})
@@ -461,11 +458,10 @@ func (mw *MainWindow) filterTitles(filterText string) {
 				continue
 			}
 			iter := storeRef.Append()
-			err = storeRef.Set(iter,
+			if err := storeRef.Set(iter,
 				[]int{IN_QUEUE_COLUMN, KIND_COLUMN, TITLE_ID_COLUMN, REGION_COLUMN, NAME_COLUMN},
 				[]interface{}{mw.isTitleInQueue(entry), wiiudownloader.GetFormattedKind(entry.TitleID), fmt.Sprintf("%016x", entry.TitleID), wiiudownloader.GetFormattedRegion(entry.Region), entry.Name},
-			)
-			if err != nil {
+			); err != nil {
 				mw.logger.Fatal("Unable to set values:", err)
 			}
 		}

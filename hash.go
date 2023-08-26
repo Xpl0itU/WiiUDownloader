@@ -4,6 +4,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/sha1"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -26,7 +27,7 @@ func checkContentHashes(path string, content contentInfo, cipherHashTree *cipher
 
 	h3Hash := sha1.Sum(h3Data)
 	if !reflect.DeepEqual(h3Hash[:8], content.Hash[:8]) {
-		return fmt.Errorf("h3 Hash mismatch")
+		return errors.New("h3 Hash mismatch")
 	}
 
 	chunkCount := int(content.Size / 0x10000)
@@ -56,13 +57,13 @@ func checkContentHashes(path string, content contentInfo, cipherHashTree *cipher
 		h2HashesHash := sha1.Sum(h2Hashes)
 
 		if !reflect.DeepEqual(h0HashesHash[:], h1Hash) {
-			return fmt.Errorf("h0 Hashes Hash mismatch")
+			return errors.New("h0 Hashes Hash mismatch")
 		}
 		if !reflect.DeepEqual(h1HashesHash[:], h2Hash) {
-			return fmt.Errorf("h1 Hashes Hash mismatch")
+			return errors.New("h1 Hashes Hash mismatch")
 		}
 		if !reflect.DeepEqual(h2HashesHash[:], h3Hash) {
-			return fmt.Errorf("h2 Hashes Hash mismatch")
+			return errors.New("h2 Hashes Hash mismatch")
 		}
 		encryptedFile.Seek(0xFC00, 1)
 		h0HashNum++

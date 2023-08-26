@@ -11,7 +11,7 @@ func isThisDecryptedFile(path string) bool {
 }
 
 func doDeleteEncryptedContents(path string) error {
-	err := filepath.Walk(path, func(filePath string, info os.FileInfo, err error) error {
+	return filepath.Walk(path, func(filePath string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -22,6 +22,4 @@ func doDeleteEncryptedContents(path string) error {
 		}
 		return nil
 	})
-
-	return err
 }

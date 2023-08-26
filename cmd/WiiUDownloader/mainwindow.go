@@ -8,13 +8,13 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 
 	wiiudownloader "github.com/Xpl0itU/WiiUDownloader"
 	"github.com/Xpl0itU/dialog"
 	"github.com/cavaliergopher/grab/v3"
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -736,46 +736,36 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string) error {
 	}
 
 	queueStatusChan := make(chan bool, 1)
-	errorChan := make(chan error, 1)
-
-	var wg sync.WaitGroup
+	defer close(queueStatusChan)
+	errGroup := errgroup.Group{}
 
 queueProcessingLoop:
 	for _, title := range mw.titleQueue {
-		wg.Add(1)
-
-		go func(title wiiudownloader.TitleEntry, selectedPath string, progressWindow *wiiudownloader.ProgressWindow) {
-			defer wg.Done()
-
+		errGroup.Go(func() error {
 			tidStr := fmt.Sprintf("%016x", title.TitleID)
 			titlePath := filepath.Join(selectedPath, fmt.Sprintf("%s [%s] [%s]", normalizeFilename(title.Name), wiiudownloader.GetFormattedKind(title.TitleID), tidStr))
-			if err := wiiudownloader.DownloadTitle(tidStr, titlePath, mw.decryptContents, progressWindow, mw.getDeleteEncryptedContents(), mw.logger); err != nil {
-				errorChan <- err
-				return
+			if err := wiiudownloader.DownloadTitle(tidStr, titlePath, mw.decryptContents, &mw.progressWindow, mw.getDeleteEncryptedContents(), mw.logger); err != nil {
+				return err
 			}
 
 			queueStatusChan <- true
-		}(title, selectedPath, &mw.progressWindow)
+			return nil
+		})
 
-		select {
-		case err := <-errorChan:
+		if err := errGroup.Wait(); err != nil {
 			queueStatusChan <- false
-			wg.Wait()
 			mw.titleQueue = []wiiudownloader.TitleEntry{}
 			if mw.progressWindow.Window.IsVisible() {
 				mw.progressWindow.Window.Close()
 			}
 			mw.updateTitlesInQueue()
 			mw.onSelectionChanged()
-			close(queueStatusChan)
-			close(errorChan)
 			return err
+		}
 
-		case queueStatus := <-queueStatusChan:
-			if !queueStatus {
-				wg.Wait()
-				break queueProcessingLoop
-			}
+		queueStatus := <-queueStatusChan
+		if !queueStatus {
+			break queueProcessingLoop
 		}
 	}
 
@@ -787,9 +777,6 @@ queueProcessingLoop:
 	})
 	mw.updateTitlesInQueue()
 	mw.onSelectionChanged()
-
-	close(queueStatusChan)
-	close(errorChan)
 
 	return nil
 }

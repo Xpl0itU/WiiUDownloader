@@ -20,6 +20,7 @@ import (
 
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
+	"golang.org/x/sync/errgroup"
 )
 
 //export callProgressCallback
@@ -30,11 +31,13 @@ func callProgressCallback(progress C.int) {
 var progressChan chan int
 
 func DecryptContents(path string, progress *ProgressWindow, deleteEncryptedContents bool) error {
-	errorChan := make(chan error)
 	progressChan = make(chan int)
-	defer close(errorChan)
 
-	go runDecryption(path, errorChan, deleteEncryptedContents)
+	errGroup := errgroup.Group{}
+
+	errGroup.Go(func() error {
+		return runDecryption(path, deleteEncryptedContents)
+	})
 
 	glib.IdleAdd(func() {
 		progress.bar.SetText("Decrypting...")
@@ -52,10 +55,10 @@ func DecryptContents(path string, progress *ProgressWindow, deleteEncryptedConte
 		time.Sleep(time.Millisecond * 10)
 	}
 
-	return <-errorChan
+	return errGroup.Wait()
 }
 
-func runDecryption(path string, errorChan chan<- error, deleteEncryptedContents bool) {
+func runDecryption(path string, deleteEncryptedContents bool) error {
 	defer close(progressChan)
 	argv := make([]*C.char, 2)
 	argv[0] = C.CString("WiiUDownloader")
@@ -67,13 +70,12 @@ func runDecryption(path string, errorChan chan<- error, deleteEncryptedContents 
 	C.set_progress_callback(C.ProgressCallback(C.callProgressCallback))
 
 	if int(C.cdecrypt_main(2, (**C.char)(unsafe.Pointer(&argv[0])))) != 0 {
-		errorChan <- fmt.Errorf("decryption failed")
-		return
+		return fmt.Errorf("decryption failed")
 	}
 
 	if deleteEncryptedContents {
 		doDeleteEncryptedContents(path)
 	}
 
-	errorChan <- nil
+	return nil
 }

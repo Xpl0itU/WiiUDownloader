@@ -60,11 +60,15 @@ func DecryptContents(path string, progress *ProgressWindow, deleteEncryptedConte
 
 func runDecryption(path string, deleteEncryptedContents bool) error {
 	defer close(progressChan)
-	argv := make([]*C.char, 2)
-	argv[0] = C.CString("WiiUDownloader")
-	argv[1] = C.CString(path)
-	defer C.free(unsafe.Pointer(argv[0]))
-	defer C.free(unsafe.Pointer(argv[1]))
+	argv := []*C.char{
+		C.CString("WiiUDownloader"),
+		C.CString(path),
+	}
+	defer func() {
+		for _, arg := range argv {
+			C.free(unsafe.Pointer(arg))
+		}
+	}()
 
 	// Register the C callback function with C
 	C.set_progress_callback(C.ProgressCallback(C.callProgressCallback))

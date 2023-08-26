@@ -19,7 +19,6 @@ import (
 	"unsafe"
 
 	"github.com/gotk3/gotk3/glib"
-	"github.com/gotk3/gotk3/gtk"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -48,9 +47,7 @@ func DecryptContents(path string, progress *ProgressWindow, deleteEncryptedConte
 			glib.IdleAdd(func() {
 				progress.bar.SetFraction(float64(progressInt) / 100)
 			})
-			for gtk.EventsPending() {
-				gtk.MainIteration()
-			}
+			forceUpdateUI()
 		}
 		time.Sleep(time.Millisecond * 10)
 	}

@@ -285,7 +285,7 @@ func (mw *MainWindow) ShowAll() {
 		mw.logger.Fatal("Unable to create box:", err)
 	}
 
-	mw.categoryButtons = make([]*gtk.ToggleButton, 5)
+	mw.categoryButtons = make([]*gtk.ToggleButton, 0)
 	for _, cat := range []string{"Game", "Update", "DLC", "Demo", "All"} {
 		button, err := gtk.ToggleButtonNewWithLabel(cat)
 		if err != nil {

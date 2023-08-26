@@ -98,13 +98,7 @@ func downloadFile(progressWindow *ProgressWindow, client *grab.Client, downloadU
 		req.BufferSize = bufferSize
 
 		resp := client.Do(req)
-		glib.IdleAdd(func() {
-			progressWindow.bar.SetFraction(resp.Progress())
-			progressWindow.bar.SetText(fmt.Sprintf("Downloading %s (%s/%s) (%s/s)", filePath, humanize.Bytes(uint64(resp.BytesComplete())), humanize.Bytes(uint64(resp.Size())), humanize.Bytes(uint64(resp.BytesPerSecond()))))
-		})
-		for gtk.EventsPending() {
-			gtk.MainIteration()
-		}
+		updateProgressWindow(progressWindow, resp, filePath)
 
 		t := time.NewTicker(500 * time.Millisecond)
 		defer t.Stop()
@@ -113,21 +107,13 @@ func downloadFile(progressWindow *ProgressWindow, client *grab.Client, downloadU
 		for {
 			select {
 			case <-t.C:
-				glib.IdleAdd(func() {
-					progressWindow.bar.SetFraction(resp.Progress())
-					progressWindow.bar.SetText(fmt.Sprintf("Downloading %s (%s/%s) (%s/s)", filePath, humanize.Bytes(uint64(resp.BytesComplete())), humanize.Bytes(uint64(resp.Size())), humanize.Bytes(uint64(resp.BytesPerSecond()))))
-				})
-				for gtk.EventsPending() {
-					gtk.MainIteration()
-				}
+				updateProgressWindow(progressWindow, resp, filePath)
 				if progressWindow.cancelled {
 					resp.Cancel()
 					break Loop
 				}
 			case <-resp.Done:
-				for gtk.EventsPending() {
-					gtk.MainIteration()
-				}
+				forceUpdateUI()
 				if err := resp.Err(); err != nil {
 					if doRetries && attempt < maxRetries {
 						time.Sleep(retryDelay)
@@ -141,6 +127,20 @@ func downloadFile(progressWindow *ProgressWindow, client *grab.Client, downloadU
 	}
 
 	return nil
+}
+
+func forceUpdateUI() {
+	for gtk.EventsPending() {
+		gtk.MainIteration()
+	}
+}
+
+func updateProgressWindow(progressWindow *ProgressWindow, resp *grab.Response, filePath string) {
+	glib.IdleAdd(func() {
+		progressWindow.bar.SetFraction(resp.Progress())
+		progressWindow.bar.SetText(fmt.Sprintf("Downloading %s (%s/%s) (%s/s)", filePath, humanize.Bytes(uint64(resp.BytesComplete())), humanize.Bytes(uint64(resp.Size())), humanize.Bytes(uint64(resp.BytesPerSecond()))))
+	})
+	forceUpdateUI()
 }
 
 func DownloadTitle(titleID string, outputDirectory string, doDecryption bool, progressWindow *ProgressWindow, deleteEncryptedContents bool, logger *Logger) error {
@@ -166,9 +166,8 @@ func DownloadTitle(titleID string, outputDirectory string, doDecryption bool, pr
 
 	client := grab.NewClient()
 	client.BufferSize = bufferSize
-	downloadURL := fmt.Sprintf("%s/%s", baseURL, "tmd")
 	tmdPath := filepath.Join(outputDir, "title.tmd")
-	if err := downloadFile(progressWindow, client, downloadURL, tmdPath, true); err != nil {
+	if err := downloadFile(progressWindow, client, fmt.Sprintf("%s/%s", baseURL, "tmd"), tmdPath, true); err != nil {
 		return err
 	}
 
@@ -183,8 +182,7 @@ func DownloadTitle(titleID string, outputDirectory string, doDecryption bool, pr
 	}
 
 	tikPath := filepath.Join(outputDir, "title.tik")
-	downloadURL = fmt.Sprintf("%s/%s", baseURL, "cetk")
-	if err := downloadFile(progressWindow, client, downloadURL, tikPath, false); err != nil {
+	if err := downloadFile(progressWindow, client, fmt.Sprintf("%s/%s", baseURL, "cetk"), tikPath, false); err != nil {
 		titleKey, err := GenerateKey(titleID)
 		if err != nil {
 			return err
@@ -235,6 +233,7 @@ func DownloadTitle(titleID string, outputDirectory string, doDecryption bool, pr
 	}
 
 	var id uint32
+	var content contentInfo
 	tmdDataReader := bytes.NewReader(tmdData)
 
 	for i := 0; i < int(contentCount); i++ {
@@ -244,18 +243,15 @@ func DownloadTitle(titleID string, outputDirectory string, doDecryption bool, pr
 			return err
 		}
 		filePath := filepath.Join(outputDir, fmt.Sprintf("%08X.app", id))
-		downloadURL = fmt.Sprintf("%s/%08X", baseURL, id)
-		if err := downloadFile(progressWindow, client, downloadURL, filePath, true); err != nil {
+		if err := downloadFile(progressWindow, client, fmt.Sprintf("%s/%08X", baseURL, id), filePath, true); err != nil {
 			return err
 		}
 
 		if tmdData[offset+7]&0x2 == 2 {
 			filePath = filepath.Join(outputDir, fmt.Sprintf("%08X.h3", id))
-			downloadURL = fmt.Sprintf("%s/%08X.h3", baseURL, id)
-			if err := downloadFile(progressWindow, client, downloadURL, filePath, true); err != nil {
+			if err := downloadFile(progressWindow, client, fmt.Sprintf("%s/%08X.h3", baseURL, id), filePath, true); err != nil {
 				return err
 			}
-			var content contentInfo
 			content.Hash = tmdData[offset+16 : offset+0x14]
 			content.ID = fmt.Sprintf("%08X", id)
 			tmdDataReader.Seek(int64(offset+8), 0)

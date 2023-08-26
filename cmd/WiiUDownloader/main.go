@@ -44,6 +44,7 @@ func main() {
 		win.ShowAll()
 		app.AddWindow(win.window)
 		app.GetActiveWindow().Show()
+		gtk.Main()
 	})
 	app.Run(nil)
 	app.Quit()

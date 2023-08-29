@@ -28,7 +28,7 @@ type ProgressReporter interface {
 	Cancelled() bool
 }
 
-func downloadFile(progressWindow ProgressReporter, client *grab.Client, downloadURL string, dstPath string, doRetries bool) error {
+func downloadFile(progressReporter ProgressReporter, client *grab.Client, downloadURL string, dstPath string, doRetries bool) error {
 	filePath := filepath.Base(dstPath)
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
@@ -39,7 +39,7 @@ func downloadFile(progressWindow ProgressReporter, client *grab.Client, download
 		req.BufferSize = bufferSize
 
 		resp := client.Do(req)
-		progressWindow.UpdateDownloadProgress(resp, filePath)
+		progressReporter.UpdateDownloadProgress(resp, filePath)
 
 		t := time.NewTicker(500 * time.Millisecond)
 		defer t.Stop()
@@ -48,8 +48,8 @@ func downloadFile(progressWindow ProgressReporter, client *grab.Client, download
 		for {
 			select {
 			case <-t.C:
-				progressWindow.UpdateDownloadProgress(resp, filePath)
-				if progressWindow.Cancelled() {
+				progressReporter.UpdateDownloadProgress(resp, filePath)
+				if progressReporter.Cancelled() {
 					resp.Cancel()
 					break Loop
 				}

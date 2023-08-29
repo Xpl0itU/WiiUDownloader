@@ -18,7 +18,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/gotk3/gotk3/glib"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -29,7 +28,7 @@ func callProgressCallback(progress C.int) {
 
 var progressChan chan int
 
-func DecryptContents(path string, progress *ProgressWindow, deleteEncryptedContents bool) error {
+func DecryptContents(path string, progress ProgressReporter, deleteEncryptedContents bool) error {
 	progressChan = make(chan int)
 
 	errGroup := errgroup.Group{}
@@ -38,16 +37,9 @@ func DecryptContents(path string, progress *ProgressWindow, deleteEncryptedConte
 		return runDecryption(path, deleteEncryptedContents)
 	})
 
-	glib.IdleAdd(func() {
-		progress.bar.SetText("Decrypting...")
-	})
-
 	for progressInt := range progressChan {
 		if progressInt > 0 {
-			glib.IdleAdd(func() {
-				progress.bar.SetFraction(float64(progressInt) / 100)
-			})
-			forceUpdateUI()
+			progress.UpdateDecryptionProgress(float64(progressInt) / 100)
 		}
 		time.Sleep(time.Millisecond * 10)
 	}

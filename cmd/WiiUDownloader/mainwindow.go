@@ -32,7 +32,7 @@ type MainWindow struct {
 	searchEntry                     *gtk.Entry
 	deleteEncryptedContentsCheckbox *gtk.CheckButton
 	addToQueueButton                *gtk.Button
-	progressWindow                  wiiudownloader.ProgressWindow
+	progressWindow                  *ProgressWindow
 	lastSearchText                  string
 	titleQueue                      []wiiudownloader.TitleEntry
 	categoryButtons                 []*gtk.ToggleButton
@@ -200,7 +200,7 @@ func (mw *MainWindow) ShowAll() {
 		mw.logger.Fatal("Unable to create menu item:", err)
 	}
 	decryptContentsMenuItem.Connect("activate", func() {
-		mw.progressWindow, err = wiiudownloader.CreateProgressWindow(mw.window)
+		mw.progressWindow, err = createProgressWindow(mw.window)
 		if err != nil {
 			return
 		}
@@ -260,7 +260,7 @@ func (mw *MainWindow) ShowAll() {
 
 		wiiudownloader.GenerateTicket(filepath.Join(parentDir, "title.tik"), titleID, titleKey, titleVersion)
 
-		cert, err := wiiudownloader.GenerateCert(tmdData, contentCount, &mw.progressWindow, grab.NewClient())
+		cert, err := wiiudownloader.GenerateCert(tmdData, contentCount, mw.progressWindow, grab.NewClient())
 		if err != nil {
 			return
 		}
@@ -347,7 +347,7 @@ func (mw *MainWindow) ShowAll() {
 		if len(mw.titleQueue) == 0 {
 			return
 		}
-		mw.progressWindow, err = wiiudownloader.CreateProgressWindow(mw.window)
+		mw.progressWindow, err = createProgressWindow(mw.window)
 		if err != nil {
 			return
 		}
@@ -483,7 +483,7 @@ func (mw *MainWindow) onCategoryToggled(button *gtk.ToggleButton) {
 }
 
 func (mw *MainWindow) onDecryptContentsMenuItemClicked(selectedPath string) error {
-	err := wiiudownloader.DecryptContents(selectedPath, &mw.progressWindow, false)
+	err := wiiudownloader.DecryptContents(selectedPath, mw.progressWindow, false)
 
 	glib.IdleAdd(func() {
 		if mw.progressWindow.Window.IsVisible() {
@@ -740,7 +740,7 @@ queueProcessingLoop:
 		errGroup.Go(func() error {
 			tidStr := fmt.Sprintf("%016x", title.TitleID)
 			titlePath := filepath.Join(selectedPath, fmt.Sprintf("%s [%s] [%s]", normalizeFilename(title.Name), wiiudownloader.GetFormattedKind(title.TitleID), tidStr))
-			if err := wiiudownloader.DownloadTitle(tidStr, titlePath, mw.decryptContents, &mw.progressWindow, mw.getDeleteEncryptedContents(), mw.logger); err != nil {
+			if err := wiiudownloader.DownloadTitle(tidStr, titlePath, mw.decryptContents, mw.progressWindow, mw.getDeleteEncryptedContents(), mw.logger); err != nil {
 				return err
 			}
 

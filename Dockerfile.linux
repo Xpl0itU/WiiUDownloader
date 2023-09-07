@@ -1,6 +1,9 @@
 FROM ubuntu:22.04
 
-ARG DEBIAN_FRONTEND=noninteractive
+ENV DEBIAN_FRONTEND=noninteractive \
+ GOROOT=/usr/local/go \
+ GOPATH=$HOME/go \
+ PATH=$GOPATH/bin:$GOROOT/bin:$PATH
 
 RUN mkdir -p /usr/share/man/man1 /usr/share/man/man2 && \
     apt -y --no-install-recommends update && \
@@ -12,7 +15,10 @@ RUN mkdir -p /usr/share/man/man1 /usr/share/man/man2 && \
 
 RUN apt-fast -y --no-install-recommends update && \
     apt-fast -y --no-install-recommends upgrade && \
-    apt-fast install -y --no-install-recommends build-essential libgcrypt20-dev libgtk-3-dev libfuse2 libtool librsvg2-dev golang-go && \
+    apt-fast install -y --no-install-recommends build-essential libgcrypt20-dev libgtk-3-dev libfuse2 libtool librsvg2-dev && \
+    wget https://go.dev/dl/go1.21.1.linux-amd64.tar.gz && \
+    tar -xvf go1.21.1.linux-amd64.tar.gz && \
+    mv go /usr/local && \
     LINUXDEPLOY="/usr/bin/linuxdeploy.AppImage" && \
     LINUXDEPLOY_PLUGIN_GTK="/usr/bin/linuxdeploy-plugin-gtk.sh" && \
     LINUXDEPLOY_PLUGIN_CHECKRT="/usr/bin/linuxdeploy-plugin-checkrt.sh" && \

@@ -206,9 +206,11 @@ func (mw *MainWindow) ShowAll() {
 		}
 		selectedPath, err := dialog.Directory().Title("Select the game path").Browse()
 		if err != nil {
-			if mw.progressWindow.Window.IsVisible() {
-				mw.progressWindow.Window.Close()
-			}
+			glib.IdleAdd(func() {
+				if mw.progressWindow.Window.IsVisible() {
+					mw.progressWindow.Window.Close()
+				}
+			})
 			return
 		}
 
@@ -353,9 +355,11 @@ func (mw *MainWindow) ShowAll() {
 		}
 		selectedPath, err := dialog.Directory().Title("Select a path to save the games to").Browse()
 		if err != nil {
-			if mw.progressWindow.Window.IsVisible() {
-				mw.progressWindow.Window.Close()
-			}
+			glib.IdleAdd(func() {
+				if mw.progressWindow.Window.IsVisible() {
+					mw.progressWindow.Window.Close()
+				}
+			})
 			return
 		}
 		mw.progressWindow.Window.ShowAll()
@@ -718,9 +722,11 @@ func (mw *MainWindow) updateTitlesInQueue() {
 }
 
 func (mw *MainWindow) showError(err error) {
-	if mw.progressWindow.Window.IsVisible() {
-		mw.progressWindow.Window.Close()
-	}
+	glib.IdleAdd(func() {
+		if mw.progressWindow.Window.IsVisible() {
+			mw.progressWindow.Window.Close()
+		}
+	})
 	errorDialog := gtk.MessageDialogNew(mw.window, gtk.DIALOG_MODAL, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, err.Error())
 	errorDialog.Run()
 	errorDialog.Destroy()
@@ -730,6 +736,8 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string) error {
 	if len(mw.titleQueue) == 0 {
 		return nil
 	}
+
+	var err error = nil
 
 	queueStatusChan := make(chan bool, 1)
 	defer close(queueStatusChan)
@@ -748,15 +756,8 @@ queueProcessingLoop:
 			return nil
 		})
 
-		if err := errGroup.Wait(); err != nil {
+		if err = errGroup.Wait(); err != nil {
 			queueStatusChan <- false
-			mw.titleQueue = []wiiudownloader.TitleEntry{}
-			if mw.progressWindow.Window.IsVisible() {
-				mw.progressWindow.Window.Close()
-			}
-			mw.updateTitlesInQueue()
-			mw.onSelectionChanged()
-			return err
 		}
 
 		if !<-queueStatusChan {
@@ -773,5 +774,5 @@ queueProcessingLoop:
 	mw.updateTitlesInQueue()
 	mw.onSelectionChanged()
 
-	return nil
+	return err
 }

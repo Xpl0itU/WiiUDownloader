@@ -17,7 +17,7 @@ var (
 	keygen_pw = []byte{0x6d, 0x79, 0x70, 0x61, 0x73, 0x73}
 )
 
-func encryptAES(data []byte, key []byte, iv []byte) ([]byte, error) {
+func encryptAES(data, key, iv []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, err

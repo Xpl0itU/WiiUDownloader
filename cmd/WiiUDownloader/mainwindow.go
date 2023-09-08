@@ -583,7 +583,7 @@ func (mw *MainWindow) isTitleInQueue(title wiiudownloader.TitleEntry) bool {
 	return false
 }
 
-func (mw *MainWindow) addToQueue(tid string, name string) {
+func (mw *MainWindow) addToQueue(tid, name string) {
 	titleID, err := strconv.ParseUint(tid, 16, 64)
 	if err != nil {
 		mw.logger.Fatal("Unable to parse title ID:", err)
@@ -743,7 +743,6 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string) error {
 	defer close(queueStatusChan)
 	errGroup := errgroup.Group{}
 
-queueProcessingLoop:
 	for _, title := range mw.titleQueue {
 		errGroup.Go(func() error {
 			tidStr := fmt.Sprintf("%016x", title.TitleID)
@@ -761,7 +760,7 @@ queueProcessingLoop:
 		}
 
 		if !<-queueStatusChan {
-			break queueProcessingLoop
+			break
 		}
 	}
 

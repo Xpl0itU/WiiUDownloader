@@ -39,7 +39,7 @@ func NewLogger(logFilePath string) (*Logger, error) {
 	}
 
 	// Open the log file for writing, truncating it if it exists
-	logFile, err = os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
+	logFile, err = os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o666)
 	if err != nil {
 		// If unable to open the log file, log the error to stdout
 		log.New(os.Stdout, "", log.Ldate|log.Ltime).Printf("[Error] Unable to open log file: %v\n", err)

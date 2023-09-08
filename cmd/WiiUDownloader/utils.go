@@ -7,17 +7,18 @@ func normalizeFilename(filename string) string {
 	shouldAppend := true
 
 	for _, c := range filename {
-		if c == '_' {
+		switch {
+		case c == '_':
 			if shouldAppend {
 				out.WriteRune('_')
 				shouldAppend = false
 			}
-		} else if c == ' ' {
+		case c == ' ':
 			if shouldAppend {
 				out.WriteRune(' ')
 				shouldAppend = false
 			}
-		} else if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') {
+		case (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'):
 			out.WriteRune(c)
 			shouldAppend = true
 		}

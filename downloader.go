@@ -28,8 +28,11 @@ type ProgressReporter interface {
 	Cancelled() bool
 }
 
-func downloadFile(progressReporter ProgressReporter, client *grab.Client, downloadURL string, dstPath string, doRetries bool) error {
+func downloadFile(progressReporter ProgressReporter, client *grab.Client, downloadURL, dstPath string, doRetries bool) error {
 	filePath := filepath.Base(dstPath)
+
+	t := time.NewTicker(500 * time.Millisecond)
+	defer t.Stop()
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		req, err := grab.NewRequest(dstPath, downloadURL)
@@ -40,9 +43,6 @@ func downloadFile(progressReporter ProgressReporter, client *grab.Client, downlo
 
 		resp := client.Do(req)
 		progressReporter.UpdateDownloadProgress(resp, filePath)
-
-		t := time.NewTicker(500 * time.Millisecond)
-		defer t.Stop()
 
 	Loop:
 		for {
@@ -69,7 +69,7 @@ func downloadFile(progressReporter ProgressReporter, client *grab.Client, downlo
 	return nil
 }
 
-func DownloadTitle(titleID string, outputDirectory string, doDecryption bool, progressReporter ProgressReporter, deleteEncryptedContents bool, logger *Logger) error {
+func DownloadTitle(titleID, outputDirectory string, doDecryption bool, progressReporter ProgressReporter, deleteEncryptedContents bool, logger *Logger) error {
 	titleEntry := getTitleEntryFromTid(titleID)
 
 	progressReporter.SetGameTitle(titleEntry.Name)
@@ -179,7 +179,7 @@ func DownloadTitle(titleID string, outputDirectory string, doDecryption bool, pr
 			if err := binary.Read(tmdDataReader, binary.BigEndian, &content.Size); err != nil {
 				return err
 			}
-			if err := checkContentHashes(outputDirectory, content, &cipherHashTree); err != nil {
+			if err := checkContentHashes(outputDirectory, content, cipherHashTree); err != nil {
 				if progressReporter.Cancelled() {
 					break
 				}

@@ -13,8 +13,7 @@ import (
 
 var commonKey = []byte{0xD7, 0xB0, 0x04, 0x02, 0x65, 0x9B, 0xA2, 0xAB, 0xD2, 0xCB, 0x0D, 0xB2, 0x7F, 0xA2, 0xB6, 0x56}
 
-func checkContentHashes(path string, content contentInfo, cipherHashTree *cipher.Block) error {
-	cHashTree := *cipherHashTree
+func checkContentHashes(path string, content contentInfo, cipherHashTree cipher.Block) error {
 	h3Data, err := os.ReadFile(filepath.Join(path, fmt.Sprintf("%s.h3", content.ID)))
 	if err != nil {
 		return fmt.Errorf("failed to read H3 hash tree file: %w", err)
@@ -42,7 +41,7 @@ func checkContentHashes(path string, content contentInfo, cipherHashTree *cipher
 	iv := make([]byte, aes.BlockSize)
 	for chunkNum := 0; chunkNum < chunkCount; chunkNum++ {
 		encryptedFile.Read(buffer)
-		cipher.NewCBCDecrypter(cHashTree, iv).CryptBlocks(decryptedContent, buffer)
+		cipher.NewCBCDecrypter(cipherHashTree, iv).CryptBlocks(decryptedContent, buffer)
 
 		h0Hashes := decryptedContent[0:0x140]
 		h1Hashes := decryptedContent[0x140:0x280]

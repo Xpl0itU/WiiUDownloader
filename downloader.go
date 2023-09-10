@@ -2,6 +2,7 @@ package wiiudownloader
 
 import (
 	"bytes"
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"encoding/binary"
@@ -69,7 +70,7 @@ func downloadFile(progressReporter ProgressReporter, client *grab.Client, downlo
 	return nil
 }
 
-func DownloadTitle(titleID, outputDirectory string, doDecryption bool, progressReporter ProgressReporter, deleteEncryptedContents bool, logger *Logger) error {
+func DownloadTitle(cancel context.CancelFunc, titleID, outputDirectory string, doDecryption bool, progressReporter ProgressReporter, deleteEncryptedContents bool, logger *Logger) error {
 	titleEntry := getTitleEntryFromTid(titleID)
 
 	progressReporter.SetGameTitle(titleEntry.Name)
@@ -181,12 +182,14 @@ func DownloadTitle(titleID, outputDirectory string, doDecryption bool, progressR
 			}
 			if err := checkContentHashes(outputDirectory, content, cipherHashTree); err != nil {
 				if progressReporter.Cancelled() {
+					cancel()
 					break
 				}
 				return err
 			}
 		}
 		if progressReporter.Cancelled() {
+			cancel()
 			break
 		}
 	}

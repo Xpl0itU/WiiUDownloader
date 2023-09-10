@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"os"
@@ -743,11 +744,20 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string) error {
 	defer close(queueStatusChan)
 	errGroup := errgroup.Group{}
 
+	queueCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	for _, title := range mw.titleQueue {
 		errGroup.Go(func() error {
+			select {
+			case <-queueCtx.Done():
+				queueStatusChan <- true
+				return nil
+			default:
+			}
 			tidStr := fmt.Sprintf("%016x", title.TitleID)
 			titlePath := filepath.Join(selectedPath, fmt.Sprintf("%s [%s] [%s]", normalizeFilename(title.Name), wiiudownloader.GetFormattedKind(title.TitleID), tidStr))
-			if err := wiiudownloader.DownloadTitle(tidStr, titlePath, mw.decryptContents, mw.progressWindow, mw.getDeleteEncryptedContents(), mw.logger); err != nil {
+			if err := wiiudownloader.DownloadTitle(cancel, tidStr, titlePath, mw.decryptContents, mw.progressWindow, mw.getDeleteEncryptedContents(), mw.logger); err != nil {
 				return err
 			}
 

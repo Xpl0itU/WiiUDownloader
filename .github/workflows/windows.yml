@@ -29,7 +29,7 @@ jobs:
       - name: Build
         run: |
           python3 grabTitles.py
-          go build -pgo=auto -ldflags -H=windowsgui cmd/WiiUDownloader/main.go cmd/WiiUDownloader/darkMode.go cmd/WiiUDownloader/mainwindow.go cmd/WiiUDownloader/progressWindow.go cmd/WiiUDownloader/utils.go
+          go build -pgo=auto -ldflags="-s -w -H=windowsgui" cmd/WiiUDownloader/main.go cmd/WiiUDownloader/darkMode.go cmd/WiiUDownloader/mainwindow.go cmd/WiiUDownloader/progressWindow.go cmd/WiiUDownloader/utils.go
       - name: Deploy WiiUDownloader
         run: |
           mkdir dist

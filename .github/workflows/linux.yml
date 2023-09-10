@@ -21,7 +21,7 @@ jobs:
       - name: Build artifacts
         run: |
           docker run --rm -v ${PWD}:/project builder python3 grabTitles.py
-          docker run --rm -v ${PWD}:/project builder go build -pgo=auto cmd/WiiUDownloader/main.go cmd/WiiUDownloader/darkMode.go cmd/WiiUDownloader/mainwindow.go cmd/WiiUDownloader/progressWindow.go cmd/WiiUDownloader/utils.go
+          docker run --rm -v ${PWD}:/project builder go build -ldflags="-s -w" -pgo=auto cmd/WiiUDownloader/main.go cmd/WiiUDownloader/darkMode.go cmd/WiiUDownloader/mainwindow.go cmd/WiiUDownloader/progressWindow.go cmd/WiiUDownloader/utils.go
       - name: Deploy WiiUDownloader
         run: |
           mv main WiiUDownloader

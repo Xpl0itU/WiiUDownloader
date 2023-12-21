@@ -2,11 +2,11 @@ package wiiudownloader
 
 import (
 	"bytes"
+	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"path"
-
-	"github.com/cavaliergopher/grab/v3"
 )
 
 var cetkData []byte
@@ -28,12 +28,12 @@ func getCert(tmdData []byte, id int, numContents uint16) ([]byte, error) {
 	}
 }
 
-func getDefaultCert(progressReporter ProgressReporter, client *grab.Client) ([]byte, error) {
+func getDefaultCert(cancelCtx context.Context, progressReporter ProgressReporter, client *http.Client) ([]byte, error) {
 	if len(cetkData) >= 0x350+0x300 {
 		return cetkData[0x350 : 0x350+0x300], nil
 	}
 	cetkDir := path.Join(os.TempDir(), "cetk")
-	if err := downloadFile(progressReporter, client, "http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/000500101000400a/cetk", cetkDir, true); err != nil {
+	if err := downloadFile(cancelCtx, progressReporter, client, "http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/000500101000400a/cetk", cetkDir, true); err != nil {
 		return nil, err
 	}
 	cetkData, err := os.ReadFile(cetkDir)
@@ -51,7 +51,7 @@ func getDefaultCert(progressReporter ProgressReporter, client *grab.Client) ([]b
 	return nil, fmt.Errorf("failed to download OSv10 cetk, length: %d", len(cetkData))
 }
 
-func GenerateCert(tmdData []byte, contentCount uint16, progressReporter ProgressReporter, client *grab.Client) (bytes.Buffer, error) {
+func GenerateCert(tmdData []byte, contentCount uint16, progressReporter ProgressReporter, client *http.Client, cancelCtx context.Context) (bytes.Buffer, error) {
 	cert := bytes.Buffer{}
 
 	cert0, err := getCert(tmdData, 0, contentCount)
@@ -66,7 +66,7 @@ func GenerateCert(tmdData []byte, contentCount uint16, progressReporter Progress
 	}
 	cert.Write(cert1)
 
-	defaultCert, err := getDefaultCert(progressReporter, client)
+	defaultCert, err := getDefaultCert(cancelCtx, progressReporter, client)
 	if err != nil {
 		return bytes.Buffer{}, err
 	}

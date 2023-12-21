@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -12,7 +13,6 @@ import (
 
 	wiiudownloader "github.com/Xpl0itU/WiiUDownloader"
 	"github.com/Xpl0itU/dialog"
-	"github.com/cavaliergopher/grab/v3"
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
 	"golang.org/x/sync/errgroup"
@@ -263,7 +263,7 @@ func (mw *MainWindow) ShowAll() {
 
 		wiiudownloader.GenerateTicket(filepath.Join(parentDir, "title.tik"), titleID, titleKey, titleVersion)
 
-		cert, err := wiiudownloader.GenerateCert(tmdData, contentCount, mw.progressWindow, grab.NewClient())
+		cert, err := wiiudownloader.GenerateCert(tmdData, contentCount, mw.progressWindow, http.DefaultClient, context.Background())
 		if err != nil {
 			return
 		}
@@ -745,7 +745,8 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string) error {
 	errGroup := errgroup.Group{}
 
 	queueCtx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	mw.progressWindow.cancelFunc = cancel
+	defer mw.progressWindow.cancelFunc()
 
 	for _, title := range mw.titleQueue {
 		errGroup.Go(func() error {
@@ -757,7 +758,7 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string) error {
 			}
 			tidStr := fmt.Sprintf("%016x", title.TitleID)
 			titlePath := filepath.Join(selectedPath, fmt.Sprintf("%s [%s] [%s]", normalizeFilename(title.Name), wiiudownloader.GetFormattedKind(title.TitleID), tidStr))
-			if err := wiiudownloader.DownloadTitle(cancel, tidStr, titlePath, mw.decryptContents, mw.progressWindow, mw.getDeleteEncryptedContents(), mw.logger); err != nil {
+			if err := wiiudownloader.DownloadTitle(queueCtx, tidStr, titlePath, mw.decryptContents, mw.progressWindow, mw.getDeleteEncryptedContents(), mw.logger); err != nil && err != context.Canceled {
 				return err
 			}
 

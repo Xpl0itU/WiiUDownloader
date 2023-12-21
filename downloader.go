@@ -8,12 +8,12 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/cavaliergopher/grab/v3"
 )
 
 const (
@@ -24,53 +24,92 @@ const (
 
 type ProgressReporter interface {
 	SetGameTitle(title string)
-	UpdateDownloadProgress(resp *grab.Response, filePath string)
+	UpdateDownloadProgress(downloaded, total int64, speed int64, filePath string)
 	UpdateDecryptionProgress(progress float64)
 	Cancelled() bool
+	SetCancelled()
 }
 
-func downloadFile(progressReporter ProgressReporter, client *grab.Client, downloadURL, dstPath string, doRetries bool) error {
+func calculateDownloadSpeed(downloaded int64, startTime, endTime time.Time) int64 {
+	duration := endTime.Sub(startTime).Seconds()
+	if duration > 0 {
+		return int64(float64(downloaded) / duration)
+	}
+	return 0
+}
+
+func downloadFile(ctx context.Context, progressReporter ProgressReporter, client *http.Client, downloadURL, dstPath string, doRetries bool) error {
 	filePath := filepath.Base(dstPath)
 
-	t := time.NewTicker(500 * time.Millisecond)
-	defer t.Stop()
+	var speed int64
+	var startTime time.Time
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		req, err := grab.NewRequest(dstPath, downloadURL)
+		req, err := http.NewRequestWithContext(ctx, "GET", downloadURL, nil)
 		if err != nil {
 			return err
 		}
-		req.BufferSize = bufferSize
 
-		resp := client.Do(req)
-		progressReporter.UpdateDownloadProgress(resp, filePath)
-
-	Loop:
-		for {
-			select {
-			case <-t.C:
-				progressReporter.UpdateDownloadProgress(resp, filePath)
-				if progressReporter.Cancelled() {
-					resp.Cancel()
-					break Loop
-				}
-			case <-resp.Done:
-				if err := resp.Err(); err != nil {
-					if doRetries && attempt < maxRetries {
-						time.Sleep(retryDelay)
-						break Loop
-					}
-					return fmt.Errorf("download error after %d attempts: %+v", attempt, err)
-				}
-				break Loop
-			}
+		resp, err := client.Do(req)
+		if err != nil {
+			return err
 		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			if doRetries && attempt < maxRetries {
+				time.Sleep(retryDelay)
+				continue
+			}
+			return fmt.Errorf("download error after %d attempts, status code: %d", attempt, resp.StatusCode)
+		}
+
+		file, err := os.Create(dstPath)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+
+		total := resp.ContentLength
+		buffer := make([]byte, bufferSize)
+		var downloaded int64
+
+		startTime = time.Now()
+		for {
+			n, err := resp.Body.Read(buffer)
+			if err != nil && err != io.EOF {
+				if doRetries && attempt < maxRetries {
+					time.Sleep(retryDelay)
+					break
+				}
+				return fmt.Errorf("download error after %d attempts: %+v", attempt, err)
+			}
+
+			if n == 0 {
+				break
+			}
+
+			_, err = file.Write(buffer[:n])
+			if err != nil {
+				if doRetries && attempt < maxRetries {
+					time.Sleep(retryDelay)
+					break
+				}
+				return fmt.Errorf("write error after %d attempts: %+v", attempt, err)
+			}
+
+			downloaded += int64(n)
+			endTime := time.Now()
+			speed = calculateDownloadSpeed(downloaded, startTime, endTime)
+			progressReporter.UpdateDownloadProgress(downloaded, total, speed, filePath)
+		}
+		break
 	}
 
 	return nil
 }
 
-func DownloadTitle(cancel context.CancelFunc, titleID, outputDirectory string, doDecryption bool, progressReporter ProgressReporter, deleteEncryptedContents bool, logger *Logger) error {
+func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, doDecryption bool, progressReporter ProgressReporter, deleteEncryptedContents bool, logger *Logger) error {
 	titleEntry := getTitleEntryFromTid(titleID)
 
 	progressReporter.SetGameTitle(titleEntry.Name)
@@ -86,10 +125,12 @@ func DownloadTitle(cancel context.CancelFunc, titleID, outputDirectory string, d
 		return err
 	}
 
-	client := grab.NewClient()
-	client.BufferSize = bufferSize
+	client := &http.Client{}
 	tmdPath := filepath.Join(outputDir, "title.tmd")
-	if err := downloadFile(progressReporter, client, fmt.Sprintf("%s/%s", baseURL, "tmd"), tmdPath, true); err != nil {
+	if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%s", baseURL, "tmd"), tmdPath, true); err != nil {
+		if progressReporter.Cancelled() {
+			return nil
+		}
 		return err
 	}
 
@@ -104,7 +145,10 @@ func DownloadTitle(cancel context.CancelFunc, titleID, outputDirectory string, d
 	}
 
 	tikPath := filepath.Join(outputDir, "title.tik")
-	if err := downloadFile(progressReporter, client, fmt.Sprintf("%s/%s", baseURL, "cetk"), tikPath, false); err != nil {
+	if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%s", baseURL, "cetk"), tikPath, false); err != nil {
+		if progressReporter.Cancelled() {
+			return nil
+		}
 		titleKey, err := GenerateKey(titleID)
 		if err != nil {
 			return err
@@ -124,8 +168,11 @@ func DownloadTitle(cancel context.CancelFunc, titleID, outputDirectory string, d
 		return err
 	}
 
-	cert, err := GenerateCert(tmdData, contentCount, progressReporter, client)
+	cert, err := GenerateCert(tmdData, contentCount, progressReporter, client, cancelCtx)
 	if err != nil {
+		if progressReporter.Cancelled() {
+			return nil
+		}
 		return err
 	}
 
@@ -165,31 +212,38 @@ func DownloadTitle(cancel context.CancelFunc, titleID, outputDirectory string, d
 			return err
 		}
 		filePath := filepath.Join(outputDir, fmt.Sprintf("%08X.app", id))
-		if err := downloadFile(progressReporter, client, fmt.Sprintf("%s/%08X", baseURL, id), filePath, true); err != nil {
+		if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%08X", baseURL, id), filePath, true); err != nil {
+			if progressReporter.Cancelled() {
+				break
+			}
 			return err
 		}
 
 		if tmdData[offset+7]&0x2 == 2 {
 			filePath = filepath.Join(outputDir, fmt.Sprintf("%08X.h3", id))
-			if err := downloadFile(progressReporter, client, fmt.Sprintf("%s/%08X.h3", baseURL, id), filePath, true); err != nil {
+			if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%08X.h3", baseURL, id), filePath, true); err != nil {
+				if progressReporter.Cancelled() {
+					break
+				}
 				return err
 			}
 			content.Hash = tmdData[offset+16 : offset+0x14]
 			content.ID = fmt.Sprintf("%08X", id)
 			tmdDataReader.Seek(int64(offset+8), 0)
 			if err := binary.Read(tmdDataReader, binary.BigEndian, &content.Size); err != nil {
+				if progressReporter.Cancelled() {
+					break
+				}
 				return err
 			}
 			if err := checkContentHashes(outputDirectory, content, cipherHashTree); err != nil {
 				if progressReporter.Cancelled() {
-					cancel()
 					break
 				}
 				return err
 			}
 		}
 		if progressReporter.Cancelled() {
-			cancel()
 			break
 		}
 	}

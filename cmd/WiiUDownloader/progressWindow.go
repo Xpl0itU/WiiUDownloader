@@ -10,13 +10,15 @@ import (
 )
 
 type ProgressWindow struct {
-	Window       *gtk.Window
-	box          *gtk.Box
-	gameLabel    *gtk.Label
-	bar          *gtk.ProgressBar
-	cancelButton *gtk.Button
-	cancelled    bool
-	cancelFunc   context.CancelFunc
+	Window          *gtk.Window
+	box             *gtk.Box
+	gameLabel       *gtk.Label
+	bar             *gtk.ProgressBar
+	cancelButton    *gtk.Button
+	cancelled       bool
+	cancelFunc      context.CancelFunc
+	totalToDownload int64
+	totalDownloaded int64
 }
 
 func (pw *ProgressWindow) SetGameTitle(title string) {
@@ -28,11 +30,12 @@ func (pw *ProgressWindow) SetGameTitle(title string) {
 	}
 }
 
-func (pw *ProgressWindow) UpdateDownloadProgress(downloaded, total, speed int64, filePath string) {
+func (pw *ProgressWindow) UpdateDownloadProgress(downloaded, speed int64, filePath string) {
 	glib.IdleAdd(func() {
 		pw.cancelButton.SetSensitive(true)
-		pw.bar.SetFraction(float64(downloaded) / float64(total))
-		pw.bar.SetText(fmt.Sprintf("Downloading %s (%s/%s) (%s/s)", filePath, humanize.Bytes(uint64(downloaded)), humanize.Bytes(uint64(total)), humanize.Bytes(uint64(speed))))
+		currentDownload := downloaded + pw.totalDownloaded
+		pw.bar.SetFraction(float64(currentDownload) / float64(pw.totalToDownload))
+		pw.bar.SetText(fmt.Sprintf("Downloading %s (%s/%s) (%s/s)", filePath, humanize.Bytes(uint64(currentDownload)), humanize.Bytes(uint64(pw.totalToDownload)), humanize.Bytes(uint64(speed))))
 	})
 	for gtk.EventsPending() {
 		gtk.MainIteration()
@@ -56,6 +59,18 @@ func (pw *ProgressWindow) Cancelled() bool {
 
 func (pw *ProgressWindow) SetCancelled() {
 	pw.cancelFunc()
+}
+
+func (pw *ProgressWindow) SetDownloadSize(size int64) {
+	pw.totalToDownload = size
+}
+
+func (pw *ProgressWindow) SetTotalDownloaded(total int64) {
+	pw.totalDownloaded = total
+}
+
+func (pw *ProgressWindow) AddToTotalDownloaded(toAdd int64) {
+	pw.totalDownloaded += toAdd
 }
 
 func createProgressWindow(parent *gtk.ApplicationWindow) (*ProgressWindow, error) {

@@ -24,10 +24,13 @@ const (
 
 type ProgressReporter interface {
 	SetGameTitle(title string)
-	UpdateDownloadProgress(downloaded, total int64, speed int64, filePath string)
+	UpdateDownloadProgress(downloaded, speed int64, filePath string)
 	UpdateDecryptionProgress(progress float64)
 	Cancelled() bool
 	SetCancelled()
+	SetDownloadSize(size int64)
+	SetTotalDownloaded(total int64)
+	AddToTotalDownloaded(toAdd int64)
 }
 
 func calculateDownloadSpeed(downloaded int64, startTime, endTime time.Time) int64 {
@@ -70,7 +73,6 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 		}
 		defer file.Close()
 
-		total := resp.ContentLength
 		buffer := make([]byte, bufferSize)
 		var downloaded int64
 
@@ -101,7 +103,7 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 			downloaded += int64(n)
 			endTime := time.Now()
 			speed = calculateDownloadSpeed(downloaded, startTime, endTime)
-			progressReporter.UpdateDownloadProgress(downloaded, total, speed, filePath)
+			progressReporter.UpdateDownloadProgress(downloaded, speed, filePath)
 		}
 		break
 	}
@@ -112,6 +114,7 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, doDecryption bool, progressReporter ProgressReporter, deleteEncryptedContents bool, logger *Logger) error {
 	titleEntry := getTitleEntryFromTid(titleID)
 
+	progressReporter.SetTotalDownloaded(0)
 	progressReporter.SetGameTitle(titleEntry.Name)
 
 	outputDir := strings.TrimRight(outputDirectory, "/\\")
@@ -168,6 +171,22 @@ func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, d
 		return err
 	}
 
+	var titleSize uint64
+	var contentSizes []uint64
+	for i := 0; i < int(contentCount); i++ {
+		contentDataLoc := 0xB04 + (0x30 * i)
+
+		var contentSizeInt uint64
+		if err := binary.Read(bytes.NewReader(tmdData[contentDataLoc+8:contentDataLoc+8+8]), binary.BigEndian, &contentSizeInt); err != nil {
+			return err
+		}
+
+		titleSize += contentSizeInt
+		contentSizes = append(contentSizes, contentSizeInt)
+	}
+
+	progressReporter.SetDownloadSize(int64(titleSize))
+
 	cert, err := GenerateCert(tmdData, contentCount, progressReporter, client, cancelCtx)
 	if err != nil {
 		if progressReporter.Cancelled() {
@@ -218,6 +237,7 @@ func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, d
 			}
 			return err
 		}
+		progressReporter.AddToTotalDownloaded(int64(contentSizes[i]))
 
 		if tmdData[offset+7]&0x2 == 2 {
 			filePath = filepath.Join(outputDir, fmt.Sprintf("%08X.h3", id))
@@ -229,13 +249,7 @@ func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, d
 			}
 			content.Hash = tmdData[offset+16 : offset+0x14]
 			content.ID = fmt.Sprintf("%08X", id)
-			tmdDataReader.Seek(int64(offset+8), 0)
-			if err := binary.Read(tmdDataReader, binary.BigEndian, &content.Size); err != nil {
-				if progressReporter.Cancelled() {
-					break
-				}
-				return err
-			}
+			content.Size = int64(contentSizes[i])
 			if err := checkContentHashes(outputDirectory, content, cipherHashTree); err != nil {
 				if progressReporter.Cancelled() {
 					break

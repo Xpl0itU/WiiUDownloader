@@ -2,9 +2,11 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	wiiudownloader "github.com/Xpl0itU/WiiUDownloader"
 	"github.com/gotk3/gotk3/glib"
@@ -39,8 +41,18 @@ func main() {
 	if err != nil {
 		logger.Fatal(err.Error())
 	}
+
+	client := &http.Client{
+		Transport: &http.Transport{
+			MaxIdleConns:        1000,
+			MaxIdleConnsPerHost: 1000,
+			MaxConnsPerHost:     100,
+		},
+		Timeout: 30 * time.Second,
+	}
+
 	app.Connect("activate", func() {
-		win := NewMainWindow(app, wiiudownloader.GetTitleEntries(wiiudownloader.TITLE_CATEGORY_GAME), logger)
+		win := NewMainWindow(app, wiiudownloader.GetTitleEntries(wiiudownloader.TITLE_CATEGORY_GAME), logger, client)
 		win.ShowAll()
 		app.AddWindow(win.window)
 		app.GetActiveWindow().Show()

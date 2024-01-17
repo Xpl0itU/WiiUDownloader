@@ -111,7 +111,7 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 	return nil
 }
 
-func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, doDecryption bool, progressReporter ProgressReporter, deleteEncryptedContents bool, logger *Logger) error {
+func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, doDecryption bool, progressReporter ProgressReporter, deleteEncryptedContents bool, logger *Logger, client *http.Client) error {
 	titleEntry := getTitleEntryFromTid(titleID)
 
 	progressReporter.SetTotalDownloaded(0)
@@ -128,7 +128,6 @@ func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, d
 		return err
 	}
 
-	client := &http.Client{}
 	tmdPath := filepath.Join(outputDir, "title.tmd")
 	if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%s", baseURL, "tmd"), tmdPath, true); err != nil {
 		if progressReporter.Cancelled() {

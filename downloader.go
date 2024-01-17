@@ -41,7 +41,7 @@ func calculateDownloadSpeed(downloaded int64, startTime, endTime time.Time) int6
 	return 0
 }
 
-func downloadFile(ctx context.Context, progressReporter ProgressReporter, client *http.Client, downloadURL, dstPath string, doRetries bool) error {
+func downloadFile(ctx context.Context, progressReporter ProgressReporter, client *http.Client, downloadURL, dstPath string, doRetries bool, buffer []byte) error {
 	filePath := filepath.Base(dstPath)
 
 	var speed int64
@@ -73,7 +73,6 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 		}
 		defer file.Close()
 
-		buffer := make([]byte, bufferSize)
 		var downloaded int64
 
 		startTime = time.Now()
@@ -128,8 +127,10 @@ func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, d
 		return err
 	}
 
+	buffer := make([]byte, bufferSize)
+
 	tmdPath := filepath.Join(outputDir, "title.tmd")
-	if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%s", baseURL, "tmd"), tmdPath, true); err != nil {
+	if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%s", baseURL, "tmd"), tmdPath, true, buffer); err != nil {
 		if progressReporter.Cancelled() {
 			return nil
 		}
@@ -147,7 +148,7 @@ func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, d
 	}
 
 	tikPath := filepath.Join(outputDir, "title.tik")
-	if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%s", baseURL, "cetk"), tikPath, false); err != nil {
+	if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%s", baseURL, "cetk"), tikPath, false, buffer); err != nil {
 		if progressReporter.Cancelled() {
 			return nil
 		}
@@ -186,7 +187,7 @@ func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, d
 
 	progressReporter.SetDownloadSize(int64(titleSize))
 
-	cert, err := GenerateCert(tmdData, contentCount, progressReporter, client, cancelCtx)
+	cert, err := GenerateCert(tmdData, contentCount, progressReporter, client, cancelCtx, buffer)
 	if err != nil {
 		if progressReporter.Cancelled() {
 			return nil
@@ -230,7 +231,7 @@ func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, d
 			return err
 		}
 		filePath := filepath.Join(outputDir, fmt.Sprintf("%08X.app", id))
-		if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%08X", baseURL, id), filePath, true); err != nil {
+		if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%08X", baseURL, id), filePath, true, buffer); err != nil {
 			if progressReporter.Cancelled() {
 				break
 			}
@@ -240,7 +241,7 @@ func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, d
 
 		if tmdData[offset+7]&0x2 == 2 {
 			filePath = filepath.Join(outputDir, fmt.Sprintf("%08X.h3", id))
-			if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%08X.h3", baseURL, id), filePath, true); err != nil {
+			if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%08X.h3", baseURL, id), filePath, true, buffer); err != nil {
 				if progressReporter.Cancelled() {
 					break
 				}

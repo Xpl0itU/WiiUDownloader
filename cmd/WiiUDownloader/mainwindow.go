@@ -265,7 +265,7 @@ func (mw *MainWindow) ShowAll() {
 
 		wiiudownloader.GenerateTicket(filepath.Join(parentDir, "title.tik"), titleID, titleKey, titleVersion)
 
-		cert, err := wiiudownloader.GenerateCert(tmdData, contentCount, mw.progressWindow, http.DefaultClient, context.Background())
+		cert, err := wiiudownloader.GenerateCert(tmdData, contentCount, mw.progressWindow, http.DefaultClient, context.Background(), make([]byte, 0))
 		if err != nil {
 			return
 		}

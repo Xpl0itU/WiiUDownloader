@@ -44,7 +44,6 @@ func calculateDownloadSpeed(downloaded int64, startTime, endTime time.Time) int6
 func downloadFile(ctx context.Context, progressReporter ProgressReporter, client *http.Client, downloadURL, dstPath string, doRetries bool, buffer []byte) error {
 	filePath := filepath.Base(dstPath)
 
-	var speed int64
 	var startTime time.Time
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
@@ -100,9 +99,7 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 			}
 
 			downloaded += int64(n)
-			endTime := time.Now()
-			speed = calculateDownloadSpeed(downloaded, startTime, endTime)
-			progressReporter.UpdateDownloadProgress(downloaded, speed, filePath)
+			progressReporter.UpdateDownloadProgress(downloaded, calculateDownloadSpeed(downloaded, startTime, time.Now()), filePath)
 		}
 		break
 	}

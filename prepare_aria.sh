@@ -92,7 +92,7 @@ PKG_CONFIG_PATH=${PREFIX}/lib/pkgconfig/ \
     --without-libexpat \
     --without-libgcrypt \
     --without-libssh2 \
-    --without-zlib \
+    --without-libz \
     --with-openssl \
     --without-appletls \
     --without-libnettle \

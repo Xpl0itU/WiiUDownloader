@@ -65,8 +65,8 @@ fi
 tar zxvf openssl-${OPENSSL_V}.tar.gz
 cd openssl-${OPENSSL_V}
 PKG_CONFIG_PATH=${PREFIX}/lib/pkgconfig/ \
-    CC="$C_COMPILER" CXX="$CXX_COMPILER" \
-    ./config
+    LD_LIBRARY_PATH=${PREFIX}/lib/ CC="$C_COMPILER" CXX="$CXX_COMPILER" \
+    ./config --prefix=${PREFIX}
 make -j`nproc`
 make install_sw
 cd ..

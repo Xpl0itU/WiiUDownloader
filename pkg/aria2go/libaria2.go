@@ -5,7 +5,7 @@ package aria2go
 /*
  #cgo CXXFLAGS: -std=c++11 -I./aria2-lib/include -Werror -Wall
  #cgo LDFLAGS: -L./aria2-lib/lib
- #cgo LDFLAGS: -lcrypto -lssl -lcares -lz -laria2
+ #cgo LDFLAGS: -lcrypto -lssl -lcares -laria2
  #cgo darwin LDFLAGS: -framework Security
  #include <stdlib.h>
  #include "aria2_c.h"

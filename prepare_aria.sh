@@ -2,7 +2,6 @@
 
 # In this configuration, the following dependent libraries are compiled:
 #
-# * zlib
 # * c-ares
 # * openSSL
 
@@ -31,13 +30,11 @@ rm -rf ${PREFIX}
 rm -rf _obj
 
 ## Version
-ZLIB_V=1.2.11
 OPENSSL_V=1.1.1w
 C_ARES_V=1.24.0
 ARIA2_V=1.37.0
 
 ## Dependencies
-ZLIB=http://sourceforge.net/projects/libpng/files/zlib/${ZLIB_V}/zlib-${ZLIB_V}.tar.gz
 OPENSSL=http://www.openssl.org/source/openssl-${OPENSSL_V}.tar.gz
 C_ARES=http://c-ares.haxx.se/download/c-ares-${C_ARES_V}.tar.gz
 ARIA2=https://github.com/aria2/aria2/releases/download/release-${ARIA2_V}/aria2-${ARIA2_V}.tar.bz2
@@ -47,19 +44,6 @@ BUILD_DIRECTORY=/tmp/
 
 ## Build
 cd ${BUILD_DIRECTORY}
-
-# zlib build
-if ! [[ -e zlib-${ZLIB_V}.tar.gz ]]; then
-    ${DOWNLOADER} ${ZLIB}
-fi
-tar zxvf zlib-${ZLIB_V}.tar.gz
-cd zlib-${ZLIB_V}
-PKG_CONFIG_PATH=${PREFIX}/lib/pkgconfig/ \
-    LD_LIBRARY_PATH=${PREFIX}/lib/ CC="$C_COMPILER" CXX="$CXX_COMPILER" \
-    ./configure --prefix=${PREFIX} --static
-make -j`nproc`
-make install
-cd ..
 
 # c-ares build
 if ! [[ -e c&&res-${C_ARES_V}.tar.gz ]]; then
@@ -108,6 +92,7 @@ PKG_CONFIG_PATH=${PREFIX}/lib/pkgconfig/ \
     --without-libexpat \
     --without-libgcrypt \
     --without-libssh2 \
+    --without-zlib \
     --with-openssl \
     --without-appletls \
     --without-libnettle \
@@ -121,7 +106,6 @@ make install
 cd ..
 
 # cleaning
-rm -rf zlib-${ZLIB_V}
 rm -rf c-ares-${C_ARES_V}
 rm -rf openssl-${OPENSSL_V}
 rm -rf aria2-${ARIA2_V}

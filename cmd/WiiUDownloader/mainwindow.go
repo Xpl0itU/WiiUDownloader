@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -40,10 +39,10 @@ type MainWindow struct {
 	titles                          []wiiudownloader.TitleEntry
 	decryptContents                 bool
 	currentRegion                   uint8
-	client                          *http.Client
+	ariaSessionPath                 string
 }
 
-func NewMainWindow(app *gtk.Application, entries []wiiudownloader.TitleEntry, logger *wiiudownloader.Logger, client *http.Client) *MainWindow {
+func NewMainWindow(app *gtk.Application, entries []wiiudownloader.TitleEntry, logger *wiiudownloader.Logger, ariaSessionPath string) *MainWindow {
 	gSettings, err := gtk.SettingsGetDefault()
 	if err != nil {
 		logger.Error(err.Error())
@@ -67,13 +66,13 @@ func NewMainWindow(app *gtk.Application, entries []wiiudownloader.TitleEntry, lo
 	}
 
 	mainWindow := MainWindow{
-		window:         win,
-		titles:         entries,
-		searchEntry:    searchEntry,
-		currentRegion:  wiiudownloader.MCP_REGION_EUROPE | wiiudownloader.MCP_REGION_JAPAN | wiiudownloader.MCP_REGION_USA,
-		logger:         logger,
-		lastSearchText: "",
-		client:         client,
+		window:          win,
+		titles:          entries,
+		searchEntry:     searchEntry,
+		currentRegion:   wiiudownloader.MCP_REGION_EUROPE | wiiudownloader.MCP_REGION_JAPAN | wiiudownloader.MCP_REGION_USA,
+		logger:          logger,
+		lastSearchText:  "",
+		ariaSessionPath: ariaSessionPath,
 	}
 
 	searchEntry.Connect("changed", mainWindow.onSearchEntryChanged)
@@ -265,7 +264,7 @@ func (mw *MainWindow) ShowAll() {
 
 		wiiudownloader.GenerateTicket(filepath.Join(parentDir, "title.tik"), titleID, titleKey, titleVersion)
 
-		cert, err := wiiudownloader.GenerateCert(tmdData, contentCount, mw.progressWindow, http.DefaultClient, context.Background(), make([]byte, 0))
+		cert, err := wiiudownloader.GenerateCert(tmdData, contentCount, mw.progressWindow, context.Background(), make([]byte, 0), mw.ariaSessionPath)
 		if err != nil {
 			return
 		}
@@ -760,7 +759,7 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string) error {
 			}
 			tidStr := fmt.Sprintf("%016x", title.TitleID)
 			titlePath := filepath.Join(selectedPath, fmt.Sprintf("%s [%s] [%s]", normalizeFilename(title.Name), wiiudownloader.GetFormattedKind(title.TitleID), tidStr))
-			if err := wiiudownloader.DownloadTitle(queueCtx, tidStr, titlePath, mw.decryptContents, mw.progressWindow, mw.getDeleteEncryptedContents(), mw.logger, mw.client); err != nil && err != context.Canceled {
+			if err := wiiudownloader.DownloadTitle(queueCtx, tidStr, titlePath, mw.decryptContents, mw.progressWindow, mw.getDeleteEncryptedContents(), mw.logger, mw.ariaSessionPath); err != nil && err != context.Canceled {
 				return err
 			}
 

@@ -7,7 +7,7 @@ package aria2go
  #cgo LDFLAGS: -L./aria2-lib/lib
  #cgo LDFLAGS: -laria2 -lcares -lssl -lcrypto
  #cgo darwin LDFLAGS: -framework Security
- #cgo windows LDFLAGS: -lws2_32 -lwsock32 -lgdi32 -lwinmm -liphlpapi -lpsapi
+ #cgo windows LDFLAGS: -lcrypt32 -lws2_32 -lwsock32 -lgdi32 -lwinmm -liphlpapi -lpsapi
  #include <stdlib.h>
  #include "aria2_c.h"
 */

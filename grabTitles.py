@@ -45,4 +45,4 @@ os.system(
 os.system("ar rcs libcdecrypt.a cdecrypt/*.o")
 os.system("gcc -shared -o cdecrypt/libcdecrypt.so cdecrypt/*.o")
 
-os.system("./prepare_aria.sh")
+os.system("bash prepare_aria.sh")

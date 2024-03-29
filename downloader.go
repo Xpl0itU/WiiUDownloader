@@ -8,14 +8,12 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
-
-	"github.com/jaskaranSM/aria2go"
 )
 
 const (
@@ -35,38 +33,6 @@ type ProgressReporter interface {
 	AddToTotalDownloaded(toAdd int64)
 }
 
-type Aria2gocNotifier struct {
-	start    chan string
-	complete chan bool
-}
-
-func newAria2goNotifier(start chan string, complete chan bool) aria2go.Notifier {
-	return Aria2gocNotifier{
-		start:    start,
-		complete: complete,
-	}
-}
-
-func (n Aria2gocNotifier) OnStart(gid string) {
-	n.start <- gid
-}
-
-func (n Aria2gocNotifier) OnPause(gid string) {
-	return
-}
-
-func (n Aria2gocNotifier) OnStop(gid string) {
-	return
-}
-
-func (n Aria2gocNotifier) OnComplete(gid string) {
-	n.complete <- false
-}
-
-func (n Aria2gocNotifier) OnError(gid string) {
-	n.complete <- true
-}
-
 func calculateDownloadSpeed(downloaded int64, startTime, endTime time.Time) int64 {
 	duration := endTime.Sub(startTime).Seconds()
 	if duration > 0 {
@@ -75,75 +41,73 @@ func calculateDownloadSpeed(downloaded int64, startTime, endTime time.Time) int6
 	return 0
 }
 
-func downloadFile(ctx context.Context, progressReporter ProgressReporter, downloadURL, dstPath string, doRetries bool, buffer []byte, ariaSessionPath string) error {
-	fileName := filepath.Base(dstPath)
+func downloadFile(ctx context.Context, progressReporter ProgressReporter, client *http.Client, downloadURL, dstPath string, doRetries bool, buffer []byte) error {
+	filePath := filepath.Base(dstPath)
 
 	var startTime time.Time
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		client := aria2go.NewAria2(aria2go.Config{
-			Options: aria2go.Options{
-				"save-session": ariaSessionPath,
-			},
-		})
-
-		gid, err := client.AddUri(downloadURL, aria2go.Options{
-			"dir":      filepath.Dir(dstPath),
-			"out":      fileName,
-			"continue": "true",
-		})
+		req, err := http.NewRequestWithContext(ctx, "GET", downloadURL, nil)
 		if err != nil {
 			return err
 		}
 
-		go func() {
-			defer client.Shutdown()
-			client.Run()
-		}()
+		resp, err := client.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
 
-		startNotif := make(chan string)
-		completeNotif := make(chan bool)
-		go func() {
-			quit := make(chan os.Signal, 1)
-			signal.Notify(quit, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+		if resp.StatusCode != http.StatusOK {
+			if doRetries && attempt < maxRetries {
+				time.Sleep(retryDelay)
+				continue
+			}
+			return fmt.Errorf("download error after %d attempts, status code: %d", attempt, resp.StatusCode)
+		}
 
-			<-quit
-			completeNotif <- true
-		}()
-		client.SetNotifier(newAria2goNotifier(startNotif, completeNotif))
+		file, err := os.Create(dstPath)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+
+		var downloaded int64
 
 		startTime = time.Now()
-		ticker := time.NewTicker(time.Millisecond * 500)
-		defer ticker.Stop()
-	loop:
 		for {
-			select {
-			case id := <-startNotif:
-				gid = id
-			case <-ticker.C:
-				downloaded := client.GetDownloadInfo(gid).BytesCompleted
-				progressReporter.UpdateDownloadProgress(downloaded, calculateDownloadSpeed(downloaded, startTime, time.Now()), fileName)
-			case errored := <-completeNotif:
-				if errored {
-					if doRetries && attempt < maxRetries {
-						time.Sleep(retryDelay)
-						break loop
-					}
-					return fmt.Errorf("write error after %d attempts: %+v", attempt, client.GetDownloadInfo(gid).ErrorCode)
+			n, err := resp.Body.Read(buffer)
+			if err != nil && err != io.EOF {
+				if doRetries && attempt < maxRetries {
+					time.Sleep(retryDelay)
+					break
 				}
-				downloaded := client.GetDownloadInfo(gid).BytesCompleted
-				progressReporter.UpdateDownloadProgress(downloaded, calculateDownloadSpeed(downloaded, startTime, time.Now()), fileName)
-				return nil
-			case <-ctx.Done():
-				return nil
+				return fmt.Errorf("download error after %d attempts: %+v", attempt, err)
 			}
+
+			if n == 0 {
+				break
+			}
+
+			_, err = file.Write(buffer[:n])
+			if err != nil {
+				if doRetries && attempt < maxRetries {
+					time.Sleep(retryDelay)
+					break
+				}
+				return fmt.Errorf("write error after %d attempts: %+v", attempt, err)
+			}
+
+			downloaded += int64(n)
+			progressReporter.UpdateDownloadProgress(downloaded, calculateDownloadSpeed(downloaded, startTime, time.Now()), filePath)
 		}
+		break
 	}
 
 	return nil
 }
 
-func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, doDecryption bool, progressReporter ProgressReporter, deleteEncryptedContents bool, logger *Logger, ariaSessionPath string) error {
+func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, doDecryption bool, progressReporter ProgressReporter, deleteEncryptedContents bool, logger *Logger, client *http.Client) error {
 	titleEntry := getTitleEntryFromTid(titleID)
 
 	progressReporter.SetTotalDownloaded(0)
@@ -163,7 +127,7 @@ func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, d
 	buffer := make([]byte, bufferSize)
 
 	tmdPath := filepath.Join(outputDir, "title.tmd")
-	if err := downloadFile(cancelCtx, progressReporter, fmt.Sprintf("%s/%s", baseURL, "tmd"), tmdPath, true, buffer, ariaSessionPath); err != nil {
+	if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%s", baseURL, "tmd"), tmdPath, true, buffer); err != nil {
 		if progressReporter.Cancelled() {
 			return nil
 		}
@@ -181,7 +145,7 @@ func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, d
 	}
 
 	tikPath := filepath.Join(outputDir, "title.tik")
-	if err := downloadFile(cancelCtx, progressReporter, fmt.Sprintf("%s/%s", baseURL, "cetk"), tikPath, false, buffer, ariaSessionPath); err != nil {
+	if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%s", baseURL, "cetk"), tikPath, false, buffer); err != nil {
 		if progressReporter.Cancelled() {
 			return nil
 		}
@@ -220,7 +184,7 @@ func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, d
 
 	progressReporter.SetDownloadSize(int64(titleSize))
 
-	cert, err := GenerateCert(tmdData, contentCount, progressReporter, cancelCtx, buffer, ariaSessionPath)
+	cert, err := GenerateCert(tmdData, contentCount, progressReporter, client, cancelCtx, buffer)
 	if err != nil {
 		if progressReporter.Cancelled() {
 			return nil
@@ -264,7 +228,7 @@ func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, d
 			return err
 		}
 		filePath := filepath.Join(outputDir, fmt.Sprintf("%08X.app", id))
-		if err := downloadFile(cancelCtx, progressReporter, fmt.Sprintf("%s/%08X", baseURL, id), filePath, true, buffer, ariaSessionPath); err != nil {
+		if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%08X", baseURL, id), filePath, true, buffer); err != nil {
 			if progressReporter.Cancelled() {
 				break
 			}
@@ -274,7 +238,7 @@ func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, d
 
 		if tmdData[offset+7]&0x2 == 2 {
 			filePath = filepath.Join(outputDir, fmt.Sprintf("%08X.h3", id))
-			if err := downloadFile(cancelCtx, progressReporter, fmt.Sprintf("%s/%08X.h3", baseURL, id), filePath, true, buffer, ariaSessionPath); err != nil {
+			if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%08X.h3", baseURL, id), filePath, true, buffer); err != nil {
 				if progressReporter.Cancelled() {
 					break
 				}

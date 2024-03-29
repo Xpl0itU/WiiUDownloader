@@ -1,8 +1,7 @@
 FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
- PATH="$HOME/go/bin:/usr/local/go/bin:$PATH" \
- LD_LIBRARY_PATH="$LD_LIBRARY_PATH:pkg/aria2go/aria2-lib/lib"
+ PATH="$HOME/go/bin:/usr/local/go/bin:$PATH"
 
 RUN mkdir -p /usr/share/man/man1 /usr/share/man/man2 && \
     apt -y --no-install-recommends update && \

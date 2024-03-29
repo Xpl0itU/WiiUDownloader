@@ -2,14 +2,10 @@ github.com/TheTitanrain/w32 v0.0.0-20200114052255-2654d97dbd3d h1:2xp1BQbqcDDaik
 github.com/TheTitanrain/w32 v0.0.0-20200114052255-2654d97dbd3d/go.mod h1:peYoMncQljjNS6tZwI9WVyQB3qZS6u79/N3mBOcnd3I=
 github.com/Xpl0itU/dialog v0.0.0-20230805114139-ec888310aded h1:GkBw5aNvID1+SKAD3xC5fU4EwMgOmkrvICy5NX3Rqvw=
 github.com/Xpl0itU/dialog v0.0.0-20230805114139-ec888310aded/go.mod h1:Yl652wzqaetwEMJ8FnDRKBK1+CisE+PU5BGJXItbYFg=
-github.com/benesch/cgosymbolizer v0.0.0-20190515212042-bec6fe6e597b h1:5JgaFtHFRnOPReItxvhMDXbvuBkjSWE+9glJyF466yw=
-github.com/benesch/cgosymbolizer v0.0.0-20190515212042-bec6fe6e597b/go.mod h1:eMD2XUcPsHYbakFEocKrWZp47G0MRJYoC60qFblGjpA=
 github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=
 github.com/dustin/go-humanize v1.0.1/go.mod h1:Mu1zIs6XwVuF/gI1OepvI0qD18qycQx+mFykh5fBlto=
 github.com/gotk3/gotk3 v0.6.2 h1:sx/PjaKfKULJPTPq8p2kn2ZbcNFxpOJqi4VLzMbEOO8=
 github.com/gotk3/gotk3 v0.6.2/go.mod h1:/hqFpkNa9T3JgNAE2fLvCdov7c5bw//FHNZrZ3Uv9/Q=
-github.com/ianlancetaylor/cgosymbolizer v0.0.0-20231130194700-cfcb2fd150eb h1:asfjGoPvNgSPvgbBiwFqMUOgWgid8xlQGCGHfgM/PAs=
-github.com/ianlancetaylor/cgosymbolizer v0.0.0-20231130194700-cfcb2fd150eb/go.mod h1:DvXTE/K/RtHehxU8/GtDs4vFtfw64jJ3PaCnFri8CRg=
 golang.org/x/crypto v0.17.0 h1:r8bRNjWL3GshPW3gkd+RpvzWrZAwPS49OmTGZ/uhM4k=
 golang.org/x/crypto v0.17.0/go.mod h1:gCAAfMLgwOJRpTjQ2zCCt2OcSfYMTeZVSRtQlPC7Nq4=
 golang.org/x/sync v0.5.0 h1:60k92dhOjHxJkrqnwsfl8KuaHbn/5dl0lUPUklKo3qE=

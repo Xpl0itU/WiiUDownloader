@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"path"
 )
@@ -27,12 +28,12 @@ func getCert(tmdData []byte, id int, numContents uint16) ([]byte, error) {
 	}
 }
 
-func getDefaultCert(cancelCtx context.Context, progressReporter ProgressReporter, buffer []byte, ariaSessionPath string) ([]byte, error) {
+func getDefaultCert(cancelCtx context.Context, progressReporter ProgressReporter, client *http.Client, buffer []byte) ([]byte, error) {
 	if len(cetkData) >= 0x350+0x300 {
 		return cetkData[0x350 : 0x350+0x300], nil
 	}
 	cetkDir := path.Join(os.TempDir(), "cetk")
-	if err := downloadFile(cancelCtx, progressReporter, "http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/000500101000400a/cetk", cetkDir, true, buffer, ariaSessionPath); err != nil {
+	if err := downloadFile(cancelCtx, progressReporter, client, "http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/000500101000400a/cetk", cetkDir, true, buffer); err != nil {
 		return nil, err
 	}
 	cetkData, err := os.ReadFile(cetkDir)
@@ -50,7 +51,7 @@ func getDefaultCert(cancelCtx context.Context, progressReporter ProgressReporter
 	return nil, fmt.Errorf("failed to download OSv10 cetk, length: %d", len(cetkData))
 }
 
-func GenerateCert(tmdData []byte, contentCount uint16, progressReporter ProgressReporter, cancelCtx context.Context, buffer []byte, ariaSessionPath string) (bytes.Buffer, error) {
+func GenerateCert(tmdData []byte, contentCount uint16, progressReporter ProgressReporter, client *http.Client, cancelCtx context.Context, buffer []byte) (bytes.Buffer, error) {
 	cert := bytes.Buffer{}
 
 	cert0, err := getCert(tmdData, 0, contentCount)
@@ -65,7 +66,7 @@ func GenerateCert(tmdData []byte, contentCount uint16, progressReporter Progress
 	}
 	cert.Write(cert1)
 
-	defaultCert, err := getDefaultCert(cancelCtx, progressReporter, buffer, ariaSessionPath)
+	defaultCert, err := getDefaultCert(cancelCtx, progressReporter, client, buffer)
 	if err != nil {
 		return bytes.Buffer{}, err
 	}

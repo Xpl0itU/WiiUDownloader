@@ -3,14 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/dustin/go-humanize"
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
 )
-
-const smoothingFactor = 0.1
 
 type ProgressWindow struct {
 	Window          *gtk.Window
@@ -22,8 +19,6 @@ type ProgressWindow struct {
 	cancelFunc      context.CancelFunc
 	totalToDownload int64
 	totalDownloaded int64
-	lastUpdateTime  time.Time
-	averageSpeed    float64
 }
 
 func (pw *ProgressWindow) SetGameTitle(title string) {
@@ -40,19 +35,8 @@ func (pw *ProgressWindow) UpdateDownloadProgress(downloaded, speed int64, filePa
 		pw.cancelButton.SetSensitive(true)
 		currentDownload := downloaded + pw.totalDownloaded
 		pw.bar.SetFraction(float64(currentDownload) / float64(pw.totalToDownload))
-
-		pw.averageSpeed = smoothingFactor*float64(speed) + (1-smoothingFactor)*pw.averageSpeed
-
-		pw.bar.SetText(fmt.Sprintf("Downloading %s (%s/%s) (%s/s)",
-			filePath,
-			humanize.Bytes(uint64(currentDownload)),
-			humanize.Bytes(uint64(pw.totalToDownload)),
-			humanize.Bytes(uint64(pw.averageSpeed)),
-		))
-
-		pw.lastUpdateTime = time.Now()
+		pw.bar.SetText(fmt.Sprintf("Downloading %s (%s/%s) (%s/s)", filePath, humanize.Bytes(uint64(currentDownload)), humanize.Bytes(uint64(pw.totalToDownload)), humanize.Bytes(uint64(speed))))
 	})
-
 	for gtk.EventsPending() {
 		gtk.MainIteration()
 	}

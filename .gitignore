@@ -9,5 +9,3 @@ main
 *.a
 out/
 log.txt
-aria2-lib/
-_obj/

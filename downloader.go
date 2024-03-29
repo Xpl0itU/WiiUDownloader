@@ -249,18 +249,17 @@ func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, d
 		return fmt.Errorf("failed to create AES cipher: %w", err)
 	}
 
-	var id uint32
-	var content contentInfo
+	var content Content
 	tmdDataReader := bytes.NewReader(tmdData)
 
 	for i := 0; i < int(contentCount); i++ {
 		offset := 2820 + (48 * i)
 		tmdDataReader.Seek(int64(offset), 0)
-		if err := binary.Read(tmdDataReader, binary.BigEndian, &id); err != nil {
+		if err := binary.Read(tmdDataReader, binary.BigEndian, &content.ID); err != nil {
 			return err
 		}
-		filePath := filepath.Join(outputDir, fmt.Sprintf("%08X.app", id))
-		if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%08X", baseURL, id), filePath, true, buffer); err != nil {
+		filePath := filepath.Join(outputDir, fmt.Sprintf("%08X.app", content.ID))
+		if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%08X", baseURL, content.ID), filePath, true, buffer); err != nil {
 			if progressReporter.Cancelled() {
 				break
 			}
@@ -269,16 +268,15 @@ func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, d
 		progressReporter.AddToTotalDownloaded(int64(contentSizes[i]))
 
 		if tmdData[offset+7]&0x2 == 2 {
-			filePath = filepath.Join(outputDir, fmt.Sprintf("%08X.h3", id))
-			if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%08X.h3", baseURL, id), filePath, true, buffer); err != nil {
+			filePath = filepath.Join(outputDir, fmt.Sprintf("%08X.h3", content.ID))
+			if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%08X.h3", baseURL, content.ID), filePath, true, buffer); err != nil {
 				if progressReporter.Cancelled() {
 					break
 				}
 				return err
 			}
 			content.Hash = tmdData[offset+16 : offset+0x14]
-			content.ID = fmt.Sprintf("%08X", id)
-			content.Size = int64(contentSizes[i])
+			content.Size = contentSizes[i]
 			if err := checkContentHashes(outputDirectory, content, cipherHashTree); err != nil {
 				if progressReporter.Cancelled() {
 					break

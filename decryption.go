@@ -12,16 +12,327 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 )
 
 const READ_SIZE = 8 * 1024 * 1024
 
 type Content struct {
-	ID    uint32
-	Index []byte
-	Type  uint16
-	Size  uint64
-	Hash  []byte
+	ID     uint32
+	Index  []byte
+	Type   uint16
+	Size   uint64
+	Hash   []byte
+	CIDStr string
+}
+
+type FSTData struct {
+	FSTFile      *os.File
+	TotalEntries uint32
+	NamesOffset  uint32
+}
+
+func parseFST(fst *FSTData) {
+	fst.FSTFile.Seek(4, io.SeekStart)
+	_ = readInt(fst.FSTFile, 4)
+	exhCount := readInt(fst.FSTFile, 4)
+	fst.FSTFile.Seek(int64(0x14+(32*exhCount)), io.SeekCurrent)
+	fileEntriesOffset, _ := fst.FSTFile.Seek(0, io.SeekCurrent)
+	fst.FSTFile.Seek(8, io.SeekCurrent)
+	fst.TotalEntries = readInt(fst.FSTFile, 4)
+	fst.FSTFile.Seek(4, io.SeekCurrent)
+	fst.NamesOffset = uint32(fileEntriesOffset) + fst.TotalEntries*0x10
+}
+
+func readInt(f io.ReadSeeker, s int) uint32 {
+	bufSize := 4 // Buffer size is always 4 for uint32
+	buf := make([]byte, bufSize)
+
+	n, err := f.Read(buf[:s])
+	if err != nil {
+		panic(err)
+	}
+
+	if n < s {
+		// If we didn't read the expected number of bytes, seek back to the
+		// previous position in the file and return an error.
+		if _, err := f.Seek(int64(-n), io.SeekCurrent); err != nil {
+			panic(err)
+		}
+		panic(io.ErrUnexpectedEOF)
+	}
+
+	return binary.BigEndian.Uint32(buf)
+}
+
+func readInt16(f io.ReadSeeker, s int) uint16 {
+	bufSize := 2 // Buffer size is always 2 for uint16
+	buf := make([]byte, bufSize)
+
+	n, err := f.Read(buf[:s])
+	if err != nil {
+		panic(err)
+	}
+
+	if n < s {
+		// If we didn't read the expected number of bytes, seek back to the
+		// previous position in the file and return an error.
+		if _, err := f.Seek(int64(-n), io.SeekCurrent); err != nil {
+			panic(err)
+		}
+		panic(io.ErrUnexpectedEOF)
+	}
+
+	return binary.BigEndian.Uint16(buf)
+}
+
+func readString(f *os.File) string {
+	buf := []byte{}
+	for {
+		char := make([]byte, 1)
+		f.Read(char)
+		if char[0] == byte(0) || len(char) == 0 {
+			return string(buf)
+		}
+		buf = append(buf, char[0])
+	}
+}
+
+func read3BytesBE(f io.ReadSeeker) int {
+	b := make([]byte, 3)
+	f.Read(b)
+	return int(uint(b[2]) | uint(b[1])<<8 | uint(b[0])<<16)
+}
+
+func fileChunkOffset(offset uint32) uint32 {
+	chunks := (offset / 0xFC00)
+	singleChunkOffset := offset % 0xFC00
+	return singleChunkOffset + ((chunks + 1) * 0x400) + (chunks * 0xFC00)
+}
+
+func iterateDirectory(f *os.File, iterStart uint32, count uint32, namesOffset int64, depth uint32, topdir int32, contentRecords []Content, tree []string) error {
+	i := iterStart
+	for i < count {
+		fType := make([]byte, 1)
+		f.Read(fType)
+		isDir := fType[0] & 1
+
+		nameOffset := int64(read3BytesBE(f)) + namesOffset
+
+		origOffset, _ := f.Seek(0, io.SeekCurrent)
+		f.Seek(int64(nameOffset), io.SeekStart)
+		fName := readString(f)
+		f.Seek(origOffset, io.SeekStart)
+
+		fOffset := readInt(f, 4)
+		fSize := readInt(f, 4)
+		fFlags := readInt16(f, 2)
+		if fFlags&4 == 0 {
+			fOffset <<= 5
+		}
+
+		contentIndex := readInt16(f, 2)
+
+		// this should be based on fFlags, but I'm not sure if there is a reliable way to determine this yet.
+		hasHashTree := contentRecords[contentIndex].Type & 2
+
+		fRealOffset := fileChunkOffset(fOffset)
+		if hasHashTree == 0 {
+			fRealOffset = fOffset
+		}
+
+		if isDir != 0 {
+			if int32(fOffset) <= topdir {
+				return errors.New("invalid directory offset")
+			}
+			tree = append(tree, fName+"/")
+			os.MkdirAll(strings.Join(tree, ""), 0755)
+			iterateDirectory(f, i+1, fSize, namesOffset, depth+1, int32(fOffset), contentRecords, tree)
+			tree = tree[:len(tree)-1]
+			i = fSize - 1
+		} else {
+			withC, err := os.Open(contentRecords[contentIndex].CIDStr + ".app.dec")
+			if err != nil {
+				return err
+			}
+			defer withC.Close()
+			withO, err := os.Create(strings.Join(tree, "") + fName)
+			if err != nil {
+				return err
+			}
+			defer withO.Close()
+
+			_, err = withC.Seek(int64(fRealOffset), 0)
+			if err != nil {
+				return err
+			}
+
+			buf := []byte{}
+			left := fSize
+
+			for left > 0 {
+				toRead := min(0x20, int(left))
+				readBuf := make([]byte, toRead)
+				_, err = withC.Read(readBuf)
+				if err != nil && err != io.EOF {
+					return err
+				}
+				buf = append(buf, readBuf...)
+				left -= uint32(toRead)
+
+				if len(buf) >= 0x200 {
+					_, err = withO.Write(buf)
+					if err != nil {
+						return err
+					}
+					buf = []byte{}
+				}
+
+				withCOffset, _ := withC.Seek(0, io.SeekCurrent)
+
+				if hasHashTree != 0 && withCOffset%0x10000 < 0x400 {
+					_, err = withC.Seek(0x400, 1)
+					if err != nil {
+						return err
+					}
+				}
+			}
+
+			if len(buf) > 0 {
+				_, err = withO.Write(buf)
+				if err != nil {
+					return err
+				}
+			}
+		}
+		i++
+	}
+	return nil
+}
+
+func decryptContentToFile(encryptedFile *os.File, decryptedFile *os.File, cipherHashTree cipher.Block, content Content) error {
+	hasHashTree := content.Type&2 != 0
+	encryptedStat, err := encryptedFile.Stat()
+	if err != nil {
+		return err
+	}
+	encryptedSize := encryptedStat.Size()
+	path := filepath.Dir(encryptedFile.Name())
+
+	if hasHashTree { // if has a hash tree
+		chunkCount := encryptedSize / 0x10000
+		h3Data, err := os.ReadFile(filepath.Join(path, fmt.Sprintf("%s.h3", content.CIDStr)))
+		if err != nil {
+			return err
+		}
+		h3BytesSHASum := sha1.Sum(h3Data)
+		if hex.EncodeToString(h3BytesSHASum[:]) != hex.EncodeToString(content.Hash) {
+			fmt.Println("H3 Hash mismatch!")
+			fmt.Println(" > TMD:    " + hex.EncodeToString(content.Hash))
+			fmt.Println(" > Result: " + hex.EncodeToString(h3BytesSHASum[:]))
+			return errors.New("H3 Hash mismatch")
+		}
+
+		h0HashNum := int64(0)
+		h1HashNum := int64(0)
+		h2HashNum := int64(0)
+		h3HashNum := int64(0)
+
+		decryptedContent := make([]byte, 0x400)
+		buffer := make([]byte, 0x400)
+
+		for chunkNum := int64(0); chunkNum < chunkCount; chunkNum++ {
+			encryptedFile.Read(buffer)
+			cipher.NewCBCDecrypter(cipherHashTree, make([]byte, aes.BlockSize)).CryptBlocks(decryptedContent, buffer)
+
+			h0Hashes := decryptedContent[0:0x140]
+			h1Hashes := decryptedContent[0x140:0x280]
+			h2Hashes := decryptedContent[0x280:0x3c0]
+
+			h0Hash := h0Hashes[(h0HashNum * 0x14):((h0HashNum + 1) * 0x14)]
+			h1Hash := h1Hashes[(h1HashNum * 0x14):((h1HashNum + 1) * 0x14)]
+			h2Hash := h2Hashes[(h2HashNum * 0x14):((h2HashNum + 1) * 0x14)]
+			h3Hash := h3Data[(h3HashNum * 0x14):((h3HashNum + 1) * 0x14)]
+
+			h0HashesHash := sha1.Sum(h0Hashes)
+			h1HashesHash := sha1.Sum(h1Hashes)
+			h2HashesHash := sha1.Sum(h2Hashes)
+
+			if !reflect.DeepEqual(h0HashesHash[:], h1Hash) {
+				return errors.New("h0 Hashes Hash mismatch")
+			}
+			if !reflect.DeepEqual(h1HashesHash[:], h2Hash) {
+				return errors.New("h1 Hashes Hash mismatch")
+			}
+			if !reflect.DeepEqual(h2HashesHash[:], h3Hash) {
+				return errors.New("h2 Hashes Hash mismatch")
+			}
+
+			decryptedData := make([]byte, 0xFC00)
+			encryptedFile.Read(decryptedData)
+
+			cipher.NewCBCDecrypter(cipherHashTree, h0Hash[:16]).CryptBlocks(decryptedData, decryptedData)
+			decryptedDataHash := sha1.Sum(decryptedData)
+
+			if !reflect.DeepEqual(decryptedDataHash[:], h0Hash) {
+				fmt.Printf("\rData block hash invalid in chunk %v\n", chunkNum)
+				return errors.New("data block hash invalid")
+			}
+
+			decryptedFile.Write(decryptedContent)
+			decryptedFile.Write(decryptedData)
+
+			h0HashNum++
+			if h0HashNum >= 16 {
+				h0HashNum = 0
+				h1HashNum++
+			}
+			if h1HashNum >= 16 {
+				h1HashNum = 0
+				h2HashNum++
+			}
+			if h2HashNum >= 16 {
+				h2HashNum = 0
+				h3HashNum++
+			}
+		}
+	} else {
+		cipherContent := cipher.NewCBCDecrypter(cipherHashTree, append(content.Index, make([]byte, 14)...))
+		contentHash := sha1.New()
+		left := content.Size
+		leftHash := content.Size
+
+		for i := 0; i <= int(content.Size/READ_SIZE)+1; i++ {
+			toRead := min(READ_SIZE, left)
+			toReadHash := min(READ_SIZE, leftHash)
+
+			encryptedContent := make([]byte, toRead)
+			_, err = io.ReadFull(encryptedFile, encryptedContent)
+			if err != nil {
+				return err
+			}
+
+			decryptedContent := make([]byte, len(encryptedContent))
+			cipherContent.CryptBlocks(decryptedContent, encryptedContent)
+			contentHash.Write(decryptedContent[:toReadHash])
+			_, err = decryptedFile.Write(decryptedContent)
+			if err != nil {
+				return err
+			}
+
+			left -= toRead
+			leftHash -= toRead
+
+			if left == 0 {
+				break
+			}
+		}
+		if !reflect.DeepEqual(content.Hash, contentHash.Sum(nil)) {
+			print("Content Hash mismatch!")
+			return errors.New("content hash mismatch")
+		}
+	}
+	return nil
 }
 
 // TODO: Implement Logging, add extraction at the same time of decryption
@@ -130,164 +441,38 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 	}
 
 	fmt.Printf("Decrypted Titlekey: %x\n", decryptedTitleKey)
-	for _, c := range contents {
-		cidStr := fmt.Sprintf("%08X", c.ID)
-		fmt.Printf("Decrypting %v...\n", cidStr)
+	fst := FSTData{nil, 0, 0}
+	for i, c := range contents {
+		c.CIDStr = fmt.Sprintf("%08X", c.ID)
+		fmt.Printf("Decrypting %v...\n", c.CIDStr)
 
-		left, err := os.Stat(filepath.Join(path, cidStr+".app"))
+		encryptedFile, err := os.Open(filepath.Join(path, c.CIDStr+".app"))
 		if err != nil {
-			cidStr = fmt.Sprintf("%08x", c.ID)
-			left, err = os.Stat(filepath.Join(path, cidStr+".app"))
+			c.CIDStr = fmt.Sprintf("%08x", c.ID)
+			encryptedFile, err = os.Open(filepath.Join(path, c.CIDStr+".app"))
 			if err != nil {
-				fmt.Println("Failed to find encrypted content:", err)
+				fmt.Println("Failed to find and open encrypted content:", err)
 				return err
 			}
 		}
-		leftSize := left.Size()
+		defer encryptedFile.Close()
 
-		if c.Type&2 != 0 { // if has a hash tree
-			chunkCount := leftSize / 0x10000
-			h3Data, err := os.ReadFile(filepath.Join(path, fmt.Sprintf("%s.h3", cidStr)))
-			if err != nil {
-				return err
-			}
-			h3BytesSHASum := sha1.Sum(h3Data)
-			if hex.EncodeToString(h3BytesSHASum[:]) != hex.EncodeToString(c.Hash) {
-				fmt.Println("H3 Hash mismatch!")
-				fmt.Println(" > TMD:    " + hex.EncodeToString(c.Hash))
-				fmt.Println(" > Result: " + hex.EncodeToString(h3BytesSHASum[:]))
-				return errors.New("H3 Hash mismatch")
-			}
+		decryptedFile, err := os.Create(filepath.Join(path, c.CIDStr+".app.dec"))
+		if err != nil {
+			fmt.Println("Failed to create decrypted content file:", err)
+			return err
+		}
+		defer decryptedFile.Close()
 
-			h0HashNum := int64(0)
-			h1HashNum := int64(0)
-			h2HashNum := int64(0)
-			h3HashNum := int64(0)
+		if err := decryptContentToFile(encryptedFile, decryptedFile, cipherHashTree, c); err != nil {
+			fmt.Println("Failed to decrypt content file:", err)
+			return err
+		}
 
-			encryptedFile, err := os.Open(filepath.Join(path, cidStr+".app"))
-			if err != nil {
-				return err
-			}
-			defer encryptedFile.Close()
-
-			decryptedFile, err := os.Create(filepath.Join(path, cidStr+".app.dec"))
-			if err != nil {
-				return err
-			}
-			defer decryptedFile.Close()
-
-			decryptedContent := make([]byte, 0x400)
-			buffer := make([]byte, 0x400)
-
-			for chunkNum := int64(0); chunkNum < chunkCount; chunkNum++ {
-				encryptedFile.Read(buffer)
-				cipher.NewCBCDecrypter(cipherHashTree, make([]byte, aes.BlockSize)).CryptBlocks(decryptedContent, buffer)
-
-				h0Hashes := decryptedContent[0:0x140]
-				h1Hashes := decryptedContent[0x140:0x280]
-				h2Hashes := decryptedContent[0x280:0x3c0]
-
-				h0Hash := h0Hashes[(h0HashNum * 0x14):((h0HashNum + 1) * 0x14)]
-				h1Hash := h1Hashes[(h1HashNum * 0x14):((h1HashNum + 1) * 0x14)]
-				h2Hash := h2Hashes[(h2HashNum * 0x14):((h2HashNum + 1) * 0x14)]
-				h3Hash := h3Data[(h3HashNum * 0x14):((h3HashNum + 1) * 0x14)]
-
-				h0HashesHash := sha1.Sum(h0Hashes)
-				h1HashesHash := sha1.Sum(h1Hashes)
-				h2HashesHash := sha1.Sum(h2Hashes)
-
-				if !reflect.DeepEqual(h0HashesHash[:], h1Hash) {
-					return errors.New("h0 Hashes Hash mismatch")
-				}
-				if !reflect.DeepEqual(h1HashesHash[:], h2Hash) {
-					return errors.New("h1 Hashes Hash mismatch")
-				}
-				if !reflect.DeepEqual(h2HashesHash[:], h3Hash) {
-					return errors.New("h2 Hashes Hash mismatch")
-				}
-
-				decryptedData := make([]byte, 0xFC00)
-				encryptedFile.Read(decryptedData)
-
-				iv := h0Hash[:16]
-				cipher.NewCBCDecrypter(cipherHashTree, iv).CryptBlocks(decryptedData, decryptedData)
-				decryptedDataHash := sha1.Sum(decryptedData)
-
-				if !reflect.DeepEqual(decryptedDataHash[:], h0Hash) {
-					fmt.Printf("\rData block hash invalid in chunk %v\n", chunkNum)
-					return errors.New("data block hash invalid")
-				}
-
-				decryptedFile.Write(decryptedContent)
-				decryptedFile.Write(decryptedData)
-
-				h0HashNum++
-				if h0HashNum >= 16 {
-					h0HashNum = 0
-					h1HashNum++
-				}
-				if h1HashNum >= 16 {
-					h1HashNum = 0
-					h2HashNum++
-				}
-				if h2HashNum >= 16 {
-					h2HashNum = 0
-					h3HashNum++
-				}
-			}
-		} else {
-			cipherHashTree, err := aes.NewCipher(decryptedTitleKey)
-			if err != nil {
-				fmt.Println(err)
-				return err
-			}
-			cipherContent := cipher.NewCBCDecrypter(cipherHashTree, append(c.Index, make([]byte, 14)...))
-			contentHash := sha1.New()
-			left := c.Size
-			leftHash := c.Size
-
-			encrypted, err := os.Open(filepath.Join(path, cidStr+".app"))
-			if err != nil {
-				return err
-			}
-			defer encrypted.Close()
-
-			decrypted, err := os.Create(filepath.Join(path, cidStr+".app.dec"))
-			if err != nil {
-				return err
-			}
-			defer decrypted.Close()
-
-			for i := 0; i <= int(c.Size/READ_SIZE)+1; i++ {
-				toRead := min(READ_SIZE, left)
-				toReadHash := min(READ_SIZE, leftHash)
-
-				encryptedContent := make([]byte, toRead)
-				_, err = io.ReadFull(encrypted, encryptedContent)
-				if err != nil {
-					return err
-				}
-
-				decryptedContent := make([]byte, len(encryptedContent))
-				cipherContent.CryptBlocks(decryptedContent, encryptedContent)
-				contentHash.Write(decryptedContent[:toReadHash])
-				_, err = decrypted.Write(decryptedContent)
-				if err != nil {
-					return err
-				}
-
-				left -= uint64(toRead)
-				leftHash -= uint64(toRead)
-
-				if left == 0 {
-					break
-				}
-			}
-			if !reflect.DeepEqual(c.Hash, contentHash.Sum(nil)) {
-				print("Content Hash mismatch!")
-				return errors.New("Content Hash mismatch")
-			}
+		if i == 0 {
+			fst.FSTFile = decryptedFile
+			parseFST(&fst)
 		}
 	}
-	return nil
+	return iterateDirectory(fst.FSTFile, 1, uint32(len(contents)), int64(fst.NamesOffset), 0, -1, contents, []string{})
 }

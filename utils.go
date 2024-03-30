@@ -1,10 +1,18 @@
 package wiiudownloader
 
 import (
+	"cmp"
 	"os"
 	"path/filepath"
 	"strings"
 )
+
+func min[T cmp.Ordered](a, b T) T {
+	if a < b {
+		return a
+	}
+	return b
+}
 
 func isThisDecryptedFile(path string) bool {
 	return strings.Contains(path, "code") || strings.Contains(path, "content") || strings.Contains(path, "meta")

@@ -20,8 +20,5 @@ opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=ssl_con
 opener.addheaders = [("User-agent", "NUSspliBuilder/2.1")]
 urllib.request.install_opener(opener)
 
-checkAndDeleteFile("gtitles/gtitles.c")
-urllib.request.urlretrieve("https://napi.v10lator.de/db", "gtitles/gtitles.c")
-os.system("gcc -c -Wall -fpic -Ofast -pipe -Igtitles -o gtitles/gtitles.o gtitles/gtitles.c")
-os.system("ar rcs libgtitles.a gtitles/gtitles.o")
-os.system("gcc -shared -o gtitles/libgtitles.so gtitles/gtitles.o")
+checkAndDeleteFile("db.go")
+urllib.request.urlretrieve("https://napi.v10lator.de/db-n?t=go", "db.go")

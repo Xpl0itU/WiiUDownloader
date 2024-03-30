@@ -1,17 +1,7 @@
 package wiiudownloader
 
-/*
-#cgo CFLAGS: -I${SRCDIR}/gtitles
-#cgo LDFLAGS: -Wl,-rpath,${SRCDIR}
-#cgo LDFLAGS: -L${SRCDIR}
-#cgo LDFLAGS: -lgtitles
-#include <gtitles.h>
-#include <ctype.h>
-*/
-import "C"
 import (
 	"strconv"
-	"unsafe"
 )
 
 const (
@@ -58,31 +48,14 @@ const (
 	TID_HIGH_UPDATE          = 0x0005000E
 )
 
-type TitleEntry struct {
-	Name    string
-	TitleID uint64
-	Region  uint8
-	key     uint8
-}
-
 func GetTitleEntries(category uint8) []TitleEntry {
-	entriesSize := getTitleEntriesSize(category)
-	entriesSlice := make([]TitleEntry, entriesSize)
-	cEntries := C.getTitleEntries(C.TITLE_CATEGORY(category))
-	cSlice := (*[1 << 28]C.TitleEntry)(unsafe.Pointer(cEntries))[:entriesSize:entriesSize]
-	for i := 0; i < entriesSize; i++ {
-		entriesSlice[i] = TitleEntry{
-			Name:    C.GoString(cSlice[i].name),
-			TitleID: uint64(cSlice[i].tid),
-			Region:  uint8(cSlice[i].region),
-			key:     uint8(cSlice[i].key),
+	titleEntries := make([]TitleEntry, 0)
+	for _, entry := range titleEntry {
+		if entry.Category == category {
+			titleEntries = append(titleEntries, entry)
 		}
 	}
-	return entriesSlice
-}
-
-func getTitleEntriesSize(category uint8) int {
-	return int(C.getTitleEntriesSize(C.TITLE_CATEGORY(category)))
+	return titleEntries
 }
 
 func GetFormattedRegion(region uint8) string {

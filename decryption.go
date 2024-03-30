@@ -1,7 +1,6 @@
 package wiiudownloader
 
 import (
-	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/sha1"
@@ -20,6 +19,7 @@ const (
 	BLOCK_SIZE_HASHED = 0x10000
 	HASH_BLOCK_SIZE   = 0xFC00
 	HASHES_SIZE       = 0x0400
+	MAX_LEVELS        = 0x10
 )
 
 const READ_SIZE = 8 * 1024 * 1024
@@ -33,43 +33,31 @@ type Content struct {
 	CIDStr string
 }
 
-type FSTFileEntry struct {
-	Offset uint32
-	Length uint32
-}
-
-type FSTDirEntry struct {
-	ParentOffset uint32
-	NextOffset   uint32
-}
-
-type FSTEntry struct {
-	Type       uint32
-	NameOffset uint32
-	TypeName   uint32
-	EntryType  interface{}
-	Entry      [2]uint32
-	Flags      uint16
-	ContentID  uint16
+type FEntry struct {
+	Type       byte   // 0 = file, 1 = directory
+	NameOffset uint32 // 3 bytes
+	Offset     uint32 // 4 bytes
+	Length     uint32 // 4 bytes
+	Flags      uint16 // 2 bytes
+	ContentID  uint16 // 2 bytes
 }
 
 type FSTData struct {
 	FSTFile      *os.File
 	TotalEntries uint32
 	NamesOffset  uint32
-	FSTEntries   []FSTEntry
+	FSTEntries   []FEntry
 }
 
-func extractFileHash(src *os.File, partDataOffset uint64, fileOffset uint64, size uint64, path string, contentId uint16) error {
+func extractFileHash(src *os.File, partDataOffset uint64, fileOffset uint64, size uint64, path string, contentId uint16, cipherHashTree cipher.Block) error {
 	enc := make([]byte, BLOCK_SIZE_HASHED)
-	dec := make([]byte, BLOCK_SIZE_HASHED)
+	decryptedContent := make([]byte, BLOCK_SIZE_HASHED)
 	iv := make([]byte, 16)
-	hash := make([]byte, sha1.Size)
 	h0 := make([]byte, sha1.Size)
 	hashes := make([]byte, HASHES_SIZE)
 
-	write_size := HASH_BLOCK_SIZE
-	block_number := (fileOffset / HASH_BLOCK_SIZE) & 0x0F
+	writeSize := HASH_BLOCK_SIZE
+	blockNumber := (fileOffset / HASH_BLOCK_SIZE) & 0x0F
 
 	dst, err := os.Create(path)
 	if err != nil {
@@ -80,8 +68,8 @@ func extractFileHash(src *os.File, partDataOffset uint64, fileOffset uint64, siz
 	roffset := fileOffset / HASH_BLOCK_SIZE * BLOCK_SIZE_HASHED
 	soffset := fileOffset - (fileOffset / HASH_BLOCK_SIZE * HASH_BLOCK_SIZE)
 
-	if soffset+size > uint64(write_size) {
-		write_size = write_size - int(soffset)
+	if soffset+size > uint64(writeSize) {
+		writeSize = writeSize - int(soffset)
 	}
 
 	_, err = src.Seek(int64(partDataOffset+roffset), io.SeekStart)
@@ -90,55 +78,53 @@ func extractFileHash(src *os.File, partDataOffset uint64, fileOffset uint64, siz
 	}
 
 	for size > 0 {
-		if uint64(write_size) > size {
-			write_size = int(size)
+		if uint64(writeSize) > size {
+			writeSize = int(size)
 		}
 
 		if _, err := io.ReadFull(src, enc); err != nil {
 			return fmt.Errorf("could not read %d bytes from '%s': %w", BLOCK_SIZE_HASHED, path, err)
 		}
 
-		block, err := aes.NewCipher(commonKey)
-		if err != nil {
-			return err
-		}
+		iv[1] = uint8(contentId)
+		mode := cipher.NewCBCDecrypter(cipherHashTree, iv)
+		mode.CryptBlocks(hashes, enc[:HASHES_SIZE])
 
-		mode := cipher.NewCBCDecrypter(block, iv)
-		mode.CryptBlocks(hashes, enc)
+		copy(h0, hashes[0x14*blockNumber:0x14*blockNumber+sha1.Size])
+		copy(iv, hashes[0x14*blockNumber:0x14*blockNumber+16])
 
-		copy(h0, hashes[0x14*block_number:0x14*block_number+sha1.Size])
-
-		copy(iv, hashes[0x14*block_number:0x14*block_number+16])
-		if block_number == 0 {
+		if blockNumber == 0 { // from testing, it doesn't seem to do anything, leaving this just in case, same with the xor below
 			iv[1] ^= byte(contentId)
 		}
-		mode.CryptBlocks(dec, enc[HASHES_SIZE:])
+		mode.CryptBlocks(decryptedContent, enc[HASHES_SIZE:])
 
-		sha1 := sha1.Sum(dec)
-		copy(hash, sha1[:])
+		hash := sha1.Sum(decryptedContent)
 
-		if block_number == 0 {
+		if blockNumber == 0 {
 			hash[1] ^= byte(contentId)
 		}
 
-		if !bytes.Equal(hash, h0) {
-			return errors.New("could not verify H0 hash")
+		fmt.Printf("\rBlock %v: hash (this is what we calculated): %x\n", blockNumber, hash)
+		fmt.Printf("\rBlock %v: h0 (this is what the file has): %x\n", blockNumber, h0)
+
+		if !reflect.DeepEqual(hash, h0) {
+			return fmt.Errorf("could not verify H0 hash on block %v", blockNumber)
 		}
 
-		size -= uint64(write_size)
+		size -= uint64(writeSize)
 
-		_, err = dst.Write(dec[soffset : soffset+uint64(write_size)])
+		_, err = dst.Write(decryptedContent[soffset : soffset+uint64(writeSize)])
 		if err != nil {
 			return err
 		}
 
-		block_number++
-		if block_number >= 16 {
-			block_number = 0
+		blockNumber++
+		if blockNumber >= 16 {
+			blockNumber = 0
 		}
 
 		if soffset != 0 {
-			write_size = HASH_BLOCK_SIZE
+			writeSize = HASH_BLOCK_SIZE
 			soffset = 0
 		}
 	}
@@ -146,7 +132,7 @@ func extractFileHash(src *os.File, partDataOffset uint64, fileOffset uint64, siz
 	return nil
 }
 
-func extractFile(src *os.File, part_data_offset uint64, file_offset uint64, size uint64, path string, content_id uint16) error {
+func extractFile(src *os.File, part_data_offset uint64, file_offset uint64, size uint64, path string, content_id uint16, cipherHashTree cipher.Block) error {
 	enc := make([]byte, BLOCK_SIZE)
 	dec := make([]byte, BLOCK_SIZE)
 	iv := make([]byte, 16)
@@ -181,12 +167,7 @@ func extractFile(src *os.File, part_data_offset uint64, file_offset uint64, size
 			return fmt.Errorf("could not read %d bytes from '%s': %w", BLOCK_SIZE, path, err)
 		}
 
-		block, err := aes.NewCipher(commonKey)
-		if err != nil {
-			return err
-		}
-
-		mode := cipher.NewCBCDecrypter(block, iv)
+		mode := cipher.NewCBCDecrypter(cipherHashTree, iv)
 		mode.CryptBlocks(dec, enc)
 
 		size -= uint64(write_size)
@@ -205,6 +186,20 @@ func extractFile(src *os.File, part_data_offset uint64, file_offset uint64, size
 	return nil
 }
 
+func parseFSTEntry(fst *FSTData) error {
+	for i := uint32(0); i < fst.TotalEntries-1; i++ {
+		entry := FEntry{}
+		entry.Type = readByte(fst.FSTFile)
+		entry.NameOffset = uint32(read3BytesBE(fst.FSTFile))
+		entry.Offset = readInt(fst.FSTFile, 4)
+		entry.Length = readInt(fst.FSTFile, 4)
+		entry.Flags = readInt16(fst.FSTFile, 2)
+		entry.ContentID = readInt16(fst.FSTFile, 2)
+		fst.FSTEntries = append(fst.FSTEntries, entry)
+	}
+	return nil
+}
+
 func parseFST(fst *FSTData) {
 	fst.FSTFile.Seek(4, io.SeekStart)
 	_ = readInt(fst.FSTFile, 4)
@@ -215,7 +210,19 @@ func parseFST(fst *FSTData) {
 	fst.TotalEntries = readInt(fst.FSTFile, 4)
 	fst.FSTFile.Seek(4, io.SeekCurrent)
 	fst.NamesOffset = uint32(fileEntriesOffset) + fst.TotalEntries*0x10
+	parseFSTEntry(fst)
+}
 
+func readByte(f io.ReadSeeker) byte {
+	buf := make([]byte, 1)
+	n, err := f.Read(buf)
+	if err != nil {
+		panic(err)
+	}
+	if n < 1 {
+		panic(io.ErrUnexpectedEOF)
+	}
+	return buf[0]
 }
 
 func readInt(f io.ReadSeeker, s int) uint32 {
@@ -481,6 +488,18 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 			fmt.Println("Failed to read content hash:", err)
 			return err
 		}
+
+		contents[c].CIDStr = fmt.Sprintf("%08X", contents[c].ID)
+
+		_, err := os.Stat(filepath.Join(path, contents[c].CIDStr+".app"))
+		if err != nil {
+			contents[c].CIDStr = fmt.Sprintf("%08x", contents[c].ID)
+			_, err = os.Stat(filepath.Join(path, contents[c].CIDStr+".app"))
+			if err != nil {
+				fmt.Println("Failed to find encrypted content:", err)
+				return err
+			}
+		}
 	}
 	fmt.Printf("Title ID: %s\n", hex.EncodeToString(titleID))
 
@@ -515,38 +534,85 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 	}
 
 	fmt.Printf("Decrypted Titlekey: %x\n", decryptedTitleKey)
-	fst := FSTData{nil, 0, 0, nil}
-	for i, c := range contents {
-		c.CIDStr = fmt.Sprintf("%08X", c.ID)
-		fmt.Printf("Decrypting %v...\n", c.CIDStr)
 
-		encryptedFile, err := os.Open(filepath.Join(path, c.CIDStr+".app"))
-		if err != nil {
-			c.CIDStr = fmt.Sprintf("%08x", c.ID)
-			encryptedFile, err = os.Open(filepath.Join(path, c.CIDStr+".app"))
-			if err != nil {
-				fmt.Println("Failed to find and open encrypted content:", err)
-				return err
+	fstEncFile, err := os.Open(filepath.Join(path, contents[0].CIDStr+".app"))
+	if err != nil {
+		fmt.Println("Failed to open encrypted FST file:", err)
+		return err
+	}
+	defer fstEncFile.Close()
+
+	fstDecFile, err := os.Create(filepath.Join(path, contents[0].CIDStr+".app.dec"))
+	if err != nil {
+		fmt.Println("Failed to create decrypted content file:", err)
+		return err
+	}
+	defer fstDecFile.Close()
+
+	if err := decryptContentToFile(fstEncFile, fstDecFile, cipherHashTree, contents[0]); err != nil {
+		fmt.Println("Failed to decrypt content file:", err)
+		return err
+	}
+
+	fstDecFile.Seek(0, io.SeekStart)
+	fst := FSTData{FSTFile: fstDecFile, FSTEntries: make([]FEntry, 0), TotalEntries: 0, NamesOffset: 0}
+	parseFST(&fst)
+	fmt.Printf("FST Entry count: %v\n", fst.TotalEntries)
+
+	outputPath := path
+	entry := make([]uint32, 0x10)
+	lEntry := make([]uint32, 0x10)
+	level := uint32(0)
+
+	for i, ent := range fst.FSTEntries {
+		if level > 0 {
+			for (level >= 1) && (int(lEntry[level-1]) == i) {
+				level--
 			}
 		}
-		defer encryptedFile.Close()
 
-		decryptedFile, err := os.Create(filepath.Join(path, c.CIDStr+".app.dec"))
-		if err != nil {
-			fmt.Println("Failed to create decrypted content file:", err)
-			return err
-		}
-		defer decryptedFile.Close()
-
-		if err := decryptContentToFile(encryptedFile, decryptedFile, cipherHashTree, c); err != nil {
-			fmt.Println("Failed to decrypt content file:", err)
-			return err
-		}
-
-		if i == 0 {
-			decryptedFile.Seek(0, io.SeekStart)
-			fst.FSTFile = decryptedFile
-			parseFST(&fst)
+		if ent.Type&1 != 0 {
+			entry[level] = uint32(i)
+			level++
+			lEntry[level] = ent.Length
+			if level >= MAX_LEVELS {
+				return errors.New("level >= MAX_LEVELS")
+			}
+			fst.FSTFile.Seek(int64(fst.NamesOffset+uint32(ent.NameOffset)), io.SeekStart)
+			os.MkdirAll(filepath.Join(outputPath, readString(fst.FSTFile)), 0755)
+		} else {
+			pathOffset := uint32(0)
+			outputPath = path
+			for i := uint32(0); i < level; i++ {
+				pathOffset = fst.FSTEntries[entry[i]].NameOffset & 0x00FFFFFF
+				fst.FSTFile.Seek(int64(fst.NamesOffset+pathOffset), io.SeekStart)
+				outputPath = filepath.Join(outputPath, readString(fst.FSTFile))
+				os.MkdirAll(outputPath, 0755)
+			}
+			pathOffset = ent.NameOffset & 0x00FFFFFF
+			fst.FSTFile.Seek(int64(fst.NamesOffset+pathOffset), io.SeekStart)
+			outputPath = filepath.Join(outputPath, readString(fst.FSTFile))
+			contentOffset := uint64(ent.Offset)
+			if ent.Flags&4 == 0 {
+				contentOffset <<= 5
+			}
+			if ent.Type&0x80 == 0 {
+				matchingContent := contents[ent.ContentID]
+				tmdFlags := matchingContent.Type
+				srcFile, err := os.Open(filepath.Join(path, matchingContent.CIDStr+".app"))
+				if err != nil {
+					return err
+				}
+				defer srcFile.Close()
+				if tmdFlags&2 != 0 {
+					err = extractFileHash(srcFile, contentOffset, uint64(ent.Offset), uint64(ent.Length), outputPath, ent.ContentID, cipherHashTree)
+				} else {
+					err = extractFile(srcFile, contentOffset, uint64(ent.Offset), uint64(ent.Length), outputPath, ent.ContentID, cipherHashTree)
+				}
+				if err != nil {
+					return err
+				}
+			}
 		}
 	}
 	return nil

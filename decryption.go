@@ -562,7 +562,7 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 		}
 
 		if fst.FSTEntries[i].Type&1 != 0 {
-			entry[level] = uint32(i)
+			entry[level] = i
 			lEntry[level] = fst.FSTEntries[i].Length
 			level++
 			if level >= MAX_LEVELS {

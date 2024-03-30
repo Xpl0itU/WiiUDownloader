@@ -1,6 +1,7 @@
 package wiiudownloader
 
 import (
+	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/sha1"
@@ -12,7 +13,13 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"strings"
+)
+
+const (
+	BLOCK_SIZE        = 0x8000
+	BLOCK_SIZE_HASHED = 0x10000
+	HASH_BLOCK_SIZE   = 0xFC00
+	HASHES_SIZE       = 0x0400
 )
 
 const READ_SIZE = 8 * 1024 * 1024
@@ -26,10 +33,176 @@ type Content struct {
 	CIDStr string
 }
 
+type FSTFileEntry struct {
+	Offset uint32
+	Length uint32
+}
+
+type FSTDirEntry struct {
+	ParentOffset uint32
+	NextOffset   uint32
+}
+
+type FSTEntry struct {
+	Type       uint32
+	NameOffset uint32
+	TypeName   uint32
+	EntryType  interface{}
+	Entry      [2]uint32
+	Flags      uint16
+	ContentID  uint16
+}
+
 type FSTData struct {
 	FSTFile      *os.File
 	TotalEntries uint32
 	NamesOffset  uint32
+	FSTEntries   []FSTEntry
+}
+
+func extractFileHash(src *os.File, partDataOffset uint64, fileOffset uint64, size uint64, path string, contentId uint16) error {
+	enc := make([]byte, BLOCK_SIZE_HASHED)
+	dec := make([]byte, BLOCK_SIZE_HASHED)
+	iv := make([]byte, 16)
+	hash := make([]byte, sha1.Size)
+	h0 := make([]byte, sha1.Size)
+	hashes := make([]byte, HASHES_SIZE)
+
+	write_size := HASH_BLOCK_SIZE
+	block_number := (fileOffset / HASH_BLOCK_SIZE) & 0x0F
+
+	dst, err := os.Create(path)
+	if err != nil {
+		return fmt.Errorf("could not create '%s': %w", path, err)
+	}
+	defer dst.Close()
+
+	roffset := fileOffset / HASH_BLOCK_SIZE * BLOCK_SIZE_HASHED
+	soffset := fileOffset - (fileOffset / HASH_BLOCK_SIZE * HASH_BLOCK_SIZE)
+
+	if soffset+size > uint64(write_size) {
+		write_size = write_size - int(soffset)
+	}
+
+	_, err = src.Seek(int64(partDataOffset+roffset), io.SeekStart)
+	if err != nil {
+		return err
+	}
+
+	for size > 0 {
+		if uint64(write_size) > size {
+			write_size = int(size)
+		}
+
+		if _, err := io.ReadFull(src, enc); err != nil {
+			return fmt.Errorf("could not read %d bytes from '%s': %w", BLOCK_SIZE_HASHED, path, err)
+		}
+
+		block, err := aes.NewCipher(commonKey)
+		if err != nil {
+			return err
+		}
+
+		mode := cipher.NewCBCDecrypter(block, iv)
+		mode.CryptBlocks(hashes, enc)
+
+		copy(h0, hashes[0x14*block_number:0x14*block_number+sha1.Size])
+
+		copy(iv, hashes[0x14*block_number:0x14*block_number+16])
+		if block_number == 0 {
+			iv[1] ^= byte(contentId)
+		}
+		mode.CryptBlocks(dec, enc[HASHES_SIZE:])
+
+		sha1 := sha1.Sum(dec)
+		copy(hash, sha1[:])
+
+		if block_number == 0 {
+			hash[1] ^= byte(contentId)
+		}
+
+		if !bytes.Equal(hash, h0) {
+			return errors.New("could not verify H0 hash")
+		}
+
+		size -= uint64(write_size)
+
+		_, err = dst.Write(dec[soffset : soffset+uint64(write_size)])
+		if err != nil {
+			return err
+		}
+
+		block_number++
+		if block_number >= 16 {
+			block_number = 0
+		}
+
+		if soffset != 0 {
+			write_size = HASH_BLOCK_SIZE
+			soffset = 0
+		}
+	}
+
+	return nil
+}
+
+func extractFile(src *os.File, part_data_offset uint64, file_offset uint64, size uint64, path string, content_id uint16) error {
+	enc := make([]byte, BLOCK_SIZE)
+	dec := make([]byte, BLOCK_SIZE)
+	iv := make([]byte, 16)
+
+	roffset := file_offset / BLOCK_SIZE * BLOCK_SIZE
+	soffset := file_offset - (file_offset / BLOCK_SIZE * BLOCK_SIZE)
+
+	dst, err := os.Create(path)
+	if err != nil {
+		return fmt.Errorf("could not create '%s': %w", path, err)
+	}
+	defer dst.Close()
+
+	iv[1] = byte(content_id)
+
+	write_size := BLOCK_SIZE
+	if soffset+size > uint64(write_size) {
+		write_size = write_size - int(soffset)
+	}
+
+	_, err = src.Seek(int64(part_data_offset+roffset), io.SeekStart)
+	if err != nil {
+		return err
+	}
+
+	for size > 0 {
+		if uint64(write_size) > size {
+			write_size = int(size)
+		}
+
+		if _, err := io.ReadFull(src, enc); err != nil {
+			return fmt.Errorf("could not read %d bytes from '%s': %w", BLOCK_SIZE, path, err)
+		}
+
+		block, err := aes.NewCipher(commonKey)
+		if err != nil {
+			return err
+		}
+
+		mode := cipher.NewCBCDecrypter(block, iv)
+		mode.CryptBlocks(dec, enc)
+
+		size -= uint64(write_size)
+
+		_, err = dst.Write(dec[soffset : soffset+uint64(write_size)])
+		if err != nil {
+			return err
+		}
+
+		if soffset != 0 {
+			write_size = BLOCK_SIZE
+			soffset = 0
+		}
+	}
+
+	return nil
 }
 
 func parseFST(fst *FSTData) {
@@ -42,6 +215,7 @@ func parseFST(fst *FSTData) {
 	fst.TotalEntries = readInt(fst.FSTFile, 4)
 	fst.FSTFile.Seek(4, io.SeekCurrent)
 	fst.NamesOffset = uint32(fileEntriesOffset) + fst.TotalEntries*0x10
+
 }
 
 func readInt(f io.ReadSeeker, s int) uint32 {
@@ -108,106 +282,6 @@ func fileChunkOffset(offset uint32) uint32 {
 	chunks := (offset / 0xFC00)
 	singleChunkOffset := offset % 0xFC00
 	return singleChunkOffset + ((chunks + 1) * 0x400) + (chunks * 0xFC00)
-}
-
-func iterateDirectory(f *os.File, iterStart uint32, count uint32, namesOffset int64, depth uint32, topdir int32, contentRecords []Content, tree []string) error {
-	i := iterStart
-	for i < count {
-		fType := make([]byte, 1)
-		f.Read(fType)
-		isDir := fType[0] & 1
-
-		nameOffset := int64(read3BytesBE(f)) + namesOffset
-
-		origOffset, _ := f.Seek(0, io.SeekCurrent)
-		f.Seek(int64(nameOffset), io.SeekStart)
-		fName := readString(f)
-		f.Seek(origOffset, io.SeekStart)
-
-		fOffset := readInt(f, 4)
-		fSize := readInt(f, 4)
-		fFlags := readInt16(f, 2)
-		if fFlags&4 == 0 {
-			fOffset <<= 5
-		}
-
-		contentIndex := readInt16(f, 2)
-
-		// this should be based on fFlags, but I'm not sure if there is a reliable way to determine this yet.
-		hasHashTree := contentRecords[contentIndex].Type & 2
-
-		fRealOffset := fileChunkOffset(fOffset)
-		if hasHashTree == 0 {
-			fRealOffset = fOffset
-		}
-
-		if isDir != 0 {
-			if int32(fOffset) <= topdir {
-				return errors.New("invalid directory offset")
-			}
-			tree = append(tree, fName+"/")
-			os.MkdirAll(strings.Join(tree, ""), 0755)
-			iterateDirectory(f, i+1, fSize, namesOffset, depth+1, int32(fOffset), contentRecords, tree)
-			tree = tree[:len(tree)-1]
-			i = fSize - 1
-		} else {
-			withC, err := os.Open(contentRecords[contentIndex].CIDStr + ".app.dec")
-			if err != nil {
-				return err
-			}
-			defer withC.Close()
-			withO, err := os.Create(strings.Join(tree, "") + fName)
-			if err != nil {
-				return err
-			}
-			defer withO.Close()
-
-			_, err = withC.Seek(int64(fRealOffset), 0)
-			if err != nil {
-				return err
-			}
-
-			buf := []byte{}
-			left := fSize
-
-			for left > 0 {
-				toRead := min(0x20, int(left))
-				readBuf := make([]byte, toRead)
-				_, err = withC.Read(readBuf)
-				if err != nil && err != io.EOF {
-					return err
-				}
-				buf = append(buf, readBuf...)
-				left -= uint32(toRead)
-
-				if len(buf) >= 0x200 {
-					_, err = withO.Write(buf)
-					if err != nil {
-						return err
-					}
-					buf = []byte{}
-				}
-
-				withCOffset, _ := withC.Seek(0, io.SeekCurrent)
-
-				if hasHashTree != 0 && withCOffset%0x10000 < 0x400 {
-					_, err = withC.Seek(0x400, 1)
-					if err != nil {
-						return err
-					}
-				}
-			}
-
-			if len(buf) > 0 {
-				_, err = withO.Write(buf)
-				if err != nil {
-					return err
-				}
-			}
-		}
-		i++
-	}
-	return nil
 }
 
 func decryptContentToFile(encryptedFile *os.File, decryptedFile *os.File, cipherHashTree cipher.Block, content Content) error {
@@ -441,7 +515,7 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 	}
 
 	fmt.Printf("Decrypted Titlekey: %x\n", decryptedTitleKey)
-	fst := FSTData{nil, 0, 0}
+	fst := FSTData{nil, 0, 0, nil}
 	for i, c := range contents {
 		c.CIDStr = fmt.Sprintf("%08X", c.ID)
 		fmt.Printf("Decrypting %v...\n", c.CIDStr)
@@ -470,9 +544,10 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 		}
 
 		if i == 0 {
+			decryptedFile.Seek(0, io.SeekStart)
 			fst.FSTFile = decryptedFile
 			parseFST(&fst)
 		}
 	}
-	return iterateDirectory(fst.FSTFile, 1, uint32(len(contents)), int64(fst.NamesOffset), 0, -1, contents, []string{})
+	return nil
 }

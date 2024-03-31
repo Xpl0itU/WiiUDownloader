@@ -1,6 +1,7 @@
 package wiiudownloader
 
 import (
+	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/sha1"
@@ -43,7 +44,7 @@ type FEntry struct {
 }
 
 type FSTData struct {
-	FSTFile     *os.File
+	FSTReader   *bytes.Reader
 	EntryCount  uint32
 	Entries     uint32
 	NamesOffset uint32
@@ -182,24 +183,24 @@ func extractFile(src *os.File, part_data_offset uint64, file_offset uint64, size
 func parseFSTEntry(fst *FSTData) error {
 	for i := uint32(0); i < fst.Entries; i++ {
 		entry := FEntry{}
-		entry.Type = readByte(fst.FSTFile)
-		entry.NameOffset = uint32(read3BytesBE(fst.FSTFile))
-		entry.Offset = readInt(fst.FSTFile, 4)
-		entry.Length = readInt(fst.FSTFile, 4)
-		entry.Flags = readInt16(fst.FSTFile, 2)
-		entry.ContentID = readInt16(fst.FSTFile, 2)
+		entry.Type = readByte(fst.FSTReader)
+		entry.NameOffset = uint32(read3BytesBE(fst.FSTReader))
+		entry.Offset = readInt(fst.FSTReader, 4)
+		entry.Length = readInt(fst.FSTReader, 4)
+		entry.Flags = readInt16(fst.FSTReader, 2)
+		entry.ContentID = readInt16(fst.FSTReader, 2)
 		fst.FSTEntries = append(fst.FSTEntries, entry)
 	}
 	return nil
 }
 
 func parseFST(fst *FSTData) {
-	fst.FSTFile.Seek(0x8, io.SeekStart)
-	fst.EntryCount = readInt(fst.FSTFile, 4)
-	fst.FSTFile.Seek(int64(0x20+fst.EntryCount*0x20+8), io.SeekStart)
-	fst.Entries = readInt(fst.FSTFile, 4)
+	fst.FSTReader.Seek(0x8, io.SeekStart)
+	fst.EntryCount = readInt(fst.FSTReader, 4)
+	fst.FSTReader.Seek(int64(0x20+fst.EntryCount*0x20+8), io.SeekStart)
+	fst.Entries = readInt(fst.FSTReader, 4)
 	fst.NamesOffset = 0x20 + fst.EntryCount*0x20 + fst.Entries*0x10
-	fst.FSTFile.Seek(4, io.SeekCurrent)
+	fst.FSTReader.Seek(4, io.SeekCurrent)
 	parseFSTEntry(fst)
 }
 
@@ -257,7 +258,7 @@ func readInt16(f io.ReadSeeker, s int) uint16 {
 	return binary.BigEndian.Uint16(buf)
 }
 
-func readString(f *os.File) string {
+func readString(f io.ReadSeeker) string {
 	buf := []byte{}
 	for {
 		char := make([]byte, 1)
@@ -275,7 +276,7 @@ func read3BytesBE(f io.ReadSeeker) int {
 	return int(uint(b[2]) | uint(b[1])<<8 | uint(b[0])<<16)
 }
 
-func decryptContentToFile(encryptedFile *os.File, decryptedFile *os.File, cipherHashTree cipher.Block, content Content) error {
+func decryptContentToBuffer(encryptedFile *os.File, decryptedBuffer *bytes.Buffer, cipherHashTree cipher.Block, content Content) error {
 	hasHashTree := content.Type&2 != 0
 	encryptedStat, err := encryptedFile.Stat()
 	if err != nil {
@@ -340,8 +341,14 @@ func decryptContentToFile(encryptedFile *os.File, decryptedFile *os.File, cipher
 				return errors.New("data block hash invalid")
 			}
 
-			decryptedFile.Write(hashes)
-			decryptedFile.Write(decryptedData)
+			_, err = decryptedBuffer.Write(hashes)
+			if err != nil {
+				return err
+			}
+			_, err = decryptedBuffer.Write(decryptedData)
+			if err != nil {
+				return err
+			}
 
 			h0HashNum++
 			if h0HashNum >= 16 {
@@ -376,7 +383,7 @@ func decryptContentToFile(encryptedFile *os.File, decryptedFile *os.File, cipher
 			decryptedContent := make([]byte, len(encryptedContent))
 			cipherContent.CryptBlocks(decryptedContent, encryptedContent)
 			contentHash.Write(decryptedContent[:toReadHash])
-			_, err = decryptedFile.Write(decryptedContent)
+			_, err = decryptedBuffer.Write(decryptedContent)
 			if err != nil {
 				return err
 			}
@@ -505,18 +512,11 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 	}
 	defer fstEncFile.Close()
 
-	fstDecFile, err := os.Create(filepath.Join(path, contents[0].CIDStr+".app.dec"))
-	if err != nil {
+	decryptedBuffer := bytes.Buffer{}
+	if err := decryptContentToBuffer(fstEncFile, &decryptedBuffer, cipherHashTree, contents[0]); err != nil {
 		return err
 	}
-	defer fstDecFile.Close()
-
-	if err := decryptContentToFile(fstEncFile, fstDecFile, cipherHashTree, contents[0]); err != nil {
-		return err
-	}
-
-	fstDecFile.Seek(0, io.SeekStart)
-	fst := FSTData{FSTFile: fstDecFile, FSTEntries: make([]FEntry, 0), EntryCount: 0, Entries: 0, NamesOffset: 0}
+	fst := FSTData{FSTReader: bytes.NewReader(bytes.Clone(decryptedBuffer.Bytes())), FSTEntries: make([]FEntry, 0), EntryCount: 0, Entries: 0, NamesOffset: 0}
 	parseFST(&fst)
 
 	outputPath := path
@@ -543,13 +543,13 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 			outputPath = path
 			for j := uint32(0); j < level; j++ {
 				pathOffset = fst.FSTEntries[entry[j]].NameOffset & 0x00FFFFFF
-				fst.FSTFile.Seek(int64(fst.NamesOffset+pathOffset), io.SeekStart)
-				outputPath = filepath.Join(outputPath, readString(fst.FSTFile))
+				fst.FSTReader.Seek(int64(fst.NamesOffset+pathOffset), io.SeekStart)
+				outputPath = filepath.Join(outputPath, readString(fst.FSTReader))
 				os.MkdirAll(outputPath, 0755)
 			}
 			pathOffset = fst.FSTEntries[i].NameOffset & 0x00FFFFFF
-			fst.FSTFile.Seek(int64(fst.NamesOffset+pathOffset), io.SeekStart)
-			outputPath = filepath.Join(outputPath, readString(fst.FSTFile))
+			fst.FSTReader.Seek(int64(fst.NamesOffset+pathOffset), io.SeekStart)
+			outputPath = filepath.Join(outputPath, readString(fst.FSTReader))
 			contentOffset := uint64(fst.FSTEntries[i].Offset)
 			if fst.FSTEntries[i].Flags&4 == 0 {
 				contentOffset <<= 5

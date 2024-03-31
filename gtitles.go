@@ -51,7 +51,7 @@ const (
 func GetTitleEntries(category uint8) []TitleEntry {
 	titleEntries := make([]TitleEntry, 0)
 	for _, entry := range titleEntry {
-		if entry.Category == category {
+		if category == TITLE_CATEGORY_ALL || category == entry.Category {
 			titleEntries = append(titleEntries, entry)
 		}
 	}

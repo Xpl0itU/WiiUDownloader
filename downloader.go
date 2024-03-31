@@ -122,10 +122,10 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 }
 
 func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, doDecryption bool, progressReporter ProgressReporter, deleteEncryptedContents bool, logger *Logger, client *http.Client) error {
-	titleEntry := getTitleEntryFromTid(titleID)
+	tEntry := getTitleEntryFromTid(titleID)
 
 	progressReporter.SetTotalDownloaded(0)
-	progressReporter.SetGameTitle(titleEntry.Name)
+	progressReporter.SetGameTitle(tEntry.Name)
 
 	outputDir := strings.TrimRight(outputDirectory, "/\\")
 	baseURL := fmt.Sprintf("http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/%s", titleID)
@@ -167,7 +167,7 @@ func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, d
 		if err != nil {
 			return err
 		}
-		if err := GenerateTicket(tikPath, titleEntry.TitleID, titleKey, titleVersion); err != nil {
+		if err := GenerateTicket(tikPath, tEntry.TitleID, titleKey, titleVersion); err != nil {
 			return err
 		}
 	}

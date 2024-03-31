@@ -525,6 +525,7 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 	level := uint32(0)
 
 	for i := uint32(0); i < fst.Entries-1; i++ {
+		progressReporter.UpdateDecryptionProgress(float64(i) / float64(fst.Entries-1))
 		if level > 0 {
 			for (level >= 1) && (lEntry[level-1] == i+1) {
 				level--

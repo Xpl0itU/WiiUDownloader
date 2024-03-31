@@ -574,5 +574,8 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 			}
 		}
 	}
+	if deleteEncryptedContents {
+		doDeleteEncryptedContents(path)
+	}
 	return nil
 }

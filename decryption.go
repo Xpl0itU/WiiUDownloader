@@ -89,24 +89,23 @@ func extractFileHash(src *os.File, partDataOffset uint64, fileOffset uint64, siz
 		iv[1] = byte(contentId)
 		cipher.NewCBCDecrypter(cipherHashTree, iv).CryptBlocks(hashes, encryptedContent[:HASHES_SIZE])
 
-		//h0Hash := hashes[0x14*blockNumber : 0x14*blockNumber+sha1.Size]
+		h0Hash := hashes[0x14*blockNumber : 0x14*blockNumber+sha1.Size]
 		iv = hashes[0x14*blockNumber : 0x14*blockNumber+aes.BlockSize]
+
+		if blockNumber == 0 {
+			iv[1] ^= byte(contentId)
+		}
 
 		cipher.NewCBCDecrypter(cipherHashTree, iv).CryptBlocks(decryptedContent, encryptedContent[HASHES_SIZE:])
 
 		hash := sha1.Sum(decryptedContent[:HASH_BLOCK_SIZE])
 
-		if blockNumber == 0 {
-			hash[1] ^= byte(contentId)
-		}
-
-		// TODO: FIX THIS
-		/*if !reflect.DeepEqual(hash[:], h0Hash) {
+		if !reflect.DeepEqual(hash[:], h0Hash) {
 			fmt.Printf("\rBlock %v: hash (this is what we calculated): %x\n", blockNumber, hash)
 			fmt.Printf("\rBlock %v: h0 (this is what the file has): %x\n", blockNumber, h0Hash)
 			fmt.Printf("\rPath: %s\n", path)
 			return errors.New("h0 hash mismatch")
-		}*/
+		}
 
 		size -= uint64(writeSize)
 
@@ -552,7 +551,7 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 	lEntry := make([]uint32, 0x10)
 	level := uint32(0)
 
-	for i := uint32(0); i < fst.Entries; i++ {
+	for i := uint32(0); i < fst.Entries-1; i++ {
 		if level > 0 {
 			for (level >= 1) && (lEntry[level-1] == i+1) {
 				level--
@@ -590,10 +589,10 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 					return err
 				}
 				defer srcFile.Close()
-				if tmdFlags&2 != 0 {
-					err = extractFileHash(srcFile, contentOffset, uint64(fst.FSTEntries[i].Offset), uint64(fst.FSTEntries[i].Length), outputPath, fst.FSTEntries[i].ContentID, cipherHashTree)
+				if tmdFlags&0x02 != 0 {
+					err = extractFileHash(srcFile, 0, uint64(fst.FSTEntries[i].Offset), uint64(fst.FSTEntries[i].Length), outputPath, fst.FSTEntries[i].ContentID, cipherHashTree)
 				} else {
-					err = extractFile(srcFile, contentOffset, uint64(fst.FSTEntries[i].Offset), uint64(fst.FSTEntries[i].Length), outputPath, fst.FSTEntries[i].ContentID, cipherHashTree)
+					err = extractFile(srcFile, 0, uint64(fst.FSTEntries[i].Offset), uint64(fst.FSTEntries[i].Length), outputPath, fst.FSTEntries[i].ContentID, cipherHashTree)
 				}
 				if err != nil {
 					return err

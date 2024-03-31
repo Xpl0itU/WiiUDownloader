@@ -5,6 +5,7 @@ import "strings"
 func normalizeFilename(filename string) string {
 	var out strings.Builder
 	shouldAppend := true
+	firstChar := true
 
 	for _, c := range filename {
 		switch {
@@ -13,14 +14,16 @@ func normalizeFilename(filename string) string {
 				out.WriteRune('_')
 				shouldAppend = false
 			}
+			firstChar = false
 		case c == ' ':
-			if shouldAppend {
+			if shouldAppend && !firstChar {
 				out.WriteRune(' ')
 				shouldAppend = false
 			}
 		case (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'):
 			out.WriteRune(c)
 			shouldAppend = true
+			firstChar = false
 		}
 	}
 

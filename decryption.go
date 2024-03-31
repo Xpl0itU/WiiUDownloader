@@ -43,10 +43,11 @@ type FEntry struct {
 }
 
 type FSTData struct {
-	FSTFile      *os.File
-	TotalEntries uint32
-	NamesOffset  uint32
-	FSTEntries   []FEntry
+	FSTFile     *os.File
+	EntryCount  uint32
+	Entries     uint32
+	NamesOffset uint32
+	FSTEntries  []FEntry
 }
 
 func extractFileHash(src *os.File, partDataOffset uint64, fileOffset uint64, size uint64, path string, contentId uint16, cipherHashTree cipher.Block) error {
@@ -183,7 +184,7 @@ func extractFile(src *os.File, part_data_offset uint64, file_offset uint64, size
 }
 
 func parseFSTEntry(fst *FSTData) error {
-	for i := uint32(0); i < fst.TotalEntries-1; i++ {
+	for i := uint32(0); i < fst.Entries; i++ {
 		entry := FEntry{}
 		entry.Type = readByte(fst.FSTFile)
 		entry.NameOffset = uint32(read3BytesBE(fst.FSTFile))
@@ -197,15 +198,12 @@ func parseFSTEntry(fst *FSTData) error {
 }
 
 func parseFST(fst *FSTData) {
-	fst.FSTFile.Seek(4, io.SeekStart)
-	_ = readInt(fst.FSTFile, 4)
-	exhCount := readInt(fst.FSTFile, 4)
-	fst.FSTFile.Seek(int64(0x14+(32*exhCount)), io.SeekCurrent)
-	fileEntriesOffset, _ := fst.FSTFile.Seek(0, io.SeekCurrent)
-	fst.FSTFile.Seek(8, io.SeekCurrent)
-	fst.TotalEntries = readInt(fst.FSTFile, 4)
+	fst.FSTFile.Seek(0x8, io.SeekStart)
+	fst.EntryCount = readInt(fst.FSTFile, 4)
+	fst.FSTFile.Seek(int64(0x20+fst.EntryCount*0x20+8), io.SeekStart)
+	fst.Entries = readInt(fst.FSTFile, 4)
+	fst.NamesOffset = 0x20 + fst.EntryCount*0x20 + fst.Entries*0x10
 	fst.FSTFile.Seek(4, io.SeekCurrent)
-	fst.NamesOffset = uint32(fileEntriesOffset) + fst.TotalEntries*0x10
 	parseFSTEntry(fst)
 }
 
@@ -545,18 +543,18 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 	}
 
 	fstDecFile.Seek(0, io.SeekStart)
-	fst := FSTData{FSTFile: fstDecFile, FSTEntries: make([]FEntry, 0), TotalEntries: 0, NamesOffset: 0}
+	fst := FSTData{FSTFile: fstDecFile, FSTEntries: make([]FEntry, 0), EntryCount: 0, Entries: 0, NamesOffset: 0}
 	parseFST(&fst)
-	fmt.Printf("FST Entry count: %v\n", fst.TotalEntries)
+	fmt.Printf("FST Entries: %v\n", fst.Entries)
 
 	outputPath := path
 	entry := make([]uint32, 0x10)
 	lEntry := make([]uint32, 0x10)
 	level := uint32(0)
 
-	for i := uint32(1); i < fst.TotalEntries; i++ {
+	for i := uint32(0); i < fst.Entries; i++ {
 		if level > 0 {
-			for (level >= 1) && (lEntry[level-1] == i) {
+			for (level >= 1) && (lEntry[level-1] == i+1) {
 				level--
 			}
 		}

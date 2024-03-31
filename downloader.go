@@ -3,10 +3,7 @@ package wiiudownloader
 import (
 	"bytes"
 	"context"
-	"crypto/aes"
-	"crypto/cipher"
 	"encoding/binary"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
@@ -54,7 +51,7 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 
 		req.Header.Set("User-Agent", "WiiUDownloader")
 		req.Header.Set("Connection", "Keep-Alive")
-		req.Header.Set("Accept-Encoding", "")
+		req.Header.Set("Accept-Encoding", "gzip")
 
 		resp, err := client.Do(req)
 		if err != nil {
@@ -82,37 +79,35 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 		ticker := time.NewTicker(250 * time.Millisecond)
 		defer ticker.Stop()
 
-	Loop:
 		for {
+			n, err := resp.Body.Read(buffer)
+			if err != nil && err != io.EOF {
+				if doRetries && attempt < maxRetries {
+					time.Sleep(retryDelay)
+					break
+				}
+				return fmt.Errorf("download error after %d attempts: %+v", attempt, err)
+			}
+
+			if n == 0 {
+				break
+			}
+
+			_, err = file.Write(buffer[:n])
+			if err != nil {
+				if doRetries && attempt < maxRetries {
+					time.Sleep(retryDelay)
+					break
+				}
+				return fmt.Errorf("write error after %d attempts: %+v", attempt, err)
+			}
+
+			downloaded += int64(n)
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-ticker.C:
 				progressReporter.UpdateDownloadProgress(downloaded, calculateDownloadSpeed(downloaded, startTime, time.Now()), filePath)
-			default:
-				n, err := resp.Body.Read(buffer)
-				if err != nil && err != io.EOF {
-					if doRetries && attempt < maxRetries {
-						time.Sleep(retryDelay)
-						break
-					}
-					return fmt.Errorf("download error after %d attempts: %+v", attempt, err)
-				}
-
-				if n == 0 {
-					break Loop
-				}
-
-				_, err = file.Write(buffer[:n])
-				if err != nil {
-					if doRetries && attempt < maxRetries {
-						time.Sleep(retryDelay)
-						break
-					}
-					return fmt.Errorf("write error after %d attempts: %+v", attempt, err)
-				}
-
-				downloaded += int64(n)
 			}
 		}
 		break
@@ -129,10 +124,6 @@ func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, d
 
 	outputDir := strings.TrimRight(outputDirectory, "/\\")
 	baseURL := fmt.Sprintf("http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/%s", titleID)
-	titleIDBytes, err := hex.DecodeString(titleID)
-	if err != nil {
-		return err
-	}
 
 	if err := os.MkdirAll(outputDir, os.ModePerm); err != nil {
 		return err
@@ -171,11 +162,6 @@ func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, d
 			return err
 		}
 	}
-	tikData, err := os.ReadFile(tikPath)
-	if err != nil {
-		return err
-	}
-	encryptedTitleKey := tikData[0x1BF : 0x1BF+0x10]
 
 	var contentCount uint16
 	if err := binary.Read(bytes.NewReader(tmdData[478:480]), binary.BigEndian, &contentCount); err != nil {
@@ -217,20 +203,6 @@ func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, d
 	defer certFile.Close()
 	logger.Info("Certificate saved to %v \n", certPath)
 
-	c, err := aes.NewCipher(commonKey)
-	if err != nil {
-		return fmt.Errorf("failed to create AES cipher: %w", err)
-	}
-
-	decryptedTitleKey := make([]byte, len(encryptedTitleKey))
-	cbc := cipher.NewCBCDecrypter(c, append(titleIDBytes, make([]byte, 8)...))
-	cbc.CryptBlocks(decryptedTitleKey, encryptedTitleKey)
-
-	cipherHashTree, err := aes.NewCipher(decryptedTitleKey)
-	if err != nil {
-		return fmt.Errorf("failed to create AES cipher: %w", err)
-	}
-
 	var content Content
 	tmdDataReader := bytes.NewReader(tmdData)
 
@@ -252,14 +224,6 @@ func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, d
 		if tmdData[offset+7]&0x2 == 2 {
 			filePath = filepath.Join(outputDir, fmt.Sprintf("%08X.h3", content.ID))
 			if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%08X.h3", baseURL, content.ID), filePath, true, buffer); err != nil {
-				if progressReporter.Cancelled() {
-					break
-				}
-				return err
-			}
-			content.Hash = tmdData[offset+16 : offset+0x14]
-			content.Size = contentSizes[i]
-			if err := checkContentHashes(outputDirectory, content, cipherHashTree); err != nil {
 				if progressReporter.Cancelled() {
 					break
 				}

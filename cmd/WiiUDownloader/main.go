@@ -42,13 +42,14 @@ func main() {
 		logger.Fatal(err.Error())
 	}
 
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.MaxIdleConns = 100
+	t.MaxConnsPerHost = 100
+	t.MaxIdleConnsPerHost = 100
+
 	client := &http.Client{
-		Transport: &http.Transport{
-			MaxIdleConns:        1000,
-			MaxIdleConnsPerHost: 1000,
-			MaxConnsPerHost:     100,
-		},
-		Timeout: 30 * time.Second,
+		Timeout:   time.Duration(120) * time.Second,
+		Transport: t,
 	}
 
 	app.Connect("activate", func() {

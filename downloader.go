@@ -41,32 +41,6 @@ func calculateDownloadSpeed(downloaded int64, startTime, endTime time.Time) int6
 	return 0
 }
 
-func downloadChunk(buffer []byte, resp *http.Response, file *os.File, doRetries bool, attempt int) (int64, error) {
-	n, err := resp.Body.Read(buffer)
-	if err != nil && err != io.EOF {
-		if doRetries && attempt < maxRetries {
-			time.Sleep(retryDelay)
-			return 0, nil
-		}
-		return 0, fmt.Errorf("download error after %d attempts: %+v", attempt, err)
-	}
-
-	if n == 0 {
-		return 0, nil
-	}
-
-	_, err = file.Write(buffer[:n])
-	if err != nil {
-		if doRetries && attempt < maxRetries {
-			time.Sleep(retryDelay)
-			return 0, nil
-		}
-		return 0, fmt.Errorf("write error after %d attempts: %+v", attempt, err)
-	}
-
-	return int64(n), nil
-}
-
 func downloadFile(ctx context.Context, progressReporter ProgressReporter, client *http.Client, downloadURL, dstPath string, doRetries bool, buffer []byte) error {
 	filePath := filepath.Base(dstPath)
 
@@ -77,6 +51,10 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 		if err != nil {
 			return err
 		}
+
+		req.Header.Set("User-Agent", "WiiUDownloader")
+		req.Header.Set("Connection", "Keep-Alive")
+		req.Header.Set("Accept-Encoding", "")
 
 		resp, err := client.Do(req)
 		if err != nil {
@@ -110,30 +88,34 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-ticker.C:
-				n, err := downloadChunk(buffer, resp, file, doRetries, attempt)
-				if err != nil {
-					return err
-				}
-
-				if n == 0 {
-					break Loop
-				}
-
-				downloaded += n
 				progressReporter.UpdateDownloadProgress(downloaded, calculateDownloadSpeed(downloaded, startTime, time.Now()), filePath)
 			default:
-				n, err := downloadChunk(buffer, resp, file, doRetries, attempt)
-				if err != nil {
-					return err
+				n, err := resp.Body.Read(buffer)
+				if err != nil && err != io.EOF {
+					if doRetries && attempt < maxRetries {
+						time.Sleep(retryDelay)
+						break
+					}
+					return fmt.Errorf("download error after %d attempts: %+v", attempt, err)
 				}
 
 				if n == 0 {
 					break Loop
 				}
 
-				downloaded += n
+				_, err = file.Write(buffer[:n])
+				if err != nil {
+					if doRetries && attempt < maxRetries {
+						time.Sleep(retryDelay)
+						break
+					}
+					return fmt.Errorf("write error after %d attempts: %+v", attempt, err)
+				}
+
+				downloaded += int64(n)
 			}
 		}
+		break
 	}
 
 	return nil

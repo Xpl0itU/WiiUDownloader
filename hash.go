@@ -13,12 +13,12 @@ import (
 
 var commonKey = []byte{0xD7, 0xB0, 0x04, 0x02, 0x65, 0x9B, 0xA2, 0xAB, 0xD2, 0xCB, 0x0D, 0xB2, 0x7F, 0xA2, 0xB6, 0x56}
 
-func checkContentHashes(path string, content contentInfo, cipherHashTree cipher.Block) error {
-	h3Data, err := os.ReadFile(filepath.Join(path, fmt.Sprintf("%s.h3", content.ID)))
+func checkContentHashes(path string, content Content, cipherHashTree cipher.Block) error {
+	h3Data, err := os.ReadFile(filepath.Join(path, fmt.Sprintf("%08X.h3", content.ID)))
 	if err != nil {
 		return fmt.Errorf("failed to read H3 hash tree file: %w", err)
 	}
-	encryptedFile, err := os.Open(filepath.Join(path, fmt.Sprintf("%s.app", content.ID)))
+	encryptedFile, err := os.Open(filepath.Join(path, fmt.Sprintf("%08X.app", content.ID)))
 	if err != nil {
 		return fmt.Errorf("failed to open encrypted file: %w", err)
 	}
@@ -80,10 +80,4 @@ func checkContentHashes(path string, content contentInfo, cipherHashTree cipher.
 		}
 	}
 	return nil
-}
-
-type contentInfo struct {
-	ID   string
-	Hash []byte
-	Size int64
 }

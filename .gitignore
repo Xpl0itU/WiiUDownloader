@@ -9,3 +9,4 @@ main
 *.a
 out/
 log.txt
+db.go

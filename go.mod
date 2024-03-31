@@ -1,6 +1,6 @@
 module github.com/Xpl0itU/WiiUDownloader
 
-go 1.20
+go 1.21
 
 require (
 	github.com/Xpl0itU/dialog v0.0.0-20230805114139-ec888310aded

@@ -101,9 +101,6 @@ func extractFileHash(src *os.File, partDataOffset uint64, fileOffset uint64, siz
 		hash := sha1.Sum(decryptedContent[:HASH_BLOCK_SIZE])
 
 		if !reflect.DeepEqual(hash[:], h0Hash) {
-			fmt.Printf("\rBlock %v: hash (this is what we calculated): %x\n", blockNumber, hash)
-			fmt.Printf("\rBlock %v: h0 (this is what the file has): %x\n", blockNumber, h0Hash)
-			fmt.Printf("\rPath: %s\n", path)
 			return errors.New("h0 hash mismatch")
 		}
 
@@ -295,9 +292,6 @@ func decryptContentToFile(encryptedFile *os.File, decryptedFile *os.File, cipher
 		}
 		h3BytesSHASum := sha1.Sum(h3Data)
 		if hex.EncodeToString(h3BytesSHASum[:]) != hex.EncodeToString(content.Hash) {
-			fmt.Println("H3 Hash mismatch!")
-			fmt.Println(" > TMD:    " + hex.EncodeToString(content.Hash))
-			fmt.Println(" > Result: " + hex.EncodeToString(h3BytesSHASum[:]))
 			return errors.New("H3 Hash mismatch")
 		}
 
@@ -343,7 +337,6 @@ func decryptContentToFile(encryptedFile *os.File, decryptedFile *os.File, cipher
 			decryptedDataHash := sha1.Sum(decryptedData)
 
 			if !reflect.DeepEqual(decryptedDataHash[:], h0Hash) {
-				fmt.Printf("\rData block hash invalid in chunk %v\n", chunkNum)
 				return errors.New("data block hash invalid")
 			}
 
@@ -396,18 +389,15 @@ func decryptContentToFile(encryptedFile *os.File, decryptedFile *os.File, cipher
 			}
 		}
 		if !reflect.DeepEqual(content.Hash, contentHash.Sum(nil)) {
-			print("Content Hash mismatch!")
 			return errors.New("content hash mismatch")
 		}
 	}
 	return nil
 }
 
-// TODO: Implement proper Logging
 func DecryptContents(path string, progressReporter ProgressReporter, deleteEncryptedContents bool) error {
 	tmdPath := filepath.Join(path, "title.tmd")
 	if _, err := os.Stat(tmdPath); os.IsNotExist(err) {
-		fmt.Println("No TMD (title.tmd) was found.")
 		return err
 	}
 
@@ -416,7 +406,6 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 	var contentCount uint16
 	tmd, err := os.Open(tmdPath)
 	if err != nil {
-		fmt.Println("Failed to open TMD:", err)
 		return err
 	}
 	defer tmd.Close()
@@ -424,20 +413,17 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 	tmd.Seek(0x18C, io.SeekStart)
 	titleID = make([]byte, 8)
 	if _, err := io.ReadFull(tmd, titleID); err != nil {
-		fmt.Println("Failed to read title ID:", err)
 		return err
 	}
 
 	tmd.Seek(0x1DE, io.SeekStart)
 	if err := binary.Read(tmd, binary.BigEndian, &contentCount); err != nil {
-		fmt.Println("Failed to read content count:", err)
 		return err
 	}
 
 	tmd.Seek(0x204, io.SeekStart)
 	tmdIndex := make([]byte, 2)
 	if _, err := io.ReadFull(tmd, tmdIndex); err != nil {
-		fmt.Println("Failed to read TMD index:", err)
 		return err
 	}
 
@@ -453,26 +439,22 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 		tmd.Seek(0xB08+(0x30*int64(c)), io.SeekStart)
 		contents[c].Index = make([]byte, 2)
 		if _, err := io.ReadFull(tmd, contents[c].Index); err != nil {
-			fmt.Println("Failed to read content index:", err)
 			return err
 		}
 
 		tmd.Seek(0xB0A+(0x30*int64(c)), io.SeekStart)
 		if err := binary.Read(tmd, binary.BigEndian, &contents[c].Type); err != nil {
-			fmt.Println("Failed to read content type:", err)
 			return err
 		}
 
 		tmd.Seek(0xB0C+(0x30*int64(c)), io.SeekStart)
 		if err := binary.Read(tmd, binary.BigEndian, &contents[c].Size); err != nil {
-			fmt.Println("Failed to read content size:", err)
 			return err
 		}
 
 		tmd.Seek(0xB14+(0x30*int64(c)), io.SeekStart)
 		contents[c].Hash = make([]byte, 0x14)
 		if _, err := io.ReadFull(tmd, contents[c].Hash); err != nil {
-			fmt.Println("Failed to read content hash:", err)
 			return err
 		}
 
@@ -483,12 +465,10 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 			contents[c].CIDStr = fmt.Sprintf("%08x", contents[c].ID)
 			_, err = os.Stat(filepath.Join(path, contents[c].CIDStr+".app"))
 			if err != nil {
-				fmt.Println("Failed to find encrypted content:", err)
-				return err
+				return errors.New("content not found")
 			}
 		}
 	}
-	fmt.Printf("Title ID: %s\n", hex.EncodeToString(titleID))
 
 	// Find the encrypted titlekey
 	var encryptedTitleKey []byte
@@ -504,7 +484,6 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 			cetk.Close()
 		}
 	}
-	fmt.Printf("Encrypted Titlekey: %s\n", hex.EncodeToString(encryptedTitleKey))
 	c, err := aes.NewCipher(commonKey)
 	if err != nil {
 		return err
@@ -520,31 +499,25 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 		return fmt.Errorf("failed to create AES cipher: %w", err)
 	}
 
-	fmt.Printf("Decrypted Titlekey: %x\n", decryptedTitleKey)
-
 	fstEncFile, err := os.Open(filepath.Join(path, contents[0].CIDStr+".app"))
 	if err != nil {
-		fmt.Println("Failed to open encrypted FST file:", err)
 		return err
 	}
 	defer fstEncFile.Close()
 
 	fstDecFile, err := os.Create(filepath.Join(path, contents[0].CIDStr+".app.dec"))
 	if err != nil {
-		fmt.Println("Failed to create decrypted content file:", err)
 		return err
 	}
 	defer fstDecFile.Close()
 
 	if err := decryptContentToFile(fstEncFile, fstDecFile, cipherHashTree, contents[0]); err != nil {
-		fmt.Println("Failed to decrypt content file:", err)
 		return err
 	}
 
 	fstDecFile.Seek(0, io.SeekStart)
 	fst := FSTData{FSTFile: fstDecFile, FSTEntries: make([]FEntry, 0), EntryCount: 0, Entries: 0, NamesOffset: 0}
 	parseFST(&fst)
-	fmt.Printf("FST Entries: %v\n", fst.Entries)
 
 	outputPath := path
 	entry := make([]uint32, 0x10)

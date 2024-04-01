@@ -7,7 +7,7 @@
     <key>CFBundleExecutable</key>
     <string>WiiUDownloader</string>
     <key>CFBundleGetInfoString</key>
-    <string>2.34, Copyright 2022-2024 Xpl0itU</string>
+    <string>2.35, Copyright 2022-2024 Xpl0itU</string>
     <key>CFBundleIconFile</key>
     <string>WiiUDownloader.icns</string>
     <key>CFBundleIdentifier</key>
@@ -17,11 +17,11 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>2.34</string>
+    <string>2.35</string>
     <key>CFBundleSignature</key>
     <string>????</string>
     <key>CFBundleVersion</key>
-    <string>2.34</string>
+    <string>2.35</string>
     <key>NSHumanReadableCopyright</key>
     <string>Copyright 2022-2024 Xpl0itU, GNU General Public License.</string>
     <key>LSMinimumSystemVersion</key>

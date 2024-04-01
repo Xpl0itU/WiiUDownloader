@@ -51,7 +51,7 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 
 		req.Header.Set("User-Agent", "WiiUDownloader")
 		req.Header.Set("Connection", "Keep-Alive")
-		req.Header.Set("Accept-Encoding", "gzip")
+		req.Header.Set("Accept-Encoding", "")
 
 		resp, err := client.Do(req)
 		if err != nil {
@@ -79,35 +79,44 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 		ticker := time.NewTicker(250 * time.Millisecond)
 		defer ticker.Stop()
 
+		go func() {
+			for range ticker.C {
+				if progressReporter.Cancelled() {
+					break
+				}
+				progressReporter.UpdateDownloadProgress(downloaded, calculateDownloadSpeed(downloaded, startTime, time.Now()), filePath)
+			}
+		}()
+
+	Loop:
 		for {
-			n, err := resp.Body.Read(buffer)
-			if err != nil && err != io.EOF {
-				if doRetries && attempt < maxRetries {
-					time.Sleep(retryDelay)
-					break
-				}
-				return fmt.Errorf("download error after %d attempts: %+v", attempt, err)
-			}
-
-			if n == 0 {
-				break
-			}
-
-			_, err = file.Write(buffer[:n])
-			if err != nil {
-				if doRetries && attempt < maxRetries {
-					time.Sleep(retryDelay)
-					break
-				}
-				return fmt.Errorf("write error after %d attempts: %+v", attempt, err)
-			}
-
-			downloaded += int64(n)
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-ticker.C:
-				progressReporter.UpdateDownloadProgress(downloaded, calculateDownloadSpeed(downloaded, startTime, time.Now()), filePath)
+			default:
+				n, err := resp.Body.Read(buffer)
+				if err != nil && err != io.EOF {
+					if doRetries && attempt < maxRetries {
+						time.Sleep(retryDelay)
+						break
+					}
+					return fmt.Errorf("download error after %d attempts: %+v", attempt, err)
+				}
+
+				if n == 0 {
+					break Loop
+				}
+
+				_, err = file.Write(buffer[:n])
+				if err != nil {
+					if doRetries && attempt < maxRetries {
+						time.Sleep(retryDelay)
+						break
+					}
+					return fmt.Errorf("write error after %d attempts: %+v", attempt, err)
+				}
+
+				downloaded += int64(n)
 			}
 		}
 		break

@@ -48,7 +48,7 @@ func main() {
 	t.MaxIdleConnsPerHost = 100
 
 	client := &http.Client{
-		Timeout:   time.Duration(120) * time.Second,
+		Timeout:   time.Duration(30) * time.Second,
 		Transport: t,
 	}
 

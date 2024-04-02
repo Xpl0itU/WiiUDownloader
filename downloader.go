@@ -41,9 +41,22 @@ func calculateDownloadSpeed(downloaded int64, startTime, endTime time.Time) int6
 func downloadFile(ctx context.Context, progressReporter ProgressReporter, client *http.Client, downloadURL, dstPath string, doRetries bool, buffer []byte) error {
 	filePath := filepath.Base(dstPath)
 
-	var startTime time.Time
+	startTime := time.Now()
+	ticker := time.NewTicker(250 * time.Millisecond)
+	defer ticker.Stop()
+	isError := false
+
+	updateProgress := func(downloaded *int64) {
+		for range ticker.C {
+			if progressReporter.Cancelled() {
+				break
+			}
+			progressReporter.UpdateDownloadProgress(*downloaded, calculateDownloadSpeed(*downloaded, startTime, time.Now()), filePath)
+		}
+	}
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
+		isError = false
 		req, err := http.NewRequestWithContext(ctx, "GET", downloadURL, nil)
 		if err != nil {
 			return err
@@ -57,53 +70,48 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 		if err != nil {
 			return err
 		}
-		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
 			if doRetries && attempt < maxRetries {
 				time.Sleep(retryDelay)
 				continue
 			}
+			resp.Body.Close()
 			return fmt.Errorf("download error after %d attempts, status code: %d", attempt, resp.StatusCode)
 		}
 
 		file, err := os.Create(dstPath)
 		if err != nil {
+			resp.Body.Close()
 			return err
 		}
-		defer file.Close()
 
 		var downloaded int64
 
-		startTime = time.Now()
-		ticker := time.NewTicker(250 * time.Millisecond)
-		defer ticker.Stop()
-
-		go func() {
-			for range ticker.C {
-				if progressReporter.Cancelled() {
-					break
-				}
-				progressReporter.UpdateDownloadProgress(downloaded, calculateDownloadSpeed(downloaded, startTime, time.Now()), filePath)
-			}
-		}()
+		go updateProgress(&downloaded)
 
 	Loop:
 		for {
 			select {
 			case <-ctx.Done():
+				resp.Body.Close()
+				file.Close()
 				return ctx.Err()
 			default:
 				n, err := resp.Body.Read(buffer)
 				if err != nil && err != io.EOF {
 					if doRetries && attempt < maxRetries {
 						time.Sleep(retryDelay)
-						break
+						isError = true
+						break Loop
 					}
+					resp.Body.Close()
+					file.Close()
 					return fmt.Errorf("download error after %d attempts: %+v", attempt, err)
 				}
 
 				if n == 0 {
+					resp.Body.Close()
 					break Loop
 				}
 
@@ -111,15 +119,20 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 				if err != nil {
 					if doRetries && attempt < maxRetries {
 						time.Sleep(retryDelay)
-						break
+						isError = true
+						break Loop
 					}
+					resp.Body.Close()
+					file.Close()
 					return fmt.Errorf("write error after %d attempts: %+v", attempt, err)
 				}
 
 				downloaded += int64(n)
 			}
 		}
-		break
+		if !isError {
+			break
+		}
 	}
 
 	return nil

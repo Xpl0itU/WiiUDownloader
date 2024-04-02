@@ -100,30 +100,31 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 			default:
 				n, err := resp.Body.Read(buffer)
 				if err != nil && err != io.EOF {
+					resp.Body.Close()
+					file.Close()
 					if doRetries && attempt < maxRetries {
 						time.Sleep(retryDelay)
 						isError = true
 						break Loop
 					}
-					resp.Body.Close()
-					file.Close()
 					return fmt.Errorf("download error after %d attempts: %+v", attempt, err)
 				}
 
 				if n == 0 {
 					resp.Body.Close()
+					file.Close()
 					break Loop
 				}
 
 				_, err = file.Write(buffer[:n])
 				if err != nil {
+					resp.Body.Close()
+					file.Close()
 					if doRetries && attempt < maxRetries {
 						time.Sleep(retryDelay)
 						isError = true
 						break Loop
 					}
-					resp.Body.Close()
-					file.Close()
 					return fmt.Errorf("write error after %d attempts: %+v", attempt, err)
 				}
 

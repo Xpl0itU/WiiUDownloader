@@ -32,22 +32,27 @@ func doDeleteEncryptedContents(path string) error {
 }
 
 type BufferedWriter struct {
-	file       *os.File
-	downloaded *int64
-	buffer     []byte
+	file             *os.File
+	downloaded       *int64
+	progressReporter ProgressReporter
+	buffer           []byte
 }
 
-func NewFileWriterWithProgress(file *os.File, downloaded *int64) (*BufferedWriter, error) {
+func NewFileWriterWithProgress(file *os.File, downloaded *int64, progressReporter ProgressReporter) (*BufferedWriter, error) {
 	return &BufferedWriter{
-		file:       file,
-		downloaded: downloaded,
-		buffer:     make([]byte, bufferSize),
+		file:             file,
+		downloaded:       downloaded,
+		progressReporter: progressReporter,
+		buffer:           make([]byte, bufferSize),
 	}, nil
 }
 
 func (bw *BufferedWriter) Write(data []byte) (int, error) {
 	written := 0
 	for written < len(data) {
+		if bw.progressReporter.Cancelled() {
+			return written, nil
+		}
 		remaining := len(data) - written
 		toWrite := min(bufferSize, uint64(remaining))
 		copy(bw.buffer, data[written:written+int(toWrite)])

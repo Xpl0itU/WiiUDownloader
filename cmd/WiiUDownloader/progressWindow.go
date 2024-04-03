@@ -121,6 +121,7 @@ func createProgressWindow(parent *gtk.ApplicationWindow) (*ProgressWindow, error
 	win.SetTitle("WiiUDownloader - Downloading")
 
 	win.SetTransientFor(parent)
+	win.SetDeletable(false)
 
 	box, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 5)
 	if err != nil {

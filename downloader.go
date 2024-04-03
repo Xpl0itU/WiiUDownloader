@@ -50,7 +50,7 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 	updateProgress := func(downloaded *int64) {
 		for range ticker.C {
 			if progressReporter.Cancelled() {
-				break
+				return
 			}
 			progressReporter.UpdateDownloadProgress(*downloaded, calculateDownloadSpeed(*downloaded, startTime, time.Now()), filePath)
 		}
@@ -100,7 +100,7 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 
 		go updateProgress(&downloaded)
 
-		customBufferedWriter, err := NewFileWriterWithProgress(file, &downloaded)
+		customBufferedWriter, err := NewFileWriterWithProgress(file, &downloaded, progressReporter)
 		if err != nil {
 			resp.CloseBodyStream()
 			file.Close()

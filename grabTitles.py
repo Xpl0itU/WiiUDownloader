@@ -1,7 +1,8 @@
 #!/bin/env python
 
 import os
-import requests
+import urllib.request
+import ssl
 
 # Don't edit below this line
 
@@ -12,16 +13,14 @@ def checkAndDeleteFile(file):
         os.remove(file)
 
 
-def downloadFile(url, file, headers={}):
-    print(f"Downloading {file}")
-    with requests.get(url, headers=headers) as r:
-        with open(file, "wb") as f:
-            f.write(r.content)
+# Disable certificate verification
+ssl_context = ssl.create_default_context()
+ssl_context.check_hostname = False
+ssl_context.verify_mode = ssl.CERT_NONE
 
+opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=ssl_context))
+opener.addheaders = [("User-agent", "NUSspliBuilder/2.1")]
+urllib.request.install_opener(opener)
 
 checkAndDeleteFile("db.go")
-downloadFile(
-    "https://napi.v10lator.de/db?t=go",
-    "db.go",
-    {"User-Agent": "NUSspliBuilder/2.2", "Accept-Encoding": "br, gzip, deflate"},
-)
+urllib.request.urlretrieve("https://napi.v10lator.de/db?t=go", "db.go")

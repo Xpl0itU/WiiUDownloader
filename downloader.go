@@ -64,7 +64,7 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 
 		req.Header.Set("User-Agent", "WiiUDownloader")
 		req.Header.Set("Connection", "Keep-Alive")
-		req.Header.Set("Accept-Encoding", "")
+		req.Header.Set("Accept-Encoding", "*")
 
 		resp, err := client.Do(req)
 		if err != nil {

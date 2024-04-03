@@ -18,6 +18,7 @@ jobs:
       - name: Install Dependencies
         run: |
           brew install create-dmg dylibbundler gtk+3
+          python3 -m pip install requests
       - name: Build
         run: |
           python3 grabTitles.py

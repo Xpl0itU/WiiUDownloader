@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -15,6 +14,7 @@ import (
 	"github.com/Xpl0itU/dialog"
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
+	"github.com/valyala/fasthttp"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -40,10 +40,10 @@ type MainWindow struct {
 	titles                          []wiiudownloader.TitleEntry
 	decryptContents                 bool
 	currentRegion                   uint8
-	client                          *http.Client
+	client                          *fasthttp.Client
 }
 
-func NewMainWindow(app *gtk.Application, entries []wiiudownloader.TitleEntry, logger *wiiudownloader.Logger, client *http.Client) *MainWindow {
+func NewMainWindow(app *gtk.Application, entries []wiiudownloader.TitleEntry, logger *wiiudownloader.Logger, client *fasthttp.Client) *MainWindow {
 	gSettings, err := gtk.SettingsGetDefault()
 	if err != nil {
 		logger.Error(err.Error())
@@ -265,7 +265,7 @@ func (mw *MainWindow) ShowAll() {
 
 		wiiudownloader.GenerateTicket(filepath.Join(parentDir, "title.tik"), titleID, titleKey, titleVersion)
 
-		cert, err := wiiudownloader.GenerateCert(tmdData, contentCount, mw.progressWindow, http.DefaultClient, context.Background(), make([]byte, 0))
+		cert, err := wiiudownloader.GenerateCert(tmdData, contentCount, mw.progressWindow, mw.client, context.Background())
 		if err != nil {
 			return
 		}

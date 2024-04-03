@@ -15,7 +15,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: 'recursive'
+      - name: Docker caching
+        uses: ScribeMD/docker-cache@0.5.0
+        id: cache
+        continue-on-error: true
+        with:
+          key: wiiudownloader-docker-cache-${{ hashFiles('Dockerfile.linux') }}
       - name: Build Docker container
+        if: steps.cache.outputs.cache-hit != 'true'
         run: |
           docker build . --file Dockerfile.linux --tag builder
       - name: Build artifacts

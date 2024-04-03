@@ -25,6 +25,7 @@ jobs:
           msystem: UCRT64
           release: true
           update: true
+          cache: true
           install: zip git mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-python mingw-w64-ucrt-x86_64-gtk3 mingw-w64-ucrt-x86_64-pkg-config mingw-w64-ucrt-x86_64-go mingw-w64-ucrt-x86_64-ntldd-git mingw-w64-ucrt-x86_64-python-requests
       - name: Build
         run: |

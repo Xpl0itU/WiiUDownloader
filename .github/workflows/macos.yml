@@ -19,7 +19,6 @@ jobs:
         run: |
           brew uninstall --ignore-dependencies curl
           brew uninstall --ignore-dependencies openssl
-          brew uninstall --ignore-dependencies curl-openssl
           brew install create-dmg dylibbundler gtk+3 openssl curl
           python3 -m pip install --compile --ignore-installed pycurl
       - name: Build

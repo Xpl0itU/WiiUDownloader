@@ -44,10 +44,21 @@ func main() {
 	}
 
 	client := &fasthttp.Client{
-		MaxConnsPerHost:     100,
+		MaxConnsPerHost:     1024,
 		MaxIdleConnDuration: 30 * time.Second,
+		TLSConfig:           nil,
+		ReadBufferSize:      wiiudownloader.BUFFER_SIZE,
+		WriteBufferSize:     wiiudownloader.BUFFER_SIZE,
+		MaxConnWaitTimeout:  30 * time.Second,
+		StreamResponseBody:  true,
+		ConnPoolStrategy:    fasthttp.LIFO,
 		ReadTimeout:         30 * time.Second,
 		WriteTimeout:        30 * time.Second,
+		Name:                "WiiUDownloader",
+		DialDualStack:       true,
+		RetryIf: func(request *fasthttp.Request) bool {
+			return true
+		},
 	}
 
 	app.Connect("activate", func() {

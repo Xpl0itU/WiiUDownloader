@@ -15,9 +15,9 @@ import (
 )
 
 const (
-	maxRetries = 5
-	retryDelay = 5 * time.Second
-	bufferSize = 1048576
+	maxRetries  = 5
+	retryDelay  = 5 * time.Second
+	BUFFER_SIZE = 1048576
 )
 
 type ProgressReporter interface {
@@ -62,7 +62,7 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 
 		req.SetRequestURI(downloadURL)
 		req.Header.SetMethod("GET")
-
+		req.Header.Set("Accept", "*/*")
 		req.Header.Set("User-Agent", "WiiUDownloader")
 		req.Header.Set("Connection", "Keep-Alive")
 		req.Header.Set("Accept-Encoding", "*")
@@ -72,12 +72,19 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 		resp.ImmediateHeaderFlush = true
 
 		if err := client.Do(req, resp); err != nil {
+			req.CloseBodyStream()
+			resp.CloseBodyStream()
 			fasthttp.ReleaseRequest(req)
 			fasthttp.ReleaseResponse(resp)
-			return err
+			if doRetries && attempt < maxRetries {
+				time.Sleep(retryDelay)
+				continue
+			}
+			return fmt.Errorf("inital request error after %d attempts, status code: %s", attempt, err.Error())
 		}
 
 		if resp.StatusCode() != fasthttp.StatusOK {
+			req.CloseBodyStream()
 			resp.CloseBodyStream()
 			fasthttp.ReleaseRequest(req)
 			fasthttp.ReleaseResponse(resp)
@@ -90,6 +97,7 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 
 		file, err := os.Create(dstPath)
 		if err != nil {
+			req.CloseBodyStream()
 			resp.CloseBodyStream()
 			fasthttp.ReleaseRequest(req)
 			fasthttp.ReleaseResponse(resp)
@@ -102,6 +110,7 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 
 		customBufferedWriter, err := NewFileWriterWithProgress(file, &downloaded, progressReporter)
 		if err != nil {
+			req.CloseBodyStream()
 			resp.CloseBodyStream()
 			file.Close()
 			fasthttp.ReleaseRequest(req)
@@ -111,6 +120,7 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 
 		select {
 		case <-ctx.Done():
+			req.CloseBodyStream()
 			resp.CloseBodyStream()
 			file.Close()
 			fasthttp.ReleaseRequest(req)
@@ -119,6 +129,7 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 		default:
 			err := resp.BodyWriteTo(customBufferedWriter)
 			if err != nil && err != io.EOF {
+				req.CloseBodyStream()
 				resp.CloseBodyStream()
 				file.Close()
 				fasthttp.ReleaseRequest(req)
@@ -132,6 +143,7 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 			}
 		}
 		if !isError {
+			req.CloseBodyStream()
 			resp.CloseBodyStream()
 			file.Close()
 			fasthttp.ReleaseRequest(req)

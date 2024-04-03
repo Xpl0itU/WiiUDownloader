@@ -43,7 +43,7 @@ func NewFileWriterWithProgress(file *os.File, downloaded *int64, progressReporte
 		file:             file,
 		downloaded:       downloaded,
 		progressReporter: progressReporter,
-		buffer:           make([]byte, bufferSize),
+		buffer:           make([]byte, BUFFER_SIZE),
 	}, nil
 }
 
@@ -54,7 +54,7 @@ func (bw *BufferedWriter) Write(data []byte) (int, error) {
 			return written, nil
 		}
 		remaining := len(data) - written
-		toWrite := min(bufferSize, uint64(remaining))
+		toWrite := min(BUFFER_SIZE, uint64(remaining))
 		copy(bw.buffer, data[written:written+int(toWrite)])
 		n, err := bw.file.Write(bw.buffer[:toWrite])
 		if err != nil {

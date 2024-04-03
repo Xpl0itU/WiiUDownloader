@@ -17,10 +17,7 @@ jobs:
           submodules: 'recursive'
       - name: Install Dependencies
         run: |
-          brew uninstall --ignore-dependencies curl
-          brew uninstall --ignore-dependencies openssl
-          brew install create-dmg dylibbundler gtk+3 openssl curl
-          python3 -m pip install --compile --ignore-installed pycurl
+          brew install create-dmg dylibbundler gtk+3
       - name: Build
         run: |
           python3 grabTitles.py

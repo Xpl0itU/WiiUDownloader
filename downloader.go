@@ -78,13 +78,13 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 		}
 
 		if resp.StatusCode() != fasthttp.StatusOK {
+			resp.CloseBodyStream()
+			fasthttp.ReleaseRequest(req)
+			fasthttp.ReleaseResponse(resp)
 			if doRetries && attempt < maxRetries {
 				time.Sleep(retryDelay)
 				continue
 			}
-			resp.CloseBodyStream()
-			fasthttp.ReleaseRequest(req)
-			fasthttp.ReleaseResponse(resp)
 			return fmt.Errorf("download error after %d attempts, status code: %d", attempt, resp.StatusCode())
 		}
 

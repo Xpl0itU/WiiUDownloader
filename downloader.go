@@ -43,7 +43,7 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 	filePath := filepath.Base(dstPath)
 
 	startTime := time.Now()
-	ticker := time.NewTicker(250 * time.Millisecond)
+	ticker := time.NewTicker(50 * time.Millisecond)
 	defer ticker.Stop()
 	isError := false
 

@@ -9,6 +9,44 @@ import (
 	"github.com/gotk3/gotk3/gtk"
 )
 
+const (
+	MAX_SPEEDS       = 32
+	SMOOTHING_FACTOR = 0.2
+)
+
+type SpeedAverager struct {
+	speeds       []int64
+	averageSpeed int64
+}
+
+func newSpeedAverager() *SpeedAverager {
+	return &SpeedAverager{
+		speeds:       make([]int64, MAX_SPEEDS),
+		averageSpeed: 0,
+	}
+}
+
+func (sa *SpeedAverager) AddSpeed(speed int64) {
+	if len(sa.speeds) >= MAX_SPEEDS {
+		copy(sa.speeds[:MAX_SPEEDS/2], sa.speeds[MAX_SPEEDS/2:])
+		sa.speeds = sa.speeds[:MAX_SPEEDS/2]
+	}
+	sa.speeds = append(sa.speeds, speed)
+}
+
+func (sa *SpeedAverager) calculateAverageOfSpeeds() {
+	var total int64
+	for _, speed := range sa.speeds {
+		total += speed
+	}
+	sa.averageSpeed = total / int64(len(sa.speeds))
+}
+
+func (sa *SpeedAverager) GetAverageSpeed() float64 {
+	sa.calculateAverageOfSpeeds()
+	return SMOOTHING_FACTOR*float64(sa.speeds[len(sa.speeds)-1]) + (1-SMOOTHING_FACTOR)*float64(sa.averageSpeed)
+}
+
 type ProgressWindow struct {
 	Window          *gtk.Window
 	box             *gtk.Box
@@ -19,6 +57,7 @@ type ProgressWindow struct {
 	cancelFunc      context.CancelFunc
 	totalToDownload int64
 	totalDownloaded int64
+	speedAverager   *SpeedAverager
 }
 
 func (pw *ProgressWindow) SetGameTitle(title string) {
@@ -35,7 +74,8 @@ func (pw *ProgressWindow) UpdateDownloadProgress(downloaded, speed int64, filePa
 		pw.cancelButton.SetSensitive(true)
 		currentDownload := downloaded + pw.totalDownloaded
 		pw.bar.SetFraction(float64(currentDownload) / float64(pw.totalToDownload))
-		pw.bar.SetText(fmt.Sprintf("Downloading %s (%s/%s) (%s/s)", filePath, humanize.Bytes(uint64(currentDownload)), humanize.Bytes(uint64(pw.totalToDownload)), humanize.Bytes(uint64(speed))))
+		pw.speedAverager.AddSpeed(speed)
+		pw.bar.SetText(fmt.Sprintf("Downloading %s (%s/%s) (%s/s)", filePath, humanize.Bytes(uint64(currentDownload)), humanize.Bytes(uint64(pw.totalToDownload)), humanize.Bytes(uint64(int64(pw.speedAverager.GetAverageSpeed())))))
 	})
 	for gtk.EventsPending() {
 		gtk.MainIteration()
@@ -118,12 +158,13 @@ func createProgressWindow(parent *gtk.ApplicationWindow) (*ProgressWindow, error
 	box.PackEnd(bottomhBox, false, false, 0)
 
 	progressWindow := ProgressWindow{
-		Window:       win,
-		box:          box,
-		gameLabel:    gameLabel,
-		bar:          progressBar,
-		cancelButton: cancelButton,
-		cancelled:    false,
+		Window:        win,
+		box:           box,
+		gameLabel:     gameLabel,
+		bar:           progressBar,
+		cancelButton:  cancelButton,
+		cancelled:     false,
+		speedAverager: newSpeedAverager(),
 	}
 
 	progressWindow.cancelButton.Connect("clicked", func() {

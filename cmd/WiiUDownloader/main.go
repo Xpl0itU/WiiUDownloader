@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -10,8 +11,6 @@ import (
 	wiiudownloader "github.com/Xpl0itU/WiiUDownloader"
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
-
-	"github.com/valyala/fasthttp"
 )
 
 func main() {
@@ -43,22 +42,14 @@ func main() {
 		logger.Fatal(err.Error())
 	}
 
-	client := &fasthttp.Client{
-		MaxConnsPerHost:     1024,
-		MaxIdleConnDuration: 30 * time.Second,
-		TLSConfig:           nil,
-		ReadBufferSize:      wiiudownloader.BUFFER_SIZE,
-		WriteBufferSize:     wiiudownloader.BUFFER_SIZE,
-		MaxConnWaitTimeout:  30 * time.Second,
-		StreamResponseBody:  true,
-		ConnPoolStrategy:    fasthttp.LIFO,
-		ReadTimeout:         30 * time.Second,
-		WriteTimeout:        30 * time.Second,
-		Name:                "WiiUDownloader",
-		DialDualStack:       true,
-		RetryIf: func(request *fasthttp.Request) bool {
-			return true
-		},
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.MaxIdleConns = 100
+	t.MaxConnsPerHost = 100
+	t.MaxIdleConnsPerHost = 100
+
+	client := &http.Client{
+		Timeout:   time.Duration(30) * time.Second,
+		Transport: t,
 	}
 
 	app.Connect("activate", func() {

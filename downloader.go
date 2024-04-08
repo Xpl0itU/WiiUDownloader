@@ -6,12 +6,11 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/valyala/fasthttp"
 )
 
 const (
@@ -39,7 +38,7 @@ func calculateDownloadSpeed(downloaded int64, startTime, endTime time.Time) int6
 	return 0
 }
 
-func downloadFile(ctx context.Context, progressReporter ProgressReporter, client *fasthttp.Client, downloadURL, dstPath string, doRetries bool) error {
+func downloadFile(ctx context.Context, progressReporter ProgressReporter, client *http.Client, downloadURL, dstPath string, doRetries bool, buffer []byte) error {
 	filePath := filepath.Base(dstPath)
 
 	startTime := time.Now()
@@ -58,49 +57,32 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		isError = false
-		req := fasthttp.AcquireRequest()
+		req, err := http.NewRequestWithContext(ctx, "GET", downloadURL, nil)
+		if err != nil {
+			return err
+		}
 
-		req.SetRequestURI(downloadURL)
-		req.Header.SetMethod("GET")
-		req.Header.Set("Accept", "*/*")
 		req.Header.Set("User-Agent", "WiiUDownloader")
 		req.Header.Set("Connection", "Keep-Alive")
 		req.Header.Set("Accept-Encoding", "*")
 
-		resp := fasthttp.AcquireResponse()
-		resp.StreamBody = true
-		resp.ImmediateHeaderFlush = true
-
-		if err := client.Do(req, resp); err != nil {
-			req.CloseBodyStream()
-			resp.CloseBodyStream()
-			fasthttp.ReleaseRequest(req)
-			fasthttp.ReleaseResponse(resp)
-			if doRetries && attempt < maxRetries {
-				time.Sleep(retryDelay)
-				continue
-			}
-			return fmt.Errorf("inital request error after %d attempts, status code: %s", attempt, err.Error())
+		resp, err := client.Do(req)
+		if err != nil {
+			return err
 		}
 
-		if resp.StatusCode() != fasthttp.StatusOK {
-			req.CloseBodyStream()
-			resp.CloseBodyStream()
-			fasthttp.ReleaseRequest(req)
-			fasthttp.ReleaseResponse(resp)
+		if resp.StatusCode != http.StatusOK {
 			if doRetries && attempt < maxRetries {
 				time.Sleep(retryDelay)
 				continue
 			}
-			return fmt.Errorf("download error after %d attempts, status code: %d", attempt, resp.StatusCode())
+			resp.Body.Close()
+			return fmt.Errorf("download error after %d attempts, status code: %d", attempt, resp.StatusCode)
 		}
 
 		file, err := os.Create(dstPath)
 		if err != nil {
-			req.CloseBodyStream()
-			resp.CloseBodyStream()
-			fasthttp.ReleaseRequest(req)
-			fasthttp.ReleaseResponse(resp)
+			resp.Body.Close()
 			return err
 		}
 
@@ -108,46 +90,48 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 
 		go updateProgress(&downloaded)
 
-		customBufferedWriter, err := NewFileWriterWithProgress(file, &downloaded, progressReporter)
-		if err != nil {
-			req.CloseBodyStream()
-			resp.CloseBodyStream()
-			file.Close()
-			fasthttp.ReleaseRequest(req)
-			fasthttp.ReleaseResponse(resp)
-			return err
-		}
-
-		select {
-		case <-ctx.Done():
-			req.CloseBodyStream()
-			resp.CloseBodyStream()
-			file.Close()
-			fasthttp.ReleaseRequest(req)
-			fasthttp.ReleaseResponse(resp)
-			return ctx.Err()
-		default:
-			err := resp.BodyWriteTo(customBufferedWriter)
-			if err != nil && err != io.EOF {
-				req.CloseBodyStream()
-				resp.CloseBodyStream()
+	Loop:
+		for {
+			select {
+			case <-ctx.Done():
+				resp.Body.Close()
 				file.Close()
-				fasthttp.ReleaseRequest(req)
-				fasthttp.ReleaseResponse(resp)
-				if doRetries && attempt < maxRetries {
-					time.Sleep(retryDelay)
-					isError = true
-					break
+				return ctx.Err()
+			default:
+				n, err := resp.Body.Read(buffer)
+				if err != nil && err != io.EOF {
+					resp.Body.Close()
+					file.Close()
+					if doRetries && attempt < maxRetries {
+						time.Sleep(retryDelay)
+						isError = true
+						break Loop
+					}
+					return fmt.Errorf("download error after %d attempts: %+v", attempt, err)
 				}
-				return fmt.Errorf("download error after %d attempts: %+v", attempt, err)
+
+				if n == 0 {
+					resp.Body.Close()
+					file.Close()
+					break Loop
+				}
+
+				_, err = file.Write(buffer[:n])
+				if err != nil {
+					resp.Body.Close()
+					file.Close()
+					if doRetries && attempt < maxRetries {
+						time.Sleep(retryDelay)
+						isError = true
+						break Loop
+					}
+					return fmt.Errorf("write error after %d attempts: %+v", attempt, err)
+				}
+
+				downloaded += int64(n)
 			}
 		}
 		if !isError {
-			req.CloseBodyStream()
-			resp.CloseBodyStream()
-			file.Close()
-			fasthttp.ReleaseRequest(req)
-			fasthttp.ReleaseResponse(resp)
 			break
 		}
 	}
@@ -155,7 +139,7 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 	return nil
 }
 
-func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, doDecryption bool, progressReporter ProgressReporter, deleteEncryptedContents bool, logger *Logger, client *fasthttp.Client) error {
+func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, doDecryption bool, progressReporter ProgressReporter, deleteEncryptedContents bool, logger *Logger, client *http.Client) error {
 	tEntry := getTitleEntryFromTid(titleID)
 
 	progressReporter.SetTotalDownloaded(0)
@@ -168,8 +152,10 @@ func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, d
 		return err
 	}
 
+	buffer := make([]byte, BUFFER_SIZE)
+
 	tmdPath := filepath.Join(outputDir, "title.tmd")
-	if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%s", baseURL, "tmd"), tmdPath, true); err != nil {
+	if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%s", baseURL, "tmd"), tmdPath, true, buffer); err != nil {
 		if progressReporter.Cancelled() {
 			return nil
 		}
@@ -187,7 +173,7 @@ func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, d
 	}
 
 	tikPath := filepath.Join(outputDir, "title.tik")
-	if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%s", baseURL, "cetk"), tikPath, false); err != nil {
+	if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%s", baseURL, "cetk"), tikPath, false, buffer); err != nil {
 		if progressReporter.Cancelled() {
 			return nil
 		}
@@ -221,7 +207,7 @@ func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, d
 
 	progressReporter.SetDownloadSize(int64(titleSize))
 
-	cert, err := GenerateCert(tmdData, contentCount, progressReporter, client, cancelCtx)
+	cert, err := GenerateCert(tmdData, contentCount, progressReporter, client, cancelCtx, buffer)
 	if err != nil {
 		if progressReporter.Cancelled() {
 			return nil
@@ -250,7 +236,7 @@ func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, d
 			return err
 		}
 		filePath := filepath.Join(outputDir, fmt.Sprintf("%08X.app", content.ID))
-		if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%08X", baseURL, content.ID), filePath, true); err != nil {
+		if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%08X", baseURL, content.ID), filePath, true, buffer); err != nil {
 			if progressReporter.Cancelled() {
 				break
 			}
@@ -260,7 +246,7 @@ func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, d
 
 		if tmdData[offset+7]&0x2 == 2 {
 			filePath = filepath.Join(outputDir, fmt.Sprintf("%08X.h3", content.ID))
-			if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%08X.h3", baseURL, content.ID), filePath, true); err != nil {
+			if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%08X.h3", baseURL, content.ID), filePath, true, buffer); err != nil {
 				if progressReporter.Cancelled() {
 					break
 				}

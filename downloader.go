@@ -14,9 +14,8 @@ import (
 )
 
 const (
-	maxRetries  = 5
-	retryDelay  = 5 * time.Second
-	BUFFER_SIZE = 1048576
+	maxRetries = 5
+	retryDelay = 5 * time.Second
 )
 
 type ProgressReporter interface {
@@ -30,33 +29,14 @@ type ProgressReporter interface {
 	AddToTotalDownloaded(toAdd int64)
 }
 
-func calculateDownloadSpeed(downloaded int64, startTime, endTime time.Time) int64 {
-	duration := endTime.Sub(startTime).Seconds()
-	if duration > 0 {
-		return int64(float64(downloaded) / duration)
-	}
-	return 0
-}
-
-func downloadFile(ctx context.Context, progressReporter ProgressReporter, client *http.Client, downloadURL, dstPath string, doRetries bool, buffer []byte) error {
+func downloadFile(ctx context.Context, progressReporter ProgressReporter, client *http.Client, downloadURL, dstPath string, doRetries bool) error {
 	filePath := filepath.Base(dstPath)
 
 	startTime := time.Now()
 	ticker := time.NewTicker(50 * time.Millisecond)
 	defer ticker.Stop()
-	isError := false
-
-	updateProgress := func(downloaded *int64) {
-		for range ticker.C {
-			if progressReporter.Cancelled() {
-				return
-			}
-			progressReporter.UpdateDownloadProgress(*downloaded, calculateDownloadSpeed(*downloaded, startTime, time.Now()), filePath)
-		}
-	}
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		isError = false
 		req, err := http.NewRequestWithContext(ctx, "GET", downloadURL, nil)
 		if err != nil {
 			return err
@@ -68,15 +48,19 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 
 		resp, err := client.Do(req)
 		if err != nil {
-			return err
-		}
-
-		if resp.StatusCode != http.StatusOK {
 			if doRetries && attempt < maxRetries {
 				time.Sleep(retryDelay)
 				continue
 			}
+			return err
+		}
+
+		if resp.StatusCode != http.StatusOK {
 			resp.Body.Close()
+			if doRetries && attempt < maxRetries {
+				time.Sleep(retryDelay)
+				continue
+			}
 			return fmt.Errorf("download error after %d attempts, status code: %d", attempt, resp.StatusCode)
 		}
 
@@ -86,54 +70,20 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 			return err
 		}
 
-		var downloaded int64
-
-		go updateProgress(&downloaded)
-
-	Loop:
-		for {
-			select {
-			case <-ctx.Done():
-				resp.Body.Close()
-				file.Close()
-				return ctx.Err()
-			default:
-				n, err := resp.Body.Read(buffer)
-				if err != nil && err != io.EOF {
-					resp.Body.Close()
-					file.Close()
-					if doRetries && attempt < maxRetries {
-						time.Sleep(retryDelay)
-						isError = true
-						break Loop
-					}
-					return fmt.Errorf("download error after %d attempts: %+v", attempt, err)
-				}
-
-				if n == 0 {
-					resp.Body.Close()
-					file.Close()
-					break Loop
-				}
-
-				_, err = file.Write(buffer[:n])
-				if err != nil {
-					resp.Body.Close()
-					file.Close()
-					if doRetries && attempt < maxRetries {
-						time.Sleep(retryDelay)
-						isError = true
-						break Loop
-					}
-					return fmt.Errorf("write error after %d attempts: %+v", attempt, err)
-				}
-
-				downloaded += int64(n)
+		writerProgress := newWriterProgress(file, progressReporter, startTime, filePath)
+		_, err = io.Copy(writerProgress, resp.Body)
+		if err != nil {
+			file.Close()
+			resp.Body.Close()
+			if doRetries && attempt < maxRetries {
+				time.Sleep(retryDelay)
+				continue
 			}
+			return err
 		}
-		if !isError {
-			break
-		}
+		file.Close()
+		resp.Body.Close()
+		break
 	}
 
 	return nil
@@ -152,10 +102,8 @@ func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, d
 		return err
 	}
 
-	buffer := make([]byte, BUFFER_SIZE)
-
 	tmdPath := filepath.Join(outputDir, "title.tmd")
-	if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%s", baseURL, "tmd"), tmdPath, true, buffer); err != nil {
+	if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%s", baseURL, "tmd"), tmdPath, true); err != nil {
 		if progressReporter.Cancelled() {
 			return nil
 		}
@@ -173,7 +121,7 @@ func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, d
 	}
 
 	tikPath := filepath.Join(outputDir, "title.tik")
-	if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%s", baseURL, "cetk"), tikPath, false, buffer); err != nil {
+	if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%s", baseURL, "cetk"), tikPath, false); err != nil {
 		if progressReporter.Cancelled() {
 			return nil
 		}
@@ -207,7 +155,7 @@ func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, d
 
 	progressReporter.SetDownloadSize(int64(titleSize))
 
-	cert, err := GenerateCert(tmdData, contentCount, progressReporter, client, cancelCtx, buffer)
+	cert, err := GenerateCert(tmdData, contentCount, progressReporter, client, cancelCtx)
 	if err != nil {
 		if progressReporter.Cancelled() {
 			return nil
@@ -236,7 +184,7 @@ func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, d
 			return err
 		}
 		filePath := filepath.Join(outputDir, fmt.Sprintf("%08X.app", content.ID))
-		if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%08X", baseURL, content.ID), filePath, true, buffer); err != nil {
+		if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%08X", baseURL, content.ID), filePath, true); err != nil {
 			if progressReporter.Cancelled() {
 				break
 			}
@@ -246,7 +194,7 @@ func DownloadTitle(cancelCtx context.Context, titleID, outputDirectory string, d
 
 		if tmdData[offset+7]&0x2 == 2 {
 			filePath = filepath.Join(outputDir, fmt.Sprintf("%08X.h3", content.ID))
-			if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%08X.h3", baseURL, content.ID), filePath, true, buffer); err != nil {
+			if err := downloadFile(cancelCtx, progressReporter, client, fmt.Sprintf("%s/%08X.h3", baseURL, content.ID), filePath, true); err != nil {
 				if progressReporter.Cancelled() {
 					break
 				}

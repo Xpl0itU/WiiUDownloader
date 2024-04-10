@@ -98,6 +98,13 @@ func (pw *ProgressWindow) Cancelled() bool {
 }
 
 func (pw *ProgressWindow) SetCancelled() {
+	glib.IdleAdd(func() {
+		pw.cancelButton.SetSensitive(false)
+		pw.SetGameTitle("Cancelling...")
+	})
+	for gtk.EventsPending() {
+		gtk.MainIteration()
+	}
 	pw.cancelFunc()
 }
 

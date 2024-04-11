@@ -46,7 +46,7 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 
 		resp, err := client.Do(req)
 		if err != nil {
-			if doRetries && attempt < maxRetries {
+			if doRetries && attempt < maxRetries && !progressReporter.Cancelled() {
 				time.Sleep(retryDelay)
 				continue
 			}
@@ -55,7 +55,7 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 
 		if resp.StatusCode != http.StatusOK {
 			resp.Body.Close()
-			if doRetries && attempt < maxRetries {
+			if doRetries && attempt < maxRetries && !progressReporter.Cancelled() {
 				time.Sleep(retryDelay)
 				continue
 			}
@@ -73,7 +73,7 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 		if err != nil {
 			file.Close()
 			resp.Body.Close()
-			if doRetries && attempt < maxRetries {
+			if doRetries && attempt < maxRetries && !progressReporter.Cancelled() {
 				time.Sleep(retryDelay)
 				continue
 			}

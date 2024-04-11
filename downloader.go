@@ -33,8 +33,6 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 	filePath := filepath.Base(dstPath)
 
 	startTime := time.Now()
-	ticker := time.NewTicker(50 * time.Millisecond)
-	defer ticker.Stop()
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		req, err := http.NewRequestWithContext(ctx, "GET", downloadURL, nil)

@@ -32,17 +32,14 @@ type ProgressReporter interface {
 func downloadFile(ctx context.Context, progressReporter ProgressReporter, client *http.Client, downloadURL, dstPath string, doRetries bool) error {
 	filePath := filepath.Base(dstPath)
 
-	startTime := time.Now()
-
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		req, err := http.NewRequestWithContext(ctx, "GET", downloadURL, nil)
+		req, err := http.NewRequest("GET", downloadURL, nil)
 		if err != nil {
 			return err
 		}
 
 		req.Header.Set("User-Agent", "WiiUDownloader")
-		req.Header.Set("Connection", "Keep-Alive")
-		req.Header.Set("Accept-Encoding", "*")
+		req = req.WithContext(ctx)
 
 		resp, err := client.Do(req)
 		if err != nil {
@@ -68,7 +65,7 @@ func downloadFile(ctx context.Context, progressReporter ProgressReporter, client
 			return err
 		}
 
-		writerProgress := newWriterProgress(file, progressReporter, startTime, filePath)
+		writerProgress := newWriterProgress(file, progressReporter, time.Now(), filePath)
 		_, err = io.Copy(writerProgress, resp.Body)
 		if err != nil {
 			file.Close()

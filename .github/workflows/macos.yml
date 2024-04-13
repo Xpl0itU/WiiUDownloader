@@ -26,9 +26,6 @@ jobs:
           check-latest: true
           cache-dependency-path: |
             go.sum
-      - name: Install Python Dependencies
-        run: |
-          python3 -m pip install requests
       - name: Build
         run: |
           python3 grabTitles.py

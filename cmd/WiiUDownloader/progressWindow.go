@@ -65,6 +65,7 @@ type ProgressWindow struct {
 	cancelled       bool
 	totalToDownload int64
 	totalDownloaded int64
+	progressPerFile map[string]int64 // map of filename to downloaded bytes
 	progressMutex   sync.Mutex
 	speedAverager   *SpeedAverager
 	startTime       time.Time
@@ -79,13 +80,19 @@ func (pw *ProgressWindow) SetGameTitle(title string) {
 	}
 }
 
-func (pw *ProgressWindow) UpdateDownloadProgress(downloaded int64) {
+func (pw *ProgressWindow) UpdateDownloadProgress(downloaded int64, filename string) {
 	glib.IdleAdd(func() {
 		pw.cancelButton.SetSensitive(true)
-		pw.AddToTotalDownloaded(downloaded)
-		pw.bar.SetFraction(float64(pw.totalDownloaded) / float64(pw.totalToDownload))
-		pw.speedAverager.AddSpeed(calculateDownloadSpeed(pw.totalDownloaded, pw.startTime, time.Now()))
-		pw.bar.SetText(fmt.Sprintf("Downloading... (%s/%s) (%s/s)", humanize.Bytes(uint64(pw.totalDownloaded)), humanize.Bytes(uint64(pw.totalToDownload)), humanize.Bytes(uint64(int64(pw.speedAverager.GetAverageSpeed())))))
+		pw.progressMutex.Lock()
+		pw.progressPerFile[filename] += downloaded
+		total := pw.totalDownloaded
+		for _, v := range pw.progressPerFile {
+			total += v
+		}
+		pw.progressMutex.Unlock()
+		pw.bar.SetFraction(float64(total) / float64(pw.totalToDownload))
+		pw.speedAverager.AddSpeed(calculateDownloadSpeed(total, pw.startTime, time.Now()))
+		pw.bar.SetText(fmt.Sprintf("Downloading... (%s/%s) (%s/s)", humanize.Bytes(uint64(total)), humanize.Bytes(uint64(pw.totalToDownload)), humanize.Bytes(uint64(int64(pw.speedAverager.GetAverageSpeed())))))
 	})
 	for gtk.EventsPending() {
 		gtk.MainIteration()
@@ -121,15 +128,20 @@ func (pw *ProgressWindow) SetDownloadSize(size int64) {
 	pw.totalToDownload = size
 }
 
-func (pw *ProgressWindow) SetTotalDownloaded(total int64) {
+func (pw *ProgressWindow) ResetTotalDownloaded() {
+	pw.progressPerFile = make(map[string]int64)
+}
+
+func (pw *ProgressWindow) MarkFileAsDone(filename string) {
 	pw.progressMutex.Lock()
-	pw.totalDownloaded = total
+	pw.totalDownloaded += pw.progressPerFile[filename]
+	delete(pw.progressPerFile, filename)
 	pw.progressMutex.Unlock()
 }
 
-func (pw *ProgressWindow) AddToTotalDownloaded(toAdd int64) {
+func (pw *ProgressWindow) SetTotalDownloadedForFile(filename string, downloaded int64) {
 	pw.progressMutex.Lock()
-	pw.totalDownloaded += toAdd
+	pw.progressPerFile[filename] = downloaded
 	pw.progressMutex.Unlock()
 }
 

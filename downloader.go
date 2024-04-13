@@ -28,13 +28,14 @@ var (
 
 type ProgressReporter interface {
 	SetGameTitle(title string)
-	UpdateDownloadProgress(downloaded int64)
+	UpdateDownloadProgress(downloaded int64, filename string)
 	UpdateDecryptionProgress(progress float64)
 	Cancelled() bool
 	SetCancelled()
 	SetDownloadSize(size int64)
-	SetTotalDownloaded(total int64)
-	AddToTotalDownloaded(toAdd int64)
+	ResetTotalDownloaded()
+	MarkFileAsDone(filename string)
+	SetTotalDownloadedForFile(filename string, downloaded int64)
 	SetStartTime(startTime time.Time)
 }
 
@@ -43,6 +44,8 @@ func downloadFileWithSemaphore(ctx context.Context, progressReporter ProgressRep
 		return nil
 	}
 	defer sem.Release(1)
+
+	basePath := filepath.Base(dstPath)
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		req, err := http.NewRequestWithContext(ctx, "GET", downloadURL, nil)
@@ -77,7 +80,8 @@ func downloadFileWithSemaphore(ctx context.Context, progressReporter ProgressRep
 			return err
 		}
 
-		writerProgress := newWriterProgress(file, progressReporter)
+		progressReporter.SetTotalDownloadedForFile(basePath, 0)
+		writerProgress := newWriterProgress(file, progressReporter, basePath)
 		_, err = io.Copy(writerProgress, resp.Body)
 		if err != nil {
 			file.Close()
@@ -92,6 +96,7 @@ func downloadFileWithSemaphore(ctx context.Context, progressReporter ProgressRep
 		file.Close()
 		resp.Body.Close()
 		writerProgress.Close()
+		progressReporter.MarkFileAsDone(basePath)
 		break
 	}
 
@@ -131,7 +136,7 @@ func downloadFile(progressReporter ProgressReporter, client *http.Client, downlo
 			return err
 		}
 
-		writerProgress := newWriterProgress(file, progressReporter)
+		writerProgress := newWriterProgress(file, progressReporter, filepath.Base(dstPath))
 		_, err = io.Copy(writerProgress, resp.Body)
 		if err != nil {
 			file.Close()
@@ -153,7 +158,7 @@ func downloadFile(progressReporter ProgressReporter, client *http.Client, downlo
 func DownloadTitle(titleID, outputDirectory string, doDecryption bool, progressReporter ProgressReporter, deleteEncryptedContents bool, logger *Logger, client *http.Client) error {
 	tEntry := getTitleEntryFromTid(titleID)
 
-	progressReporter.SetTotalDownloaded(0)
+	progressReporter.ResetTotalDownloaded()
 	progressReporter.SetGameTitle(tEntry.Name)
 
 	outputDir := strings.TrimRight(outputDirectory, "/\\")

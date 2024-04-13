@@ -51,4 +51,3 @@ This program is distributed under the GPLv3 License. For more information, see t
 WiiUDownloader uses several open-source libraries and dependencies to provide its functionality:
 
 - [github.com/gotk3/gotk3](https://github.com/gotk3/gotk3): Go bindings for GTK+3.
-- [github.com/cavaliergopher/grab](https://github.com/cavaliergopher/grab): A download manager package for Go.

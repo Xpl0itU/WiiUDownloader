@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"sync"
+	"time"
 
 	"github.com/dustin/go-humanize"
 	"github.com/gotk3/gotk3/glib"
@@ -33,6 +35,14 @@ func (sa *SpeedAverager) AddSpeed(speed int64) {
 	sa.speeds = append(sa.speeds, speed)
 }
 
+func calculateDownloadSpeed(downloaded int64, startTime, endTime time.Time) int64 {
+	duration := endTime.Sub(startTime).Seconds()
+	if duration > 0 {
+		return int64(float64(downloaded) / duration)
+	}
+	return 0
+}
+
 func (sa *SpeedAverager) calculateAverageOfSpeeds() {
 	var total int64
 	for _, speed := range sa.speeds {
@@ -55,7 +65,9 @@ type ProgressWindow struct {
 	cancelled       bool
 	totalToDownload int64
 	totalDownloaded int64
+	progressMutex   sync.Mutex
 	speedAverager   *SpeedAverager
+	startTime       time.Time
 }
 
 func (pw *ProgressWindow) SetGameTitle(title string) {
@@ -67,13 +79,13 @@ func (pw *ProgressWindow) SetGameTitle(title string) {
 	}
 }
 
-func (pw *ProgressWindow) UpdateDownloadProgress(downloaded, speed int64, filePath string) {
+func (pw *ProgressWindow) UpdateDownloadProgress(downloaded int64) {
 	glib.IdleAdd(func() {
 		pw.cancelButton.SetSensitive(true)
-		currentDownload := downloaded + pw.totalDownloaded
-		pw.bar.SetFraction(float64(currentDownload) / float64(pw.totalToDownload))
-		pw.speedAverager.AddSpeed(speed)
-		pw.bar.SetText(fmt.Sprintf("Downloading %s (%s/%s) (%s/s)", filePath, humanize.Bytes(uint64(currentDownload)), humanize.Bytes(uint64(pw.totalToDownload)), humanize.Bytes(uint64(int64(pw.speedAverager.GetAverageSpeed())))))
+		pw.AddToTotalDownloaded(downloaded)
+		pw.bar.SetFraction(float64(pw.totalDownloaded) / float64(pw.totalToDownload))
+		pw.speedAverager.AddSpeed(calculateDownloadSpeed(pw.totalDownloaded, pw.startTime, time.Now()))
+		pw.bar.SetText(fmt.Sprintf("Downloading... (%s/%s) (%s/s)", humanize.Bytes(uint64(pw.totalDownloaded)), humanize.Bytes(uint64(pw.totalToDownload)), humanize.Bytes(uint64(int64(pw.speedAverager.GetAverageSpeed())))))
 	})
 	for gtk.EventsPending() {
 		gtk.MainIteration()
@@ -110,11 +122,19 @@ func (pw *ProgressWindow) SetDownloadSize(size int64) {
 }
 
 func (pw *ProgressWindow) SetTotalDownloaded(total int64) {
+	pw.progressMutex.Lock()
 	pw.totalDownloaded = total
+	pw.progressMutex.Unlock()
 }
 
 func (pw *ProgressWindow) AddToTotalDownloaded(toAdd int64) {
+	pw.progressMutex.Lock()
 	pw.totalDownloaded += toAdd
+	pw.progressMutex.Unlock()
+}
+
+func (pw *ProgressWindow) SetStartTime(startTime time.Time) {
+	pw.startTime = startTime
 }
 
 func createProgressWindow(parent *gtk.ApplicationWindow) (*ProgressWindow, error) {

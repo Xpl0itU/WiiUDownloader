@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/dustin/go-humanize"
@@ -54,7 +53,6 @@ type ProgressWindow struct {
 	bar             *gtk.ProgressBar
 	cancelButton    *gtk.Button
 	cancelled       bool
-	cancelFunc      context.CancelFunc
 	totalToDownload int64
 	totalDownloaded int64
 	speedAverager   *SpeedAverager
@@ -105,7 +103,6 @@ func (pw *ProgressWindow) SetCancelled() {
 	for gtk.EventsPending() {
 		gtk.MainIteration()
 	}
-	pw.cancelFunc()
 }
 
 func (pw *ProgressWindow) SetDownloadSize(size int64) {

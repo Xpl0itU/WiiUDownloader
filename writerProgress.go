@@ -33,3 +33,8 @@ func (r *WriterProgress) Write(p []byte) (n int, err error) {
 	r.downloadToReport += int64(n)
 	return n, err
 }
+
+func (r *WriterProgress) Close() error {
+	r.updateProgressTicker.Stop()
+	return nil
+}

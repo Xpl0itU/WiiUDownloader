@@ -82,6 +82,7 @@ func downloadFileWithSemaphore(ctx context.Context, progressReporter ProgressRep
 		if err != nil {
 			file.Close()
 			resp.Body.Close()
+			writerProgress.Close()
 			if doRetries && attempt < maxRetries && !progressReporter.Cancelled() {
 				time.Sleep(retryDelay)
 				continue
@@ -90,6 +91,7 @@ func downloadFileWithSemaphore(ctx context.Context, progressReporter ProgressRep
 		}
 		file.Close()
 		resp.Body.Close()
+		writerProgress.Close()
 		break
 	}
 

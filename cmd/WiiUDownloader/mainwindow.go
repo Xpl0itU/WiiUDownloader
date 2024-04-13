@@ -265,7 +265,7 @@ func (mw *MainWindow) ShowAll() {
 
 		wiiudownloader.GenerateTicket(filepath.Join(parentDir, "title.tik"), titleID, titleKey, titleVersion)
 
-		cert, err := wiiudownloader.GenerateCert(tmdData, contentCount, mw.progressWindow, http.DefaultClient, context.Background())
+		cert, err := wiiudownloader.GenerateCert(tmdData, contentCount, mw.progressWindow, http.DefaultClient)
 		if err != nil {
 			return
 		}
@@ -746,21 +746,15 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string) error {
 	defer close(queueStatusChan)
 	errGroup := errgroup.Group{}
 
-	queueCtx, cancel := context.WithCancel(context.Background())
-	mw.progressWindow.cancelFunc = cancel
-	defer mw.progressWindow.cancelFunc()
-
 	for _, title := range mw.titleQueue {
 		errGroup.Go(func() error {
-			select {
-			case <-queueCtx.Done():
+			if mw.progressWindow.cancelled {
 				queueStatusChan <- true
 				return nil
-			default:
 			}
 			tidStr := fmt.Sprintf("%016x", title.TitleID)
 			titlePath := filepath.Join(selectedPath, fmt.Sprintf("%s [%s] [%s]", normalizeFilename(title.Name), wiiudownloader.GetFormattedKind(title.TitleID), tidStr))
-			if err := wiiudownloader.DownloadTitle(queueCtx, tidStr, titlePath, mw.decryptContents, mw.progressWindow, mw.getDeleteEncryptedContents(), mw.logger, mw.client); err != nil && err != context.Canceled {
+			if err := wiiudownloader.DownloadTitle(tidStr, titlePath, mw.decryptContents, mw.progressWindow, mw.getDeleteEncryptedContents(), mw.logger, mw.client); err != nil && err != context.Canceled {
 				return err
 			}
 

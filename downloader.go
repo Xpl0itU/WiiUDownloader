@@ -210,7 +210,7 @@ func DownloadTitle(titleID, outputDirectory string, doDecryption bool, progressR
 			return err
 		}
 
-		tmdDataReader.Seek(8, io.SeekCurrent)
+		tmdDataReader.Seek(2, io.SeekCurrent)
 
 		if err := binary.Read(tmdDataReader, binary.BigEndian, &contents[i].Type); err != nil {
 			return err
@@ -252,7 +252,6 @@ func DownloadTitle(titleID, outputDirectory string, doDecryption bool, progressR
 	for i := 0; i < int(contentCount); i++ {
 		i := i
 		g.Go(func() error {
-
 			filePath := filepath.Join(outputDir, fmt.Sprintf("%08X.app", contents[i].ID))
 			if err := downloadFileWithSemaphore(ctx, progressReporter, client, fmt.Sprintf("%s/%08X", baseURL, contents[i].ID), filePath, true, sem); err != nil {
 				if progressReporter.Cancelled() {

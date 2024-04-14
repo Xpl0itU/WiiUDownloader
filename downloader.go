@@ -94,7 +94,6 @@ func downloadFileWithSemaphore(ctx context.Context, progressReporter ProgressRep
 				time.Sleep(retryDelay)
 				continue
 			}
-			fmt.Printf("Error: %v, cause: %v\n", err, context.Cause(ctx))
 			return err
 		}
 		file.Close()

@@ -10,6 +10,11 @@ require (
 )
 
 require (
+	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99
+	golang.org/x/net v0.24.0 // indirect
+)
+
+require (
 	github.com/TheTitanrain/w32 v0.0.0-20200114052255-2654d97dbd3d // indirect
 	golang.org/x/sync v0.7.0
 )

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	ctxio "github.com/jbenet/go-context/io"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
 )
@@ -82,7 +83,9 @@ func downloadFileWithSemaphore(ctx context.Context, progressReporter ProgressRep
 
 		progressReporter.SetTotalDownloadedForFile(basePath, 0)
 		writerProgress := newWriterProgress(file, progressReporter, basePath)
-		_, err = io.Copy(writerProgress, resp.Body)
+		writerProgressWithContext := ctxio.NewWriter(ctx, writerProgress)
+		bodyReaderWithContext := ctxio.NewReader(ctx, resp.Body)
+		_, err = io.Copy(writerProgressWithContext, bodyReaderWithContext)
 		if err != nil {
 			file.Close()
 			resp.Body.Close()

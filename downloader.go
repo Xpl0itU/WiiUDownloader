@@ -43,7 +43,7 @@ type ProgressReporter interface {
 
 func downloadFileWithSemaphore(ctx context.Context, progressReporter ProgressReporter, client *http.Client, downloadURL, dstPath string, doRetries bool, sem *semaphore.Weighted) error {
 	if err := sem.Acquire(ctx, 1); err != nil {
-		return nil
+		return err
 	}
 	defer sem.Release(1)
 
@@ -72,7 +72,6 @@ func downloadFileWithSemaphore(ctx context.Context, progressReporter ProgressRep
 				time.Sleep(retryDelay)
 				continue
 			}
-			fmt.Printf("download error after %d attempts, status code: %d, url: %s\n", attempt, resp.StatusCode, downloadURL)
 			return fmt.Errorf("download error after %d attempts, status code: %d", attempt, resp.StatusCode)
 		}
 
@@ -95,6 +94,7 @@ func downloadFileWithSemaphore(ctx context.Context, progressReporter ProgressRep
 				time.Sleep(retryDelay)
 				continue
 			}
+			fmt.Printf("Error: %v, cause: %v\n", err, context.Cause(ctx))
 			return err
 		}
 		file.Close()

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -15,23 +15,17 @@ import (
 )
 
 func main() {
-	logger, err := wiiudownloader.NewLogger("log.txt")
-	if err != nil {
-		fmt.Println("Error:", err)
-		return
-	}
 	// Check if user is running macOS
 	if runtime.GOOS == "darwin" {
 		execPath, err := os.Executable()
 		if err != nil {
-			logger.Error(err.Error())
-			return
+			log.Fatal(err.Error())
 		}
 
 		bundlePath := filepath.Dir(filepath.Dir(execPath))
 		filePath := filepath.Join(bundlePath, "Resources", "lib", "share", "glib-schemas")
 		if _, err := os.Stat(filePath); os.IsNotExist(err) {
-			logger.Warning("glib-schemas not found")
+			log.Println("glib-schemas not found")
 		} else {
 			os.Setenv("GSETTINGS_SCHEMA_DIR", filePath)
 		}
@@ -40,7 +34,7 @@ func main() {
 
 	app, err := gtk.ApplicationNew("io.github.xpl0itu.wiiudownloader", glib.APPLICATION_FLAGS_NONE)
 	if err != nil {
-		logger.Fatal(err.Error())
+		log.Fatal("Error creating application.")
 	}
 
 	client := &http.Client{
@@ -60,7 +54,7 @@ func main() {
 	}
 
 	app.Connect("activate", func() {
-		win := NewMainWindow(app, wiiudownloader.GetTitleEntries(wiiudownloader.TITLE_CATEGORY_GAME), logger, client)
+		win := NewMainWindow(app, wiiudownloader.GetTitleEntries(wiiudownloader.TITLE_CATEGORY_GAME), client)
 		win.ShowAll()
 		app.AddWindow(win.window)
 		app.GetActiveWindow().Show()

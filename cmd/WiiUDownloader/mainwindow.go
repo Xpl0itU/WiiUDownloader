@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -29,7 +30,6 @@ const (
 type MainWindow struct {
 	window                          *gtk.ApplicationWindow
 	treeView                        *gtk.TreeView
-	logger                          *wiiudownloader.Logger
 	searchEntry                     *gtk.Entry
 	deleteEncryptedContentsCheckbox *gtk.CheckButton
 	addToQueueButton                *gtk.Button
@@ -43,16 +43,16 @@ type MainWindow struct {
 	client                          *http.Client
 }
 
-func NewMainWindow(app *gtk.Application, entries []wiiudownloader.TitleEntry, logger *wiiudownloader.Logger, client *http.Client) *MainWindow {
+func NewMainWindow(app *gtk.Application, entries []wiiudownloader.TitleEntry, client *http.Client) *MainWindow {
 	gSettings, err := gtk.SettingsGetDefault()
 	if err != nil {
-		logger.Error(err.Error())
+		log.Println(err.Error())
 	}
 	gSettings.SetProperty("gtk-application-prefer-dark-theme", isDarkMode())
 
 	win, err := gtk.ApplicationWindowNew(app)
 	if err != nil {
-		logger.Fatal("Unable to create window:", err)
+		log.Fatalln("Unable to create window:", err)
 	}
 
 	win.SetTitle("WiiUDownloader")
@@ -63,7 +63,7 @@ func NewMainWindow(app *gtk.Application, entries []wiiudownloader.TitleEntry, lo
 
 	searchEntry, err := gtk.EntryNew()
 	if err != nil {
-		logger.Fatal("Unable to create search entry:", err)
+		log.Fatalln("Unable to create entry:", err)
 	}
 
 	mainWindow := MainWindow{
@@ -71,7 +71,6 @@ func NewMainWindow(app *gtk.Application, entries []wiiudownloader.TitleEntry, lo
 		titles:         entries,
 		searchEntry:    searchEntry,
 		currentRegion:  wiiudownloader.MCP_REGION_EUROPE | wiiudownloader.MCP_REGION_JAPAN | wiiudownloader.MCP_REGION_USA,
-		logger:         logger,
 		lastSearchText: "",
 		client:         client,
 	}
@@ -84,7 +83,7 @@ func NewMainWindow(app *gtk.Application, entries []wiiudownloader.TitleEntry, lo
 func (mw *MainWindow) updateTitles(titles []wiiudownloader.TitleEntry) {
 	store, err := gtk.ListStoreNew(glib.TYPE_BOOLEAN, glib.TYPE_STRING, glib.TYPE_STRING, glib.TYPE_STRING, glib.TYPE_STRING)
 	if err != nil {
-		mw.logger.Fatal("Unable to create list store:", err)
+		log.Fatalln("Unable to create list store:", err)
 	}
 
 	for _, entry := range titles {
@@ -96,7 +95,7 @@ func (mw *MainWindow) updateTitles(titles []wiiudownloader.TitleEntry) {
 			[]int{IN_QUEUE_COLUMN, KIND_COLUMN, TITLE_ID_COLUMN, REGION_COLUMN, NAME_COLUMN},
 			[]interface{}{mw.isTitleInQueue(entry), wiiudownloader.GetFormattedKind(entry.TitleID), fmt.Sprintf("%016x", entry.TitleID), wiiudownloader.GetFormattedRegion(entry.Region), entry.Name},
 		); err != nil {
-			mw.logger.Fatal("Unable to set values:", err)
+			log.Fatalln("Unable to set values:", err)
 		}
 	}
 	mw.treeView.SetModel(store)
@@ -105,7 +104,7 @@ func (mw *MainWindow) updateTitles(titles []wiiudownloader.TitleEntry) {
 func (mw *MainWindow) ShowAll() {
 	store, err := gtk.ListStoreNew(glib.TYPE_BOOLEAN, glib.TYPE_STRING, glib.TYPE_STRING, glib.TYPE_STRING, glib.TYPE_STRING)
 	if err != nil {
-		mw.logger.Fatal("Unable to create list store:", err)
+		log.Fatalln("Unable to create list store:", err)
 	}
 
 	for _, entry := range mw.titles {
@@ -118,18 +117,18 @@ func (mw *MainWindow) ShowAll() {
 			[]interface{}{mw.isTitleInQueue(entry), wiiudownloader.GetFormattedKind(entry.TitleID), fmt.Sprintf("%016x", entry.TitleID), wiiudownloader.GetFormattedRegion(entry.Region), entry.Name},
 		)
 		if err != nil {
-			mw.logger.Fatal("Unable to set values:", err)
+			log.Fatalln("Unable to set values:", err)
 		}
 	}
 
 	mw.treeView, err = gtk.TreeViewNew()
 	if err != nil {
-		mw.logger.Fatal("Unable to create tree view:", err)
+		log.Fatalln("Unable to create tree view:", err)
 	}
 
 	selection, err := mw.treeView.GetSelection()
 	if err != nil {
-		mw.logger.Fatal("Unable to get selection:", err)
+		log.Fatalln("Unable to get selection:", err)
 	}
 	selection.SetMode(gtk.SELECTION_MULTIPLE)
 
@@ -137,70 +136,70 @@ func (mw *MainWindow) ShowAll() {
 
 	toggleRenderer, err := gtk.CellRendererToggleNew()
 	if err != nil {
-		mw.logger.Fatal("Unable to create cell renderer toggle:", err)
+		log.Fatalln("Unable to create cell renderer toggle:", err)
 	}
 	column, err := gtk.TreeViewColumnNewWithAttribute("Queue", toggleRenderer, "active", IN_QUEUE_COLUMN)
 	if err != nil {
-		mw.logger.Fatal("Unable to create tree view column:", err)
+		log.Fatalln("Unable to create tree view column:", err)
 	}
 	mw.treeView.AppendColumn(column)
 
 	renderer, err := gtk.CellRendererTextNew()
 	if err != nil {
-		mw.logger.Fatal("Unable to create cell renderer:", err)
+		log.Fatalln("Unable to create cell renderer:", err)
 	}
 	column, err = gtk.TreeViewColumnNewWithAttribute("Kind", renderer, "text", KIND_COLUMN)
 	if err != nil {
-		mw.logger.Fatal("Unable to create tree view column:", err)
+		log.Fatalln("Unable to create tree view column:", err)
 	}
 	mw.treeView.AppendColumn(column)
 
 	renderer, err = gtk.CellRendererTextNew()
 	if err != nil {
-		mw.logger.Fatal("Unable to create cell renderer:", err)
+		log.Fatalln("Unable to create cell renderer:", err)
 	}
 	column, err = gtk.TreeViewColumnNewWithAttribute("Title ID", renderer, "text", TITLE_ID_COLUMN)
 	if err != nil {
-		mw.logger.Fatal("Unable to create tree view column:", err)
+		log.Fatalln("Unable to create tree view column:", err)
 	}
 	mw.treeView.AppendColumn(column)
 
 	column, err = gtk.TreeViewColumnNewWithAttribute("Region", renderer, "text", REGION_COLUMN)
 	if err != nil {
-		mw.logger.Fatal("Unable to create tree view column:", err)
+		log.Fatalln("Unable to create tree view column:", err)
 	}
 	mw.treeView.AppendColumn(column)
 
 	renderer, err = gtk.CellRendererTextNew()
 	if err != nil {
-		mw.logger.Fatal("Unable to create cell renderer:", err)
+		log.Fatalln("Unable to create cell renderer:", err)
 	}
 	column, err = gtk.TreeViewColumnNewWithAttribute("Name", renderer, "text", NAME_COLUMN)
 	if err != nil {
-		mw.logger.Fatal("Unable to create tree view column:", err)
+		log.Fatalln("Unable to create tree view column:", err)
 	}
 	mw.treeView.AppendColumn(column)
 
 	mainvBox, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
 	if err != nil {
-		mw.logger.Fatal("Unable to create box:", err)
+		log.Fatalln("Unable to create box:", err)
 	}
 	menuBar, err := gtk.MenuBarNew()
 	if err != nil {
-		mw.logger.Fatal("Unable to create menu bar:", err)
+		log.Fatalln("Unable to create menu bar:", err)
 	}
 	toolsSubMenu, err := gtk.MenuNew()
 	if err != nil {
-		mw.logger.Fatal("Unable to create menu:", err)
+		log.Fatalln("Unable to create menu:", err)
 	}
 
 	toolsMenu, err := gtk.MenuItemNewWithLabel("Tools")
 	if err != nil {
-		mw.logger.Fatal("Unable to create menu item:", err)
+		log.Fatalln("Unable to create menu item:", err)
 	}
 	decryptContentsMenuItem, err := gtk.MenuItemNewWithLabel("Decrypt contents")
 	if err != nil {
-		mw.logger.Fatal("Unable to create menu item:", err)
+		log.Fatalln("Unable to create menu item:", err)
 	}
 	decryptContentsMenuItem.Connect("activate", func() {
 		mw.progressWindow, err = createProgressWindow(mw.window)
@@ -230,7 +229,7 @@ func (mw *MainWindow) ShowAll() {
 
 	generateFakeTicketCert, err := gtk.MenuItemNewWithLabel("Generate fake ticket and cert")
 	if err != nil {
-		mw.logger.Fatal("Unable to create menu item:", err)
+		log.Fatalln("Unable to create menu item:", err)
 	}
 	generateFakeTicketCert.Connect("activate", func() {
 		tmdPath, err := dialog.File().Title("Select the game's tmd file").Filter("tmd", "tmd").Load()
@@ -287,20 +286,20 @@ func (mw *MainWindow) ShowAll() {
 	mainvBox.PackStart(menuBar, false, false, 0)
 	tophBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
 	if err != nil {
-		mw.logger.Fatal("Unable to create box:", err)
+		log.Fatalln("Unable to create box:", err)
 	}
 
 	mw.categoryButtons = make([]*gtk.ToggleButton, 0)
 	for _, cat := range []string{"Game", "Update", "DLC", "Demo", "All"} {
 		button, err := gtk.ToggleButtonNewWithLabel(cat)
 		if err != nil {
-			mw.logger.Fatal("Unable to create toggle button:", err)
+			log.Fatalln("Unable to create toggle button:", err)
 		}
 		tophBox.PackStart(button, false, false, 0)
 		button.Connect("pressed", mw.onCategoryToggled)
 		buttonLabel, err := button.GetLabel()
 		if err != nil {
-			mw.logger.Fatal("Unable to get label:", err)
+			log.Fatalln("Unable to get label:", err)
 		}
 		if buttonLabel == "Game" {
 			button.SetActive(true)
@@ -313,7 +312,7 @@ func (mw *MainWindow) ShowAll() {
 
 	scrollable, err := gtk.ScrolledWindowNew(nil, nil)
 	if err != nil {
-		mw.logger.Fatal("Unable to create scrolled window:", err)
+		log.Fatalln("Unable to create scrolled window:", err)
 	}
 	scrollable.SetPolicy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
 	selection.Connect("changed", mw.onSelectionChanged)
@@ -323,27 +322,27 @@ func (mw *MainWindow) ShowAll() {
 
 	bottomhBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
 	if err != nil {
-		mw.logger.Fatal("Unable to create box:", err)
+		log.Fatalln("Unable to create box:", err)
 	}
 
 	mw.addToQueueButton, err = gtk.ButtonNewWithLabel("Add to queue")
 	if err != nil {
-		mw.logger.Fatal("Unable to create button:", err)
+		log.Fatalln("Unable to create button:", err)
 	}
 
 	downloadQueueButton, err := gtk.ButtonNewWithLabel("Download queue")
 	if err != nil {
-		mw.logger.Fatal("Unable to create button:", err)
+		log.Fatalln("Unable to create button:", err)
 	}
 
 	decryptContentsCheckbox, err := gtk.CheckButtonNewWithLabel("Decrypt contents")
 	if err != nil {
-		mw.logger.Fatal("Unable to create button:", err)
+		log.Fatalln("Unable to create button:", err)
 	}
 
 	mw.deleteEncryptedContentsCheckbox, err = gtk.CheckButtonNewWithLabel("Delete encrypted contents after decryption")
 	if err != nil {
-		mw.logger.Fatal("Unable to create button:", err)
+		log.Fatalln("Unable to create button:", err)
 	}
 	mw.deleteEncryptedContentsCheckbox.SetSensitive(false)
 
@@ -381,7 +380,7 @@ func (mw *MainWindow) ShowAll() {
 
 	checkboxvBox, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
 	if err != nil {
-		mw.logger.Fatal("Unable to create box:", err)
+		log.Fatalln("Unable to create box:", err)
 	}
 	checkboxvBox.PackStart(decryptContentsCheckbox, false, false, 0)
 	checkboxvBox.PackEnd(mw.deleteEncryptedContentsCheckbox, false, false, 0)
@@ -391,7 +390,7 @@ func (mw *MainWindow) ShowAll() {
 	japanButton, err := gtk.CheckButtonNewWithLabel("Japan")
 	japanButton.SetActive(true)
 	if err != nil {
-		mw.logger.Fatal("Unable to create button:", err)
+		log.Fatalln("Unable to create button:", err)
 	}
 	japanButton.Connect("clicked", func() {
 		mw.onRegionChange(japanButton, wiiudownloader.MCP_REGION_JAPAN)
@@ -401,7 +400,7 @@ func (mw *MainWindow) ShowAll() {
 	usaButton, err := gtk.CheckButtonNewWithLabel("USA")
 	usaButton.SetActive(true)
 	if err != nil {
-		mw.logger.Fatal("Unable to create button:", err)
+		log.Fatalln("Unable to create button:", err)
 	}
 	usaButton.Connect("clicked", func() {
 		mw.onRegionChange(usaButton, wiiudownloader.MCP_REGION_USA)
@@ -411,7 +410,7 @@ func (mw *MainWindow) ShowAll() {
 	europeButton, err := gtk.CheckButtonNewWithLabel("Europe")
 	europeButton.SetActive(true)
 	if err != nil {
-		mw.logger.Fatal("Unable to create button:", err)
+		log.Fatalln("Unable to create button:", err)
 	}
 	europeButton.Connect("clicked", func() {
 		mw.onRegionChange(europeButton, wiiudownloader.MCP_REGION_EUROPE)
@@ -443,7 +442,7 @@ func (mw *MainWindow) onRegionChange(button *gtk.CheckButton, region uint8) {
 func (mw *MainWindow) onSearchEntryChanged() {
 	text, err := mw.searchEntry.GetText()
 	if err != nil {
-		mw.logger.Fatal("Unable to get text:", err)
+		log.Fatalln("Unable to get text:", err)
 	}
 	mw.lastSearchText = text
 	mw.filterTitles(text)
@@ -452,7 +451,7 @@ func (mw *MainWindow) onSearchEntryChanged() {
 func (mw *MainWindow) filterTitles(filterText string) {
 	store, err := mw.treeView.GetModel()
 	if err != nil {
-		mw.logger.Fatal("Unable to get tree view model:", err)
+		log.Fatalln("Unable to get tree view model:", err)
 	}
 
 	storeRef := store.(*gtk.ListStore)
@@ -469,7 +468,7 @@ func (mw *MainWindow) filterTitles(filterText string) {
 				[]int{IN_QUEUE_COLUMN, KIND_COLUMN, TITLE_ID_COLUMN, REGION_COLUMN, NAME_COLUMN},
 				[]interface{}{mw.isTitleInQueue(entry), wiiudownloader.GetFormattedKind(entry.TitleID), fmt.Sprintf("%016x", entry.TitleID), wiiudownloader.GetFormattedRegion(entry.Region), entry.Name},
 			); err != nil {
-				mw.logger.Fatal("Unable to set values:", err)
+				log.Fatalln("Unable to set values:", err)
 			}
 		}
 	}
@@ -478,7 +477,7 @@ func (mw *MainWindow) filterTitles(filterText string) {
 func (mw *MainWindow) onCategoryToggled(button *gtk.ToggleButton) {
 	category, err := button.GetLabel()
 	if err != nil {
-		mw.logger.Fatal("Unable to get label:", err)
+		log.Fatalln("Unable to get label:", err)
 	}
 	mw.titles = wiiudownloader.GetTitleEntries(wiiudownloader.GetCategoryFromFormattedCategory(category))
 	mw.updateTitles(mw.titles)
@@ -503,12 +502,12 @@ func (mw *MainWindow) onDecryptContentsMenuItemClicked(selectedPath string) erro
 func (mw *MainWindow) isSelectionInQueue() bool {
 	selection, err := mw.treeView.GetSelection()
 	if err != nil {
-		mw.logger.Fatal("Unable to get selection:", err)
+		log.Fatalln("Unable to get selection:", err)
 	}
 
 	store, err := mw.treeView.GetModel()
 	if err != nil {
-		mw.logger.Fatal("Unable to get model:", err)
+		log.Fatalln("Unable to get model:", err)
 	}
 
 	storeRef := store.(*gtk.ListStore)
@@ -589,7 +588,7 @@ func (mw *MainWindow) isTitleInQueue(title wiiudownloader.TitleEntry) bool {
 func (mw *MainWindow) addToQueue(tid, name string) {
 	titleID, err := strconv.ParseUint(tid, 16, 64)
 	if err != nil {
-		mw.logger.Fatal("Unable to parse title ID:", err)
+		log.Fatalln("Unable to parse title ID:", err)
 	}
 	mw.titleQueue = append(mw.titleQueue, wiiudownloader.TitleEntry{TitleID: titleID, Name: name})
 }
@@ -606,12 +605,12 @@ func (mw *MainWindow) removeFromQueue(tid string) {
 func (mw *MainWindow) onAddToQueueClicked() {
 	selection, err := mw.treeView.GetSelection()
 	if err != nil {
-		mw.logger.Fatal("Unable to get selection:", err)
+		log.Fatalln("Unable to get selection:", err)
 	}
 
 	store, err := mw.treeView.GetModel()
 	if err != nil {
-		mw.logger.Fatal("Unable to get model:", err)
+		log.Fatalln("Unable to get model:", err)
 	}
 
 	storeRef := store.(*gtk.ListStore)
@@ -629,7 +628,7 @@ func (mw *MainWindow) onAddToQueueClicked() {
 
 	defer func() {
 		if r := recover(); r != nil {
-			mw.logger.Fatal("Error updating model:", r)
+			log.Fatalln("Error updating model:", r)
 		}
 	}()
 
@@ -693,14 +692,14 @@ func (mw *MainWindow) onAddToQueueClicked() {
 func (mw *MainWindow) updateTitlesInQueue() {
 	store, err := mw.treeView.GetModel()
 	if err != nil {
-		mw.logger.Fatal("Unable to get tree view model:", err)
+		log.Fatalln("Unable to get tree view model:", err)
 	}
 
 	storeRef := store.(*gtk.ListStore)
 
 	iter, ok := storeRef.GetIterFirst()
 	if !ok {
-		mw.logger.Fatal("Unable to get first iter:", err)
+		log.Fatalln("Unable to get first iter:", err)
 	}
 	for iter != nil {
 		tid, err := storeRef.GetValue(iter, TITLE_ID_COLUMN)
@@ -754,7 +753,7 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string) error {
 			}
 			tidStr := fmt.Sprintf("%016x", title.TitleID)
 			titlePath := filepath.Join(selectedPath, fmt.Sprintf("%s [%s] [%s]", normalizeFilename(title.Name), wiiudownloader.GetFormattedKind(title.TitleID), tidStr))
-			if err := wiiudownloader.DownloadTitle(tidStr, titlePath, mw.decryptContents, mw.progressWindow, mw.getDeleteEncryptedContents(), mw.logger, mw.client); err != nil && err != context.Canceled {
+			if err := wiiudownloader.DownloadTitle(tidStr, titlePath, mw.decryptContents, mw.progressWindow, mw.getDeleteEncryptedContents(), mw.client); err != nil && err != context.Canceled {
 				return err
 			}
 

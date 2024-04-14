@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -158,7 +159,7 @@ func downloadFile(progressReporter ProgressReporter, client *http.Client, downlo
 	return nil
 }
 
-func DownloadTitle(titleID, outputDirectory string, doDecryption bool, progressReporter ProgressReporter, deleteEncryptedContents bool, logger *Logger, client *http.Client) error {
+func DownloadTitle(titleID, outputDirectory string, doDecryption bool, progressReporter ProgressReporter, deleteEncryptedContents bool, client *http.Client) error {
 	tEntry := getTitleEntryFromTid(titleID)
 
 	progressReporter.ResetTotalDownloaded()
@@ -252,7 +253,7 @@ func DownloadTitle(titleID, outputDirectory string, doDecryption bool, progressR
 		return err
 	}
 	certFile.Close()
-	logger.Info("Certificate saved to %v \n", certPath)
+	log.Printf("Certificate saved to %v \n", certPath)
 
 	g, ctx := errgroup.WithContext(context.Background())
 	g.SetLimit(maxConcurrentDownloads)

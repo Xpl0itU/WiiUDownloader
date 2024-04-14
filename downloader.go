@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -49,12 +50,12 @@ func downloadFileWithSemaphore(ctx context.Context, progressReporter ProgressRep
 	basePath := filepath.Base(dstPath)
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		req, err := http.NewRequest("GET", downloadURL, nil)
+		req := &http.Request{}
+		parsedURL, err := url.Parse(downloadURL)
 		if err != nil {
 			return err
 		}
-
-		req.Header.Set("User-Agent", "WiiUDownloader")
+		req.URL = parsedURL
 
 		resp, err := client.Do(req)
 		if err != nil {

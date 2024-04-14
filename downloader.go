@@ -49,7 +49,7 @@ func downloadFileWithSemaphore(ctx context.Context, progressReporter ProgressRep
 	basePath := filepath.Base(dstPath)
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		req, err := http.NewRequestWithContext(ctx, "GET", downloadURL, nil)
+		req, err := http.NewRequest("GET", downloadURL, nil)
 		if err != nil {
 			return err
 		}

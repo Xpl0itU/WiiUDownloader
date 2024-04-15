@@ -1,7 +1,6 @@
 package wiiudownloader
 
 import (
-	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
@@ -185,8 +184,8 @@ func DownloadTitle(titleID, outputDirectory string, doDecryption bool, progressR
 		return err
 	}
 
-	var titleVersion uint16
-	if err := binary.Read(bytes.NewReader(tmdData[476:478]), binary.BigEndian, &titleVersion); err != nil {
+	tmd, err := parseTMD(tmdData)
+	if err != nil {
 		return err
 	}
 
@@ -199,44 +198,20 @@ func DownloadTitle(titleID, outputDirectory string, doDecryption bool, progressR
 		if err != nil {
 			return err
 		}
-		if err := GenerateTicket(tikPath, tEntry.TitleID, titleKey, titleVersion); err != nil {
+		if err := GenerateTicket(tikPath, tEntry.TitleID, titleKey, tmd.TitleVersion); err != nil {
 			return err
 		}
-	}
-
-	var contentCount uint16
-	if err := binary.Read(bytes.NewReader(tmdData[478:480]), binary.BigEndian, &contentCount); err != nil {
-		return err
 	}
 
 	var titleSize uint64
-	contents := make([]Content, contentCount)
-	tmdDataReader := bytes.NewReader(tmdData)
 
-	for i := 0; i < int(contentCount); i++ {
-		offset := 0xB04 + (0x30 * i)
-
-		tmdDataReader.Seek(int64(offset), io.SeekStart)
-		if err := binary.Read(tmdDataReader, binary.BigEndian, &contents[i].ID); err != nil {
-			return err
-		}
-
-		tmdDataReader.Seek(2, io.SeekCurrent)
-
-		if err := binary.Read(tmdDataReader, binary.BigEndian, &contents[i].Type); err != nil {
-			return err
-		}
-
-		if err := binary.Read(tmdDataReader, binary.BigEndian, &contents[i].Size); err != nil {
-			return err
-		}
-
-		titleSize += contents[i].Size
+	for i := 0; i < int(tmd.ContentCount); i++ {
+		titleSize += tmd.Contents[i].Size
 	}
 
 	progressReporter.SetDownloadSize(int64(titleSize))
 
-	cert, err := GenerateCert(tmdData, contentCount, progressReporter, client)
+	cert, err := GenerateCert(tmdData, tmd.ContentCount, progressReporter, client)
 	if err != nil {
 		if progressReporter.Cancelled() {
 			return nil
@@ -260,20 +235,20 @@ func DownloadTitle(titleID, outputDirectory string, doDecryption bool, progressR
 	sem := semaphore.NewWeighted(maxConcurrentDownloads)
 	progressReporter.SetStartTime(time.Now())
 
-	for i := 0; i < int(contentCount); i++ {
+	for i := 0; i < int(tmd.ContentCount); i++ {
 		i := i
 		g.Go(func() error {
-			filePath := filepath.Join(outputDir, fmt.Sprintf("%08X.app", contents[i].ID))
-			if err := downloadFileWithSemaphore(ctx, progressReporter, client, fmt.Sprintf("%s/%08X", baseURL, contents[i].ID), filePath, true, sem); err != nil {
+			filePath := filepath.Join(outputDir, fmt.Sprintf("%08X.app", tmd.Contents[i].ID))
+			if err := downloadFileWithSemaphore(ctx, progressReporter, client, fmt.Sprintf("%s/%08X", baseURL, tmd.Contents[i].ID), filePath, true, sem); err != nil {
 				if progressReporter.Cancelled() {
 					return errCancel
 				}
 				return err
 			}
 
-			if contents[i].Type&0x2 == 2 { // has a hash
-				filePath = filepath.Join(outputDir, fmt.Sprintf("%08X.h3", contents[i].ID))
-				if err := downloadFileWithSemaphore(ctx, progressReporter, client, fmt.Sprintf("%s/%08X.h3", baseURL, contents[i].ID), filePath, true, sem); err != nil {
+			if tmd.Contents[i].Type&0x2 == 2 { // has a hash
+				filePath = filepath.Join(outputDir, fmt.Sprintf("%08X.h3", tmd.Contents[i].ID))
+				if err := downloadFileWithSemaphore(ctx, progressReporter, client, fmt.Sprintf("%s/%08X.h3", baseURL, tmd.Contents[i].ID), filePath, true, sem); err != nil {
 					if progressReporter.Cancelled() {
 						return errCancel
 					}

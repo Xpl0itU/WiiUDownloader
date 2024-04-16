@@ -128,8 +128,10 @@ func (pw *ProgressWindow) SetDownloadSize(size int64) {
 	pw.totalToDownload = size
 }
 
-func (pw *ProgressWindow) ResetTotalDownloaded() {
+func (pw *ProgressWindow) ResetTotals() {
 	pw.progressPerFile = make(map[string]int64)
+	pw.totalDownloaded = 0
+	pw.totalToDownload = 0
 }
 
 func (pw *ProgressWindow) MarkFileAsDone(filename string) {

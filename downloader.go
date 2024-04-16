@@ -35,7 +35,7 @@ type ProgressReporter interface {
 	Cancelled() bool
 	SetCancelled()
 	SetDownloadSize(size int64)
-	ResetTotalDownloaded()
+	ResetTotals()
 	MarkFileAsDone(filename string)
 	SetTotalDownloadedForFile(filename string, downloaded int64)
 	SetStartTime(startTime time.Time)
@@ -161,7 +161,7 @@ func downloadFile(progressReporter ProgressReporter, client *http.Client, downlo
 func DownloadTitle(titleID, outputDirectory string, doDecryption bool, progressReporter ProgressReporter, deleteEncryptedContents bool, client *http.Client) error {
 	tEntry := getTitleEntryFromTid(titleID)
 
-	progressReporter.ResetTotalDownloaded()
+	progressReporter.ResetTotals()
 	progressReporter.SetGameTitle(tEntry.Name)
 
 	outputDir := strings.TrimRight(outputDirectory, "/\\")

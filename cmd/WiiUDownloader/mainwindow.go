@@ -208,9 +208,7 @@ func (mw *MainWindow) ShowAll() {
 		selectedPath, err := dialog.Directory().Title("Select the game path").Browse()
 		if err != nil {
 			glib.IdleAdd(func() {
-				if mw.progressWindow.Window.IsVisible() {
-					mw.progressWindow.Window.Close()
-				}
+				mw.progressWindow.Window.Hide()
 			})
 			return
 		}
@@ -242,6 +240,9 @@ func (mw *MainWindow) ShowAll() {
 		}
 
 		tmd, err := wiiudownloader.ParseTMD(tmdData)
+		if err != nil {
+			return
+		}
 
 		titleKey, err := wiiudownloader.GenerateKey(fmt.Sprintf("%016x", tmd.TitleID))
 		if err != nil {
@@ -344,9 +345,7 @@ func (mw *MainWindow) ShowAll() {
 		selectedPath, err := dialog.Directory().Title("Select a path to save the games to").Browse()
 		if err != nil {
 			glib.IdleAdd(func() {
-				if mw.progressWindow.Window.IsVisible() {
-					mw.progressWindow.Window.Close()
-				}
+				mw.progressWindow.Window.Hide()
 			})
 			return
 		}
@@ -478,9 +477,7 @@ func (mw *MainWindow) onDecryptContentsMenuItemClicked(selectedPath string) erro
 	err := wiiudownloader.DecryptContents(selectedPath, mw.progressWindow, false)
 
 	glib.IdleAdd(func() {
-		if mw.progressWindow.Window.IsVisible() {
-			mw.progressWindow.Window.Close()
-		}
+		mw.progressWindow.Window.Hide()
 	})
 	return err
 }
@@ -711,9 +708,7 @@ func (mw *MainWindow) updateTitlesInQueue() {
 
 func (mw *MainWindow) showError(err error) {
 	glib.IdleAdd(func() {
-		if mw.progressWindow.Window.IsVisible() {
-			mw.progressWindow.Window.Close()
-		}
+		mw.progressWindow.Window.Hide()
 	})
 	errorDialog := gtk.MessageDialogNew(mw.window, gtk.DIALOG_MODAL, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, err.Error())
 	errorDialog.Run()
@@ -758,9 +753,7 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string) error {
 
 	mw.titleQueue = []wiiudownloader.TitleEntry{} // Clear the queue
 	glib.IdleAdd(func() {
-		if mw.progressWindow.Window.IsVisible() {
-			mw.progressWindow.Window.Close()
-		}
+		mw.progressWindow.Window.Hide()
 	})
 	mw.updateTitlesInQueue()
 	mw.onSelectionChanged()

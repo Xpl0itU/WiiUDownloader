@@ -10,7 +10,7 @@ import (
 
 var cetkData []byte
 
-func getCert(tmdData []byte, id int, numContents uint16) ([]byte, error) {
+func getCert(tmdData []byte, id int, numContents uint16) ([]byte, error) { // TODO: Add support for Wii's TMD
 	var certSlice []byte
 	if len(tmdData) == int((0x0B04+0x30*numContents+0xA00)-0x300) {
 		certSlice = tmdData[0x0B04+0x30*numContents : 0x0B04+0x30*numContents+0xA00-0x300]

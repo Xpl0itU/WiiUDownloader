@@ -412,69 +412,21 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 		return err
 	}
 
-	// find title id and content id
-	var titleID []byte
-	var contentCount uint16
-	tmd, err := os.Open(tmdPath)
+	tmdData, err := os.ReadFile(tmdPath)
 	if err != nil {
 		return err
 	}
-	defer tmd.Close()
-
-	tmd.Seek(0x18C, io.SeekStart)
-	titleID = make([]byte, 8)
-	if _, err := io.ReadFull(tmd, titleID); err != nil {
+	tmd, err := parseTMD(tmdData)
+	if err != nil {
 		return err
 	}
 
-	tmd.Seek(0x1DE, io.SeekStart)
-	if err := binary.Read(tmd, binary.BigEndian, &contentCount); err != nil {
-		return err
-	}
-
-	tmd.Seek(0x204, io.SeekStart)
-	tmdIndex := make([]byte, 2)
-	if _, err := io.ReadFull(tmd, tmdIndex); err != nil {
-		return err
-	}
-
-	contents := make([]Content, contentCount)
-
-	for c := uint16(0); c < contentCount; c++ {
-		offset := 2820 + (48 * c)
-		tmd.Seek(int64(offset), io.SeekStart)
-		if err := binary.Read(tmd, binary.BigEndian, &contents[c].ID); err != nil {
-			return err
-		}
-
-		tmd.Seek(0xB08+(0x30*int64(c)), io.SeekStart)
-		contents[c].Index = make([]byte, 2)
-		if _, err := io.ReadFull(tmd, contents[c].Index); err != nil {
-			return err
-		}
-
-		tmd.Seek(0xB0A+(0x30*int64(c)), io.SeekStart)
-		if err := binary.Read(tmd, binary.BigEndian, &contents[c].Type); err != nil {
-			return err
-		}
-
-		tmd.Seek(0xB0C+(0x30*int64(c)), io.SeekStart)
-		if err := binary.Read(tmd, binary.BigEndian, &contents[c].Size); err != nil {
-			return err
-		}
-
-		tmd.Seek(0xB14+(0x30*int64(c)), io.SeekStart)
-		contents[c].Hash = make([]byte, 0x14)
-		if _, err := io.ReadFull(tmd, contents[c].Hash); err != nil {
-			return err
-		}
-
-		contents[c].CIDStr = fmt.Sprintf("%08X", contents[c].ID)
-
-		_, err := os.Stat(filepath.Join(path, contents[c].CIDStr+".app"))
+	// Check if all contents are present and how they are named
+	for i := 0; i < len(tmd.Contents); i++ {
+		_, err := os.Stat(filepath.Join(path, tmd.Contents[i].CIDStr+".app"))
 		if err != nil {
-			contents[c].CIDStr = fmt.Sprintf("%08x", contents[c].ID)
-			_, err = os.Stat(filepath.Join(path, contents[c].CIDStr+".app"))
+			tmd.Contents[i].CIDStr = fmt.Sprintf("%08x", tmd.Contents[i].ID)
+			_, err = os.Stat(filepath.Join(path, tmd.Contents[i].CIDStr+".app"))
 			if err != nil {
 				return errors.New("content not found")
 			}
@@ -500,7 +452,9 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 		return err
 	}
 
-	cbc := cipher.NewCBCDecrypter(c, append(titleID, make([]byte, 8)...))
+	titleIDBytes := make([]byte, 8)
+	binary.BigEndian.PutUint64(titleIDBytes, tmd.TitleID)
+	cbc := cipher.NewCBCDecrypter(c, append(titleIDBytes, make([]byte, 8)...))
 
 	decryptedTitleKey := make([]byte, len(encryptedTitleKey))
 	cbc.CryptBlocks(decryptedTitleKey, encryptedTitleKey)
@@ -510,14 +464,14 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 		return fmt.Errorf("failed to create AES cipher: %w", err)
 	}
 
-	fstEncFile, err := os.Open(filepath.Join(path, contents[0].CIDStr+".app"))
+	fstEncFile, err := os.Open(filepath.Join(path, tmd.Contents[0].CIDStr+".app"))
 	if err != nil {
 		return err
 	}
 	defer fstEncFile.Close()
 
 	decryptedBuffer := bytes.Buffer{}
-	if err := decryptContentToBuffer(fstEncFile, &decryptedBuffer, cipherHashTree, contents[0]); err != nil {
+	if err := decryptContentToBuffer(fstEncFile, &decryptedBuffer, cipherHashTree, tmd.Contents[0]); err != nil {
 		return err
 	}
 	fst := FSTData{FSTReader: bytes.NewReader(bytes.Clone(decryptedBuffer.Bytes())), FSTEntries: make([]FEntry, 0), EntryCount: 0, Entries: 0, NamesOffset: 0}
@@ -560,7 +514,7 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 				contentOffset <<= 5
 			}
 			if fst.FSTEntries[i].Type&0x80 == 0 {
-				matchingContent := contents[fst.FSTEntries[i].ContentID]
+				matchingContent := tmd.Contents[fst.FSTEntries[i].ContentID]
 				tmdFlags := matchingContent.Type
 				srcFile, err := os.Open(filepath.Join(path, matchingContent.CIDStr+".app"))
 				if err != nil {

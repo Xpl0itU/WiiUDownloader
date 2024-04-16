@@ -13,6 +13,7 @@ const (
 )
 
 type TMD struct {
+	TitleID      uint64
 	Version      byte
 	TitleVersion uint16
 	ContentCount uint16
@@ -30,6 +31,11 @@ func parseTMD(data []byte) (*TMD, error) {
 
 	switch tmd.Version {
 	case TMD_VERSION_WII:
+		reader.Seek(0x18C, io.SeekStart)
+		if err := binary.Read(reader, binary.BigEndian, &tmd.TitleID); err != nil {
+			return nil, err
+		}
+
 		reader.Seek(0x1DC, io.SeekStart)
 
 		if err := binary.Read(reader, binary.BigEndian, &tmd.TitleVersion); err != nil {
@@ -50,7 +56,11 @@ func parseTMD(data []byte) (*TMD, error) {
 				return nil, err
 			}
 
-			reader.Seek(2, io.SeekCurrent)
+			reader.Seek(0x1E8+(0x24*int64(i)), io.SeekStart)
+			tmd.Contents[i].Index = make([]byte, 2)
+			if _, err := io.ReadFull(reader, tmd.Contents[i].Index); err != nil {
+				return nil, err
+			}
 
 			if err := binary.Read(reader, binary.BigEndian, &tmd.Contents[i].Type); err != nil {
 				return nil, err
@@ -59,8 +69,17 @@ func parseTMD(data []byte) (*TMD, error) {
 			if err := binary.Read(reader, binary.BigEndian, &tmd.Contents[i].Size); err != nil {
 				return nil, err
 			}
+
+			tmd.Contents[i].Hash = make([]byte, 0x14)
+			if err := binary.Read(reader, binary.BigEndian, &tmd.Contents[i].Hash); err != nil {
+				return nil, err
+			}
 		}
 	case TMD_VERSION_WIIU:
+		reader.Seek(0x18C, io.SeekStart)
+		if err := binary.Read(reader, binary.BigEndian, &tmd.TitleID); err != nil {
+			return nil, err
+		}
 		reader.Seek(0x1DC, io.SeekStart)
 
 		if err := binary.Read(reader, binary.BigEndian, &tmd.TitleVersion); err != nil {
@@ -73,21 +92,32 @@ func parseTMD(data []byte) (*TMD, error) {
 
 		tmd.Contents = make([]Content, tmd.ContentCount)
 
-		for i := 0; i < int(tmd.ContentCount); i++ {
-			offset := 0xB04 + (0x30 * i)
-
+		for c := uint16(0); c < tmd.ContentCount; c++ {
+			offset := 2820 + (48 * c)
 			reader.Seek(int64(offset), io.SeekStart)
-			if err := binary.Read(reader, binary.BigEndian, &tmd.Contents[i].ID); err != nil {
+			if err := binary.Read(reader, binary.BigEndian, &tmd.Contents[c].ID); err != nil {
 				return nil, err
 			}
 
-			reader.Seek(2, io.SeekCurrent)
-
-			if err := binary.Read(reader, binary.BigEndian, &tmd.Contents[i].Type); err != nil {
+			reader.Seek(0xB08+(0x30*int64(c)), io.SeekStart)
+			tmd.Contents[c].Index = make([]byte, 2)
+			if _, err := io.ReadFull(reader, tmd.Contents[c].Index); err != nil {
 				return nil, err
 			}
 
-			if err := binary.Read(reader, binary.BigEndian, &tmd.Contents[i].Size); err != nil {
+			reader.Seek(0xB0A+(0x30*int64(c)), io.SeekStart)
+			if err := binary.Read(reader, binary.BigEndian, &tmd.Contents[c].Type); err != nil {
+				return nil, err
+			}
+
+			reader.Seek(0xB0C+(0x30*int64(c)), io.SeekStart)
+			if err := binary.Read(reader, binary.BigEndian, &tmd.Contents[c].Size); err != nil {
+				return nil, err
+			}
+
+			reader.Seek(0xB14+(0x30*int64(c)), io.SeekStart)
+			tmd.Contents[c].Hash = make([]byte, 0x14)
+			if err := binary.Read(reader, binary.BigEndian, &tmd.Contents[c].Hash); err != nil {
 				return nil, err
 			}
 		}

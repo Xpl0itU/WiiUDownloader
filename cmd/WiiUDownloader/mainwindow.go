@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
@@ -242,29 +241,16 @@ func (mw *MainWindow) ShowAll() {
 			return
 		}
 
-		var contentCount uint16
-		if err := binary.Read(bytes.NewReader(tmdData[478:480]), binary.BigEndian, &contentCount); err != nil {
-			return
-		}
+		tmd, err := wiiudownloader.ParseTMD(tmdData)
 
-		var titleVersion uint16
-		if err := binary.Read(bytes.NewReader(tmdData[476:478]), binary.BigEndian, &titleVersion); err != nil {
-			return
-		}
-
-		var titleID uint64
-		if err := binary.Read(bytes.NewReader(tmdData[0x018C:0x0194]), binary.BigEndian, &titleID); err != nil {
-			return
-		}
-
-		titleKey, err := wiiudownloader.GenerateKey(fmt.Sprintf("%016x", titleID))
+		titleKey, err := wiiudownloader.GenerateKey(fmt.Sprintf("%016x", tmd.TitleID))
 		if err != nil {
 			return
 		}
 
-		wiiudownloader.GenerateTicket(filepath.Join(parentDir, "title.tik"), titleID, titleKey, titleVersion)
+		wiiudownloader.GenerateTicket(filepath.Join(parentDir, "title.tik"), tmd.TitleID, titleKey, tmd.TitleVersion)
 
-		cert, err := wiiudownloader.GenerateCert(tmdData, contentCount, mw.progressWindow, http.DefaultClient)
+		cert, err := wiiudownloader.GenerateCert(tmd, mw.progressWindow, http.DefaultClient)
 		if err != nil {
 			return
 		}

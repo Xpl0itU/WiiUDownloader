@@ -184,7 +184,7 @@ func DownloadTitle(titleID, outputDirectory string, doDecryption bool, progressR
 		return err
 	}
 
-	tmd, err := parseTMD(tmdData)
+	tmd, err := ParseTMD(tmdData)
 	if err != nil {
 		return err
 	}
@@ -211,7 +211,7 @@ func DownloadTitle(titleID, outputDirectory string, doDecryption bool, progressR
 
 	progressReporter.SetDownloadSize(int64(titleSize))
 
-	cert, err := GenerateCert(tmdData, tmd.ContentCount, progressReporter, client)
+	cert, err := GenerateCert(tmd, progressReporter, client)
 	if err != nil {
 		if progressReporter.Cancelled() {
 			return nil

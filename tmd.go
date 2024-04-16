@@ -18,9 +18,11 @@ type TMD struct {
 	TitleVersion uint16
 	ContentCount uint16
 	Contents     []Content
+	Certificate1 []byte
+	Certificate2 []byte
 }
 
-func parseTMD(data []byte) (*TMD, error) {
+func ParseTMD(data []byte) (*TMD, error) {
 	tmd := &TMD{}
 	reader := bytes.NewReader(data)
 
@@ -75,6 +77,14 @@ func parseTMD(data []byte) (*TMD, error) {
 				return nil, err
 			}
 		}
+		tmd.Certificate1 = make([]byte, 0x400)
+		if _, err := io.ReadFull(reader, tmd.Certificate1); err != nil {
+			return nil, err
+		}
+		tmd.Certificate2 = make([]byte, 0x300)
+		if _, err := io.ReadFull(reader, tmd.Certificate2); err != nil {
+			return nil, err
+		}
 	case TMD_VERSION_WIIU:
 		reader.Seek(0x18C, io.SeekStart)
 		if err := binary.Read(reader, binary.BigEndian, &tmd.TitleID); err != nil {
@@ -120,6 +130,14 @@ func parseTMD(data []byte) (*TMD, error) {
 			if err := binary.Read(reader, binary.BigEndian, &tmd.Contents[c].Hash); err != nil {
 				return nil, err
 			}
+		}
+		tmd.Certificate1 = make([]byte, 0x400)
+		if _, err := io.ReadFull(reader, tmd.Certificate1); err != nil {
+			return nil, err
+		}
+		tmd.Certificate2 = make([]byte, 0x300)
+		if _, err := io.ReadFull(reader, tmd.Certificate2); err != nil {
+			return nil, err
 		}
 	default:
 		return nil, fmt.Errorf("unknown TMD version: %d", tmd.Version)

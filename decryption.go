@@ -416,7 +416,7 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 	if err != nil {
 		return err
 	}
-	tmd, err := parseTMD(tmdData)
+	tmd, err := ParseTMD(tmdData)
 	if err != nil {
 		return err
 	}

@@ -423,6 +423,7 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 
 	// Check if all contents are present and how they are named
 	for i := 0; i < len(tmd.Contents); i++ {
+		tmd.Contents[i].CIDStr = fmt.Sprintf("%08X", tmd.Contents[i].ID)
 		_, err := os.Stat(filepath.Join(path, tmd.Contents[i].CIDStr+".app"))
 		if err != nil {
 			tmd.Contents[i].CIDStr = fmt.Sprintf("%08x", tmd.Contents[i].ID)

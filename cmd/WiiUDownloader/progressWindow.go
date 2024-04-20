@@ -111,6 +111,9 @@ func (pw *ProgressWindow) UpdateDecryptionProgress(progress float64) {
 }
 
 func (pw *ProgressWindow) Cancelled() bool {
+	if pw == nil {
+		return false
+	}
 	return pw.cancelled
 }
 

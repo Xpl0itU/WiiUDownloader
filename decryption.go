@@ -399,7 +399,7 @@ func decryptContentToBuffer(encryptedFile *os.File, decryptedBuffer *bytes.Buffe
 				break
 			}
 		}
-		if !reflect.DeepEqual(content.Hash, contentHash.Sum(nil)) {
+		if !reflect.DeepEqual(content.Hash[:sha1.Size], contentHash.Sum(nil)) {
 			return errors.New("content hash mismatch")
 		}
 	}

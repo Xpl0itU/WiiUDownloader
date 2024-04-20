@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/binary"
 	"fmt"
 	"log"
 	"net/http"
@@ -251,20 +250,9 @@ func (mw *MainWindow) ShowAll() {
 
 		wiiudownloader.GenerateTicket(filepath.Join(parentDir, "title.tik"), tmd.TitleID, titleKey, tmd.TitleVersion)
 
-		cert, err := wiiudownloader.GenerateCert(tmd, mw.progressWindow, http.DefaultClient)
-		if err != nil {
+		if err := wiiudownloader.GenerateCert(tmd, filepath.Join(parentDir, "title.cert"), mw.progressWindow, http.DefaultClient); err != nil {
 			return
 		}
-
-		certPath := filepath.Join(parentDir, "title.cert")
-		certFile, err := os.Create(certPath)
-		if err != nil {
-			return
-		}
-		if err := binary.Write(certFile, binary.BigEndian, cert.Bytes()); err != nil {
-			return
-		}
-		defer certFile.Close()
 	})
 	toolsSubMenu.Append(generateFakeTicketCert)
 

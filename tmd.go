@@ -72,7 +72,7 @@ func ParseTMD(data []byte) (*TMD, error) {
 				return nil, err
 			}
 
-			tmd.Contents[i].Hash = make([]byte, 0x14)
+			tmd.Contents[i].Hash = make([]byte, 0x20)
 			if err := binary.Read(reader, binary.BigEndian, &tmd.Contents[i].Hash); err != nil {
 				return nil, err
 			}
@@ -126,17 +126,18 @@ func ParseTMD(data []byte) (*TMD, error) {
 			}
 
 			reader.Seek(0xB14+(0x30*int64(c)), io.SeekStart)
-			tmd.Contents[c].Hash = make([]byte, 0x14)
+			tmd.Contents[c].Hash = make([]byte, 0x20)
 			if err := binary.Read(reader, binary.BigEndian, &tmd.Contents[c].Hash); err != nil {
 				return nil, err
 			}
 		}
 		tmd.Certificate1 = make([]byte, 0x400)
-		if _, err := io.ReadFull(reader, tmd.Certificate1); err != nil {
+		if err := binary.Read(reader, binary.BigEndian, &tmd.Certificate1); err != nil {
 			return nil, err
 		}
+
 		tmd.Certificate2 = make([]byte, 0x300)
-		if _, err := io.ReadFull(reader, tmd.Certificate2); err != nil {
+		if err := binary.Read(reader, binary.BigEndian, &tmd.Certificate2); err != nil {
 			return nil, err
 		}
 	default:

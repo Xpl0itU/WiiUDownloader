@@ -1,7 +1,7 @@
 package wiiudownloader
 
 import (
-	"bytes"
+	"encoding/binary"
 	"fmt"
 	"net/http"
 	"os"
@@ -33,21 +33,28 @@ func getDefaultCert(progressReporter ProgressReporter, client *http.Client) ([]b
 	return nil, fmt.Errorf("failed to download OSv10 cetk, length: %d", len(cetkData))
 }
 
-func GenerateCert(tmd *TMD, progressReporter ProgressReporter, client *http.Client) (bytes.Buffer, error) {
-	cert := bytes.Buffer{}
+func GenerateCert(tmd *TMD, outputPath string, progressReporter ProgressReporter, client *http.Client) error {
+	cert, err := os.Create(outputPath)
+	if err != nil {
+		return err
+	}
+	defer cert.Close()
 
-	if _, err := cert.Write(tmd.Certificate1); err != nil {
-		return bytes.Buffer{}, err
+	if err := binary.Write(cert, binary.BigEndian, tmd.Certificate1); err != nil {
+		return err
 	}
 
-	if _, err := cert.Write(tmd.Certificate2); err != nil {
-		return bytes.Buffer{}, err
+	if err := binary.Write(cert, binary.BigEndian, tmd.Certificate2); err != nil {
+		return err
 	}
 
 	defaultCert, err := getDefaultCert(progressReporter, client)
 	if err != nil {
-		return bytes.Buffer{}, err
+		return err
 	}
-	cert.Write(defaultCert)
-	return cert, nil
+
+	if err := binary.Write(cert, binary.BigEndian, defaultCert); err != nil {
+		return err
+	}
+	return nil
 }

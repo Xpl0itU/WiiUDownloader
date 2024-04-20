@@ -2,10 +2,8 @@ package wiiudownloader
 
 import (
 	"context"
-	"encoding/binary"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -211,24 +209,12 @@ func DownloadTitle(titleID, outputDirectory string, doDecryption bool, progressR
 
 	progressReporter.SetDownloadSize(int64(titleSize))
 
-	cert, err := GenerateCert(tmd, progressReporter, client)
-	if err != nil {
+	if err := GenerateCert(tmd, filepath.Join(outputDir, "title.cert"), progressReporter, client); err != nil {
 		if progressReporter.Cancelled() {
 			return nil
 		}
 		return err
 	}
-
-	certPath := filepath.Join(outputDir, "title.cert")
-	certFile, err := os.Create(certPath)
-	if err != nil {
-		return err
-	}
-	if err := binary.Write(certFile, binary.BigEndian, cert.Bytes()); err != nil {
-		return err
-	}
-	certFile.Close()
-	log.Printf("Certificate saved to %v \n", certPath)
 
 	g, ctx := errgroup.WithContext(context.Background())
 	g.SetLimit(maxConcurrentDownloads)

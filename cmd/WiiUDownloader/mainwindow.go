@@ -136,6 +136,53 @@ func (mw *MainWindow) ShowAll() {
 	if err != nil {
 		log.Fatalln("Unable to create cell renderer toggle:", err)
 	}
+	// on click, add or remove from queue
+	toggleRenderer.Connect("toggled", func(renderer *gtk.CellRendererToggle, path string) {
+		store, err := mw.treeView.GetModel()
+		if err != nil {
+			log.Fatalln("Unable to get model:", err)
+		}
+		pathObj, err := gtk.TreePathNewFromString(path)
+		if err != nil {
+			log.Fatalln("Unable to create tree path:", err)
+		}
+		iter, err := store.ToTreeModel().GetIter(pathObj)
+		if err != nil {
+			log.Fatalln("Unable to get iter:", err)
+		}
+		inQueueVal, err := store.ToTreeModel().GetValue(iter, IN_QUEUE_COLUMN)
+		if err != nil {
+			log.Fatalln("Unable to get value:", err)
+		}
+		isInQueue, err := inQueueVal.GoValue()
+		if err != nil {
+			log.Fatalln("Unable to get value:", err)
+		}
+		tid, err := store.ToTreeModel().GetValue(iter, TITLE_ID_COLUMN)
+		if err != nil {
+			log.Fatalln("Unable to get value:", err)
+		}
+		tidStr, err := tid.GetString()
+		if err != nil {
+			log.Fatalln("Unable to get value:", err)
+		}
+		if isInQueue.(bool) {
+			mw.removeFromQueue(tidStr)
+		} else {
+			name, err := store.ToTreeModel().GetValue(iter, NAME_COLUMN)
+			if err != nil {
+				log.Fatalln("Unable to get value:", err)
+			}
+			nameStr, err := name.GetString()
+			if err != nil {
+				log.Fatalln("Unable to get value:", err)
+			}
+			mw.addToQueue(tidStr, nameStr)
+			name.Unset()
+		}
+		mw.updateTitlesInQueue()
+		mw.onSelectionChanged()
+	})
 	column, err := gtk.TreeViewColumnNewWithAttribute("Queue", toggleRenderer, "active", IN_QUEUE_COLUMN)
 	if err != nil {
 		log.Fatalln("Unable to create tree view column:", err)

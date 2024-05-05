@@ -469,12 +469,13 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 	if err != nil {
 		return err
 	}
-	defer fstEncFile.Close()
 
 	decryptedBuffer := bytes.Buffer{}
 	if err := decryptContentToBuffer(fstEncFile, &decryptedBuffer, cipherHashTree, tmd.Contents[0]); err != nil {
+		fstEncFile.Close()
 		return err
 	}
+	fstEncFile.Close()
 	fst := FSTData{FSTReader: bytes.NewReader(bytes.Clone(decryptedBuffer.Bytes())), FSTEntries: make([]FEntry, 0), EntryCount: 0, Entries: 0, NamesOffset: 0}
 	parseFST(&fst)
 
@@ -521,12 +522,12 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 				if err != nil {
 					return err
 				}
-				defer srcFile.Close()
 				if tmdFlags&0x02 != 0 {
 					err = extractFileHash(srcFile, 0, contentOffset, uint64(fst.FSTEntries[i].Length), outputPath, fst.FSTEntries[i].ContentID, cipherHashTree)
 				} else {
 					err = extractFile(srcFile, 0, contentOffset, uint64(fst.FSTEntries[i].Length), outputPath, fst.FSTEntries[i].ContentID, cipherHashTree)
 				}
+				srcFile.Close()
 				if err != nil {
 					return err
 				}

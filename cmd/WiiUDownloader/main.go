@@ -53,8 +53,16 @@ func main() {
 		},
 	}
 
+	config, err := loadConfig()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	app.Connect("activate", func() {
-		win := NewMainWindow(app, wiiudownloader.GetTitleEntries(wiiudownloader.TITLE_CATEGORY_GAME), client)
+		win := NewMainWindow(app, wiiudownloader.GetTitleEntries(wiiudownloader.TITLE_CATEGORY_GAME), client, config)
+		config.saveConfigCallback = func() {
+			win.applyConfig(config)
+		}
 		win.ShowAll()
 		app.AddWindow(win.window)
 		app.GetActiveWindow().Show()

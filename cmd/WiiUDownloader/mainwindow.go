@@ -30,8 +30,10 @@ type MainWindow struct {
 	treeView                        *gtk.TreeView
 	searchEntry                     *gtk.Entry
 	deleteEncryptedContentsCheckbox *gtk.CheckButton
+	deleteEncryptedContents         bool
 	addToQueueButton                *gtk.Button
 	progressWindow                  *ProgressWindow
+	configWindow                    *ConfigWindow
 	lastSearchText                  string
 	titleQueue                      []wiiudownloader.TitleEntry
 	categoryButtons                 []*gtk.ToggleButton
@@ -41,13 +43,7 @@ type MainWindow struct {
 	client                          *http.Client
 }
 
-func NewMainWindow(app *gtk.Application, entries []wiiudownloader.TitleEntry, client *http.Client) *MainWindow {
-	gSettings, err := gtk.SettingsGetDefault()
-	if err != nil {
-		log.Println(err.Error())
-	}
-	gSettings.SetProperty("gtk-application-prefer-dark-theme", isDarkMode())
-
+func NewMainWindow(app *gtk.Application, entries []wiiudownloader.TitleEntry, client *http.Client, config *Config) *MainWindow {
 	win, err := gtk.ApplicationWindowNew(app)
 	if err != nil {
 		log.Fatalln("Unable to create window:", err)
@@ -73,6 +69,8 @@ func NewMainWindow(app *gtk.Application, entries []wiiudownloader.TitleEntry, cl
 		client:         client,
 	}
 
+	mainWindow.applyConfig(config)
+
 	searchEntry.Connect("changed", mainWindow.onSearchEntryChanged)
 
 	return &mainWindow
@@ -97,6 +95,33 @@ func (mw *MainWindow) updateTitles(titles []wiiudownloader.TitleEntry) {
 		}
 	}
 	mw.treeView.SetModel(store)
+}
+
+func (mw *MainWindow) createConfigWindow(config *Config) error {
+	if mw.configWindow != nil {
+		return nil
+	}
+	configWindow, err := NewConfigWindow(config)
+	if err != nil {
+		return err
+	}
+	mw.configWindow = configWindow
+	return nil
+}
+
+func (mw *MainWindow) SetDarkTheme(darkMode bool) {
+	gSettings, err := gtk.SettingsGetDefault()
+	if err != nil {
+		log.Println(err.Error())
+	}
+	gSettings.SetProperty("gtk-application-prefer-dark-theme", darkMode)
+}
+
+func (mw *MainWindow) applyConfig(config *Config) {
+	mw.SetDarkTheme(config.DarkMode)
+	mw.decryptContents = config.DecryptContents
+	mw.deleteEncryptedContents = config.DeleteEncryptedContents
+	mw.currentRegion = config.SelectedRegion
 }
 
 func (mw *MainWindow) ShowAll() {
@@ -305,6 +330,31 @@ func (mw *MainWindow) ShowAll() {
 
 	toolsMenu.SetSubmenu(toolsSubMenu)
 	menuBar.Append(toolsMenu)
+	configSubMenu, err := gtk.MenuNew()
+	if err != nil {
+		log.Fatalln("Unable to create menu:", err)
+	}
+	configMenuOption, err := gtk.MenuItemNewWithLabel("Config")
+	if err != nil {
+		log.Fatalln("Unable to create menu item:", err)
+	}
+	configMenuOption.SetSubmenu(configSubMenu)
+	configOption, err := gtk.MenuItemNewWithLabel("Config")
+	if err != nil {
+		log.Fatalln("Unable to create menu item:", err)
+	}
+	configOption.Connect("activate", func() {
+		config, err := loadConfig()
+		if err != nil {
+			return
+		}
+		if err := mw.createConfigWindow(config); err != nil {
+			return
+		}
+		mw.configWindow.Window.ShowAll()
+	})
+	configSubMenu.Append(configOption)
+	menuBar.Append(configMenuOption)
 	mainvBox.PackStart(menuBar, false, false, 0)
 	tophBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
 	if err != nil {
@@ -361,12 +411,24 @@ func (mw *MainWindow) ShowAll() {
 	if err != nil {
 		log.Fatalln("Unable to create button:", err)
 	}
+	decryptContentsCheckbox.SetActive(mw.decryptContents)
 
 	mw.deleteEncryptedContentsCheckbox, err = gtk.CheckButtonNewWithLabel("Delete encrypted contents after decryption")
 	if err != nil {
 		log.Fatalln("Unable to create button:", err)
 	}
-	mw.deleteEncryptedContentsCheckbox.SetSensitive(false)
+	mw.deleteEncryptedContentsCheckbox.SetSensitive(mw.decryptContents)
+	mw.deleteEncryptedContentsCheckbox.SetActive(mw.deleteEncryptedContents)
+	mw.deleteEncryptedContentsCheckbox.Connect("clicked", func() {
+		config, err := loadConfig()
+		if err != nil {
+			return
+		}
+		config.DeleteEncryptedContents = mw.getDeleteEncryptedContents()
+		if err := config.Save(); err != nil {
+			return
+		}
+	})
 
 	mw.addToQueueButton.Connect("clicked", mw.onAddToQueueClicked)
 	downloadQueueButton.Connect("clicked", func() {
@@ -408,7 +470,7 @@ func (mw *MainWindow) ShowAll() {
 	bottomhBox.PackStart(checkboxvBox, false, false, 0)
 
 	japanButton, err := gtk.CheckButtonNewWithLabel("Japan")
-	japanButton.SetActive(true)
+	japanButton.SetActive(mw.currentRegion&wiiudownloader.MCP_REGION_JAPAN != 0)
 	if err != nil {
 		log.Fatalln("Unable to create button:", err)
 	}
@@ -418,7 +480,7 @@ func (mw *MainWindow) ShowAll() {
 	bottomhBox.PackEnd(japanButton, false, false, 0)
 
 	usaButton, err := gtk.CheckButtonNewWithLabel("USA")
-	usaButton.SetActive(true)
+	usaButton.SetActive(mw.currentRegion&wiiudownloader.MCP_REGION_USA != 0)
 	if err != nil {
 		log.Fatalln("Unable to create button:", err)
 	}
@@ -428,7 +490,7 @@ func (mw *MainWindow) ShowAll() {
 	bottomhBox.PackEnd(usaButton, false, false, 0)
 
 	europeButton, err := gtk.CheckButtonNewWithLabel("Europe")
-	europeButton.SetActive(true)
+	europeButton.SetActive(mw.currentRegion&wiiudownloader.MCP_REGION_EUROPE != 0)
 	if err != nil {
 		log.Fatalln("Unable to create button:", err)
 	}
@@ -457,6 +519,14 @@ func (mw *MainWindow) onRegionChange(button *gtk.CheckButton, region uint8) {
 	}
 	mw.updateTitles(mw.titles)
 	mw.filterTitles(mw.lastSearchText)
+	config, err := loadConfig()
+	if err != nil {
+		return
+	}
+	config.SelectedRegion = mw.currentRegion
+	if err := config.Save(); err != nil {
+		return
+	}
 }
 
 func (mw *MainWindow) onSearchEntryChanged() {
@@ -576,20 +646,21 @@ func (mw *MainWindow) onSelectionChanged() {
 }
 
 func (mw *MainWindow) onDecryptContentsClicked() {
-	if mw.decryptContents {
-		mw.decryptContents = false
-		mw.deleteEncryptedContentsCheckbox.SetSensitive(false)
-	} else {
-		mw.decryptContents = true
-		mw.deleteEncryptedContentsCheckbox.SetSensitive(true)
+	mw.decryptContents = !mw.decryptContents
+	mw.deleteEncryptedContentsCheckbox.SetSensitive(mw.decryptContents)
+	config, err := loadConfig()
+	if err != nil {
+		return
+	}
+	config.DecryptContents = mw.decryptContents
+	if err := config.Save(); err != nil {
+		return
 	}
 }
 
 func (mw *MainWindow) getDeleteEncryptedContents() bool {
 	if mw.deleteEncryptedContentsCheckbox.GetSensitive() {
-		if mw.deleteEncryptedContentsCheckbox.GetActive() {
-			return true
-		}
+		return mw.deleteEncryptedContentsCheckbox.GetActive()
 	}
 	return false
 }

@@ -154,7 +154,7 @@ func (pw *ProgressWindow) SetStartTime(startTime time.Time) {
 	pw.startTime = startTime
 }
 
-func createProgressWindow(parent *gtk.ApplicationWindow) (*ProgressWindow, error) {
+func createProgressWindow(parent *gtk.Window) (*ProgressWindow, error) {
 	win, err := gtk.WindowNew(gtk.WINDOW_TOPLEVEL)
 	if err != nil {
 		return nil, err

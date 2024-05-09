@@ -26,16 +26,15 @@ const (
 )
 
 type MainWindow struct {
-	window                          *gtk.ApplicationWindow
+	window                          *gtk.Window
+	queuePane                       *QueuePane
 	treeView                        *gtk.TreeView
 	searchEntry                     *gtk.Entry
 	deleteEncryptedContentsCheckbox *gtk.CheckButton
 	deleteEncryptedContents         bool
-	addToQueueButton                *gtk.Button
 	progressWindow                  *ProgressWindow
 	configWindow                    *ConfigWindow
 	lastSearchText                  string
-	titleQueue                      []wiiudownloader.TitleEntry
 	categoryButtons                 []*gtk.ToggleButton
 	titles                          []wiiudownloader.TitleEntry
 	decryptContents                 bool
@@ -43,14 +42,14 @@ type MainWindow struct {
 	client                          *http.Client
 }
 
-func NewMainWindow(app *gtk.Application, entries []wiiudownloader.TitleEntry, client *http.Client, config *Config) *MainWindow {
-	win, err := gtk.ApplicationWindowNew(app)
+func NewMainWindow(entries []wiiudownloader.TitleEntry, client *http.Client, config *Config) *MainWindow {
+	win, err := gtk.WindowNew(gtk.WINDOW_TOPLEVEL)
 	if err != nil {
 		log.Fatalln("Unable to create window:", err)
 	}
 
 	win.SetTitle("WiiUDownloader")
-	win.SetDefaultSize(716, 400)
+	win.SetDefaultSize(870, 400)
 	win.Connect("destroy", func() {
 		gtk.MainQuit()
 	})
@@ -59,9 +58,17 @@ func NewMainWindow(app *gtk.Application, entries []wiiudownloader.TitleEntry, cl
 	if err != nil {
 		log.Fatalln("Unable to create entry:", err)
 	}
+	searchEntry.SetPlaceholderText("Search...")
+	searchEntry.SetHExpand(false)
+
+	queuePane, err := NewQueuePane()
+	if err != nil {
+		log.Fatalln("Unable to create queue pane:", err)
+	}
 
 	mainWindow := MainWindow{
 		window:         win,
+		queuePane:      queuePane,
 		titles:         entries,
 		searchEntry:    searchEntry,
 		currentRegion:  wiiudownloader.MCP_REGION_EUROPE | wiiudownloader.MCP_REGION_JAPAN | wiiudownloader.MCP_REGION_USA,
@@ -69,11 +76,17 @@ func NewMainWindow(app *gtk.Application, entries []wiiudownloader.TitleEntry, cl
 		client:         client,
 	}
 
+	queuePane.updateFunc = mainWindow.updateTitlesInQueue
+
 	mainWindow.applyConfig(config)
 
 	searchEntry.Connect("changed", mainWindow.onSearchEntryChanged)
 
 	return &mainWindow
+}
+
+func (mw *MainWindow) SetApplicationForGTKWindow(app *gtk.Application) {
+	mw.window.SetApplication(app)
 }
 
 func (mw *MainWindow) updateTitles(titles []wiiudownloader.TitleEntry) {
@@ -89,7 +102,7 @@ func (mw *MainWindow) updateTitles(titles []wiiudownloader.TitleEntry) {
 		iter := store.Append()
 		if err := store.Set(iter,
 			[]int{IN_QUEUE_COLUMN, KIND_COLUMN, TITLE_ID_COLUMN, REGION_COLUMN, NAME_COLUMN},
-			[]interface{}{mw.isTitleInQueue(entry), wiiudownloader.GetFormattedKind(entry.TitleID), fmt.Sprintf("%016x", entry.TitleID), wiiudownloader.GetFormattedRegion(entry.Region), entry.Name},
+			[]interface{}{mw.queuePane.IsTitleInQueue(entry), wiiudownloader.GetFormattedKind(entry.TitleID), fmt.Sprintf("%016x", entry.TitleID), wiiudownloader.GetFormattedRegion(entry.Region), entry.Name},
 		); err != nil {
 			log.Fatalln("Unable to set values:", err)
 		}
@@ -137,7 +150,7 @@ func (mw *MainWindow) ShowAll() {
 		iter := store.Append()
 		err = store.Set(iter,
 			[]int{IN_QUEUE_COLUMN, KIND_COLUMN, TITLE_ID_COLUMN, REGION_COLUMN, NAME_COLUMN},
-			[]interface{}{mw.isTitleInQueue(entry), wiiudownloader.GetFormattedKind(entry.TitleID), fmt.Sprintf("%016x", entry.TitleID), wiiudownloader.GetFormattedRegion(entry.Region), entry.Name},
+			[]interface{}{mw.queuePane.IsTitleInQueue(entry), wiiudownloader.GetFormattedKind(entry.TitleID), fmt.Sprintf("%016x", entry.TitleID), wiiudownloader.GetFormattedRegion(entry.Region), entry.Name},
 		)
 		if err != nil {
 			log.Fatalln("Unable to set values:", err)
@@ -191,22 +204,16 @@ func (mw *MainWindow) ShowAll() {
 		if err != nil {
 			log.Fatalln("Unable to get value:", err)
 		}
+		parsedTid, err := strconv.ParseUint(tidStr, 16, 64)
+		if err != nil {
+			log.Fatalln("Unable to parse title ID:", err)
+		}
 		if isInQueue.(bool) {
-			mw.removeFromQueue(tidStr)
+			mw.queuePane.RemoveTitle(wiiudownloader.TitleEntry{TitleID: parsedTid})
 		} else {
-			name, err := store.ToTreeModel().GetValue(iter, NAME_COLUMN)
-			if err != nil {
-				log.Fatalln("Unable to get value:", err)
-			}
-			nameStr, err := name.GetString()
-			if err != nil {
-				log.Fatalln("Unable to get value:", err)
-			}
-			mw.addToQueue(tidStr, nameStr)
-			name.Unset()
+			mw.queuePane.AddTitle(wiiudownloader.GetTitleEntryFromTid(parsedTid))
 		}
 		mw.updateTitlesInQueue()
-		mw.onSelectionChanged()
 	})
 	column, err := gtk.TreeViewColumnNewWithAttribute("Queue", toggleRenderer, "active", IN_QUEUE_COLUMN)
 	if err != nil {
@@ -224,10 +231,6 @@ func (mw *MainWindow) ShowAll() {
 	}
 	mw.treeView.AppendColumn(column)
 
-	renderer, err = gtk.CellRendererTextNew()
-	if err != nil {
-		log.Fatalln("Unable to create cell renderer:", err)
-	}
 	column, err = gtk.TreeViewColumnNewWithAttribute("Title ID", renderer, "text", TITLE_ID_COLUMN)
 	if err != nil {
 		log.Fatalln("Unable to create tree view column:", err)
@@ -240,10 +243,6 @@ func (mw *MainWindow) ShowAll() {
 	}
 	mw.treeView.AppendColumn(column)
 
-	renderer, err = gtk.CellRendererTextNew()
-	if err != nil {
-		log.Fatalln("Unable to create cell renderer:", err)
-	}
 	column, err = gtk.TreeViewColumnNewWithAttribute("Name", renderer, "text", NAME_COLUMN)
 	if err != nil {
 		log.Fatalln("Unable to create tree view column:", err)
@@ -387,7 +386,6 @@ func (mw *MainWindow) ShowAll() {
 		log.Fatalln("Unable to create scrolled window:", err)
 	}
 	scrollable.SetPolicy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
-	selection.Connect("changed", mw.onSelectionChanged)
 	scrollable.Add(mw.treeView)
 
 	mainvBox.PackStart(scrollable, true, true, 0)
@@ -395,11 +393,6 @@ func (mw *MainWindow) ShowAll() {
 	bottomhBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
 	if err != nil {
 		log.Fatalln("Unable to create box:", err)
-	}
-
-	mw.addToQueueButton, err = gtk.ButtonNewWithLabel("Add to queue")
-	if err != nil {
-		log.Fatalln("Unable to create button:", err)
 	}
 
 	downloadQueueButton, err := gtk.ButtonNewWithLabel("Download queue")
@@ -430,9 +423,8 @@ func (mw *MainWindow) ShowAll() {
 		}
 	})
 
-	mw.addToQueueButton.Connect("clicked", mw.onAddToQueueClicked)
 	downloadQueueButton.Connect("clicked", func() {
-		if len(mw.titleQueue) == 0 {
+		if mw.queuePane.IsQueueEmpty() {
 			return
 		}
 		mw.progressWindow, err = createProgressWindow(mw.window)
@@ -457,7 +449,6 @@ func (mw *MainWindow) ShowAll() {
 		}()
 	})
 	decryptContentsCheckbox.Connect("clicked", mw.onDecryptContentsClicked)
-	bottomhBox.PackStart(mw.addToQueueButton, false, false, 0)
 	bottomhBox.PackStart(downloadQueueButton, false, false, 0)
 
 	checkboxvBox, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
@@ -501,14 +492,21 @@ func (mw *MainWindow) ShowAll() {
 
 	mainvBox.PackEnd(bottomhBox, false, false, 0)
 
-	mainvBox.SetMarginBottom(2)
-	mainvBox.SetMarginEnd(2)
-	mainvBox.SetMarginStart(2)
-	mainvBox.SetMarginTop(2)
+	splitPane, err := gtk.PanedNew(gtk.ORIENTATION_HORIZONTAL)
+	if err != nil {
+		log.Fatalln("Unable to create paned:", err)
+	}
+	splitPane.Pack1(mw.queuePane.GetContainer(), true, false)
+	splitPane.Pack2(mainvBox, true, true)
 
-	mw.window.Add(mainvBox)
+	splitPane.SetMarginBottom(2)
+	splitPane.SetMarginEnd(2)
+	splitPane.SetMarginStart(2)
+	splitPane.SetMarginTop(2)
 
-	mainvBox.ShowAll()
+	mw.window.Add(splitPane)
+
+	splitPane.ShowAll()
 }
 
 func (mw *MainWindow) onRegionChange(button *gtk.CheckButton, region uint8) {
@@ -556,7 +554,7 @@ func (mw *MainWindow) filterTitles(filterText string) {
 			iter := storeRef.Append()
 			if err := storeRef.Set(iter,
 				[]int{IN_QUEUE_COLUMN, KIND_COLUMN, TITLE_ID_COLUMN, REGION_COLUMN, NAME_COLUMN},
-				[]interface{}{mw.isTitleInQueue(entry), wiiudownloader.GetFormattedKind(entry.TitleID), fmt.Sprintf("%016x", entry.TitleID), wiiudownloader.GetFormattedRegion(entry.Region), entry.Name},
+				[]interface{}{mw.queuePane.IsTitleInQueue(entry), wiiudownloader.GetFormattedKind(entry.TitleID), fmt.Sprintf("%016x", entry.TitleID), wiiudownloader.GetFormattedRegion(entry.Region), entry.Name},
 			); err != nil {
 				log.Fatalln("Unable to set values:", err)
 			}
@@ -587,64 +585,6 @@ func (mw *MainWindow) onDecryptContentsMenuItemClicked(selectedPath string) erro
 	return err
 }
 
-func (mw *MainWindow) isSelectionInQueue() bool {
-	selection, err := mw.treeView.GetSelection()
-	if err != nil {
-		log.Fatalln("Unable to get selection:", err)
-	}
-
-	store, err := mw.treeView.GetModel()
-	if err != nil {
-		log.Fatalln("Unable to get model:", err)
-	}
-
-	storeRef := store.(*gtk.ListStore)
-	treeModel := storeRef.ToTreeModel()
-	if treeModel == nil {
-		return false
-	}
-
-	selectionSelected := selection.GetSelectedRows(treeModel)
-	if selectionSelected == nil {
-		return false
-	}
-
-	for i := uint(0); i < selectionSelected.Length(); i++ {
-		path, ok := selectionSelected.Nth(i).Data().(*gtk.TreePath)
-		if !ok {
-			continue
-		}
-
-		iter, err := treeModel.GetIter(path)
-		if err != nil {
-			continue
-		}
-
-		inQueueVal, err := treeModel.GetValue(iter, IN_QUEUE_COLUMN)
-		if err != nil {
-			continue
-		}
-		isInQueue, err := inQueueVal.GoValue()
-		if err != nil {
-			continue
-		}
-
-		if !isInQueue.(bool) {
-			return false
-		}
-	}
-
-	return true
-}
-
-func (mw *MainWindow) onSelectionChanged() {
-	if mw.isSelectionInQueue() {
-		mw.addToQueueButton.SetLabel("Remove from queue")
-	} else {
-		mw.addToQueueButton.SetLabel("Add to queue")
-	}
-}
-
 func (mw *MainWindow) onDecryptContentsClicked() {
 	mw.decryptContents = !mw.decryptContents
 	mw.deleteEncryptedContentsCheckbox.SetSensitive(mw.decryptContents)
@@ -663,119 +603,6 @@ func (mw *MainWindow) getDeleteEncryptedContents() bool {
 		return mw.deleteEncryptedContentsCheckbox.GetActive()
 	}
 	return false
-}
-
-func (mw *MainWindow) isTitleInQueue(title wiiudownloader.TitleEntry) bool {
-	for _, entry := range mw.titleQueue {
-		if entry.TitleID == title.TitleID {
-			return true
-		}
-	}
-	return false
-}
-
-func (mw *MainWindow) addToQueue(tid, name string) {
-	titleID, err := strconv.ParseUint(tid, 16, 64)
-	if err != nil {
-		log.Fatalln("Unable to parse title ID:", err)
-	}
-	mw.titleQueue = append(mw.titleQueue, wiiudownloader.TitleEntry{TitleID: titleID, Name: name})
-}
-
-func (mw *MainWindow) removeFromQueue(tid string) {
-	for i, entry := range mw.titleQueue {
-		if fmt.Sprintf("%016x", entry.TitleID) == tid {
-			mw.titleQueue = append(mw.titleQueue[:i], mw.titleQueue[i+1:]...)
-			return
-		}
-	}
-}
-
-func (mw *MainWindow) onAddToQueueClicked() {
-	selection, err := mw.treeView.GetSelection()
-	if err != nil {
-		log.Fatalln("Unable to get selection:", err)
-	}
-
-	store, err := mw.treeView.GetModel()
-	if err != nil {
-		log.Fatalln("Unable to get model:", err)
-	}
-
-	storeRef := store.(*gtk.ListStore)
-	treeModel := storeRef.ToTreeModel()
-	if treeModel == nil {
-		return
-	}
-
-	addToQueue := !mw.isSelectionInQueue()
-
-	selectionSelected := selection.GetSelectedRows(treeModel)
-	if selectionSelected == nil || selectionSelected.Length() == 0 {
-		return
-	}
-
-	defer func() {
-		if r := recover(); r != nil {
-			log.Fatalln("Error updating model:", r)
-		}
-	}()
-
-	iter, _ := treeModel.GetIterFirst()
-	for iter != nil {
-		isSelected := selection.IterIsSelected(iter)
-		if isSelected {
-			inQueueVal, err := treeModel.GetValue(iter, IN_QUEUE_COLUMN)
-			if err != nil {
-				continue
-			}
-			isInQueue, err := inQueueVal.GoValue()
-			if err != nil {
-				continue
-			}
-
-			if addToQueue != isInQueue.(bool) {
-				inQueueVal.SetBool(addToQueue)
-
-				tid, err := treeModel.GetValue(iter, TITLE_ID_COLUMN)
-				if err != nil {
-					continue
-				}
-				tidStr, err := tid.GetString()
-				if err != nil {
-					continue
-				}
-
-				if addToQueue {
-					name, err := treeModel.GetValue(iter, NAME_COLUMN)
-					if err != nil {
-						continue
-					}
-					nameStr, err := name.GetString()
-					if err != nil {
-						continue
-					}
-					mw.addToQueue(tidStr, nameStr)
-					name.Unset()
-				} else {
-					mw.removeFromQueue(tidStr)
-				}
-
-				storeRef.SetValue(iter, IN_QUEUE_COLUMN, addToQueue)
-				tid.Unset()
-			}
-		}
-
-		if !storeRef.IterNext(iter) {
-			break
-		}
-	}
-
-	if addToQueue {
-		mw.addToQueueButton.SetLabel("Remove from queue")
-	} else {
-		mw.addToQueueButton.SetLabel("Add to queue")
-	}
 }
 
 func (mw *MainWindow) updateTitlesInQueue() {
@@ -801,7 +628,7 @@ func (mw *MainWindow) updateTitlesInQueue() {
 				if err != nil {
 					continue
 				}
-				isInQueue := mw.isTitleInQueue(wiiudownloader.TitleEntry{TitleID: tidNum})
+				isInQueue := mw.queuePane.IsTitleInQueue(wiiudownloader.TitleEntry{TitleID: tidNum})
 				storeRef.SetValue(iter, IN_QUEUE_COLUMN, isInQueue)
 				tid.Unset()
 			}
@@ -810,6 +637,7 @@ func (mw *MainWindow) updateTitlesInQueue() {
 			break
 		}
 	}
+	mw.queuePane.Update(false)
 }
 
 func (mw *MainWindow) showError(err error) {
@@ -822,7 +650,7 @@ func (mw *MainWindow) showError(err error) {
 }
 
 func (mw *MainWindow) onDownloadQueueClicked(selectedPath string) error {
-	if len(mw.titleQueue) == 0 {
+	if mw.queuePane.IsQueueEmpty() {
 		return nil
 	}
 
@@ -832,7 +660,7 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string) error {
 	defer close(queueStatusChan)
 	errGroup := errgroup.Group{}
 
-	for _, title := range mw.titleQueue {
+	mw.queuePane.ForEachRemoving(func(title wiiudownloader.TitleEntry) {
 		errGroup.Go(func() error {
 			if mw.progressWindow.cancelled {
 				queueStatusChan <- true
@@ -853,16 +681,15 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string) error {
 		}
 
 		if !<-queueStatusChan {
-			break
+			return
 		}
-	}
+	})
 
-	mw.titleQueue = []wiiudownloader.TitleEntry{} // Clear the queue
+	mw.queuePane.Clear()
 	glib.IdleAdd(func() {
 		mw.progressWindow.Window.Hide()
 	})
 	mw.updateTitlesInQueue()
-	mw.onSelectionChanged()
 
 	return err
 }

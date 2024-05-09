@@ -1,9 +1,5 @@
 package wiiudownloader
 
-import (
-	"strconv"
-)
-
 const (
 	MCP_REGION_JAPAN  = 0x01
 	MCP_REGION_USA    = 0x02
@@ -127,13 +123,9 @@ func GetCategoryFromFormattedCategory(formattedCategory string) uint8 {
 	}
 }
 
-func getTitleEntryFromTid(tid string) TitleEntry {
-	titleID, err := strconv.ParseUint(tid, 16, 64)
-	if err != nil {
-		return TitleEntry{}
-	}
+func GetTitleEntryFromTid(tid uint64) TitleEntry {
 	for _, entry := range GetTitleEntries(TITLE_CATEGORY_ALL) {
-		if entry.TitleID == titleID {
+		if entry.TitleID == tid {
 			return entry
 		}
 	}

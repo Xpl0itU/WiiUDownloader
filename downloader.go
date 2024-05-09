@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -157,7 +158,11 @@ func downloadFile(progressReporter ProgressReporter, client *http.Client, downlo
 }
 
 func DownloadTitle(titleID, outputDirectory string, doDecryption bool, progressReporter ProgressReporter, deleteEncryptedContents bool, client *http.Client) error {
-	tEntry := getTitleEntryFromTid(titleID)
+	tid, err := strconv.ParseUint(titleID, 16, 64)
+	if err != nil {
+		return err
+	}
+	tEntry := GetTitleEntryFromTid(tid)
 
 	progressReporter.ResetTotals()
 	progressReporter.SetGameTitle(tEntry.Name)

@@ -58,16 +58,19 @@ func main() {
 		log.Fatal(err)
 	}
 
-	app.Connect("activate", func() {
-		win := NewMainWindow(app, wiiudownloader.GetTitleEntries(wiiudownloader.TITLE_CATEGORY_GAME), client, config)
-		config.saveConfigCallback = func() {
-			win.applyConfig(config)
-		}
-		win.ShowAll()
-		app.AddWindow(win.window)
-		app.GetActiveWindow().Show()
+	win := NewMainWindow(wiiudownloader.GetTitleEntries(wiiudownloader.TITLE_CATEGORY_GAME), client, config)
+	config.saveConfigCallback = func() {
+		win.applyConfig(config)
+	}
+
+	app.Connect("activate", func(app *gtk.Application) {
+		win.SetApplicationForGTKWindow(app)
+		glib.IdleAddPriority(glib.PRIORITY_HIGH, func() {
+			win.ShowAll()
+			app.AddWindow(win.window)
+			app.GetActiveWindow().Show()
+		})
 		gtk.Main()
 	})
-	app.Run(nil)
-	app.Quit()
+	glib.ApplicationGetDefault().Run(os.Args)
 }

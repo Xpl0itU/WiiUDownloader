@@ -24,7 +24,7 @@ require (
 
 require (
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99
-	golang.org/x/net v0.24.0 // indirect
+	golang.org/x/net v0.25.0 // indirect
 )
 
 require (

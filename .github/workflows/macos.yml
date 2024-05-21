@@ -22,14 +22,14 @@ jobs:
       - name: Install Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22.2'
+          go-version: '1.22.3'
           check-latest: true
           cache-dependency-path: |
             go.sum
       - name: Build
         run: |
           python3 grabTitles.py
-          go build -ldflags="-s -w" cmd/WiiUDownloader/main.go cmd/WiiUDownloader/darkMode.go cmd/WiiUDownloader/mainwindow.go cmd/WiiUDownloader/progressWindow.go cmd/WiiUDownloader/utils.go
+          go build -ldflags="-s -w" cmd/WiiUDownloader/config.go cmd/WiiUDownloader/configWindow.go cmd/WiiUDownloader/main.go cmd/WiiUDownloader/darkMode.go cmd/WiiUDownloader/initialSetupAssistant.go cmd/WiiUDownloader/mainwindow.go cmd/WiiUDownloader/progressWindow.go cmd/WiiUDownloader/queuePane.go cmd/WiiUDownloader/utils.go
       - name: Package
         run: |
           python3 data/create_bundle.py

@@ -64,12 +64,34 @@ func main() {
 	}
 
 	app.Connect("activate", func(app *gtk.Application) {
-		win.SetApplicationForGTKWindow(app)
-		glib.IdleAddPriority(glib.PRIORITY_HIGH, func() {
-			win.ShowAll()
-			app.AddWindow(win.window)
-			app.GetActiveWindow().Show()
-		})
+		if !config.DidInitialSetup {
+			// Open the initial setup assistant
+			assistant, err := NewInitialSetupAssistantWindow(config)
+			if err != nil {
+				log.Fatal(err)
+			}
+			assistant.SetPostSetupCallback(func() {
+				win.SetApplicationForGTKWindow(app)
+				glib.IdleAddPriority(glib.PRIORITY_HIGH, func() {
+					win.ShowAll()
+					app.AddWindow(win.window)
+					app.GetActiveWindow().Show()
+				})
+			})
+			glib.IdleAddPriority(glib.PRIORITY_HIGH, func() {
+				assistant.assistantWindow.ShowAll()
+				app.AddWindow(assistant.assistantWindow)
+				app.GetActiveWindow().Show()
+				win.window.Hide()
+			})
+		} else {
+			win.SetApplicationForGTKWindow(app)
+			glib.IdleAddPriority(glib.PRIORITY_HIGH, func() {
+				win.ShowAll()
+				app.AddWindow(win.window)
+				app.GetActiveWindow().Show()
+			})
+		}
 		gtk.Main()
 	})
 	glib.ApplicationGetDefault().Run(os.Args)

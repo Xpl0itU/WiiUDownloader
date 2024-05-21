@@ -51,7 +51,7 @@ func NewMainWindow(entries []wiiudownloader.TitleEntry, client *http.Client, con
 	win.SetTitle("WiiUDownloader")
 	win.SetDefaultSize(870, 400)
 	win.Connect("destroy", func() {
-		gtk.MainQuit()
+		os.Exit(0) // Hacky way to close the program
 	})
 
 	searchEntry, err := gtk.EntryNew()
@@ -122,16 +122,8 @@ func (mw *MainWindow) createConfigWindow(config *Config) error {
 	return nil
 }
 
-func (mw *MainWindow) SetDarkTheme(darkMode bool) {
-	gSettings, err := gtk.SettingsGetDefault()
-	if err != nil {
-		log.Println(err.Error())
-	}
-	gSettings.SetProperty("gtk-application-prefer-dark-theme", darkMode)
-}
-
 func (mw *MainWindow) applyConfig(config *Config) {
-	mw.SetDarkTheme(config.DarkMode)
+	setDarkTheme(config.DarkMode)
 	mw.decryptContents = config.DecryptContents
 	mw.deleteEncryptedContents = config.DeleteEncryptedContents
 	mw.currentRegion = config.SelectedRegion

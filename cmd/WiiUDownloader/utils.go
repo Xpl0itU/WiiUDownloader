@@ -1,6 +1,11 @@
 package main
 
-import "strings"
+import (
+	"log"
+	"strings"
+
+	"github.com/gotk3/gotk3/gtk"
+)
 
 func normalizeFilename(filename string) string {
 	var out strings.Builder
@@ -33,4 +38,12 @@ func normalizeFilename(filename string) string {
 	}
 
 	return result
+}
+
+func setDarkTheme(darkMode bool) {
+	gSettings, err := gtk.SettingsGetDefault()
+	if err != nil {
+		log.Println(err.Error())
+	}
+	gSettings.SetProperty("gtk-application-prefer-dark-theme", darkMode)
 }

@@ -18,6 +18,7 @@ type Config struct {
 	DecryptContents         bool  `koanf:"decryptContents"`
 	DeleteEncryptedContents bool  `koanf:"deleteEncryptedContents"`
 	SelectedRegion          uint8 `koanf:"selectedRegion"`
+	DidInitialSetup         bool  `koanf:"didInitialSetup"`
 	saveConfigCallback      func()
 	saveMutex               *sync.Mutex
 }
@@ -38,6 +39,7 @@ func getDefaultConfig() *Config {
 		DecryptContents:         false,
 		DeleteEncryptedContents: false,
 		SelectedRegion:          wiiudownloader.MCP_REGION_EUROPE | wiiudownloader.MCP_REGION_USA | wiiudownloader.MCP_REGION_JAPAN,
+		DidInitialSetup:         false,
 		saveConfigCallback:      nil,
 		saveMutex:               &sync.Mutex{},
 	}

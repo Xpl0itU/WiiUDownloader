@@ -30,6 +30,7 @@ func main() {
 			os.Setenv("GSETTINGS_SCHEMA_DIR", filePath)
 		}
 	}
+
 	gtk.Init(nil)
 
 	app, err := gtk.ApplicationNew("io.github.xpl0itu.wiiudownloader", glib.APPLICATION_FLAGS_NONE)
@@ -92,6 +93,8 @@ func main() {
 				app.GetActiveWindow().Show()
 			})
 		}
+	})
+	glib.IdleAddPriority(glib.PRIORITY_HIGH, func() {
 		gtk.Main()
 	})
 	glib.ApplicationGetDefault().Run(os.Args)

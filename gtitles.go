@@ -48,6 +48,9 @@ func GetTitleEntries(category uint8) []TitleEntry {
 	titleEntries := make([]TitleEntry, 0)
 	for _, entry := range titleEntry {
 		if category == TITLE_CATEGORY_ALL || category == entry.Category {
+			if entry.Category == TITLE_CATEGORY_DISC {
+				continue
+			}
 			titleEntries = append(titleEntries, entry)
 		}
 	}

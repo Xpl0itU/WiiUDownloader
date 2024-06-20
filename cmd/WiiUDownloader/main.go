@@ -94,7 +94,7 @@ func main() {
 			})
 		}
 	})
-	glib.IdleAddPriority(glib.PRIORITY_HIGH, func() {
+	app.ConnectAfter("activate", func(app *gtk.Application) {
 		gtk.Main()
 	})
 	glib.ApplicationGetDefault().Run(os.Args)

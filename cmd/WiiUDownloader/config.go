@@ -14,11 +14,12 @@ import (
 )
 
 type Config struct {
-	DarkMode                bool  `koanf:"darkMode"`
-	DecryptContents         bool  `koanf:"decryptContents"`
-	DeleteEncryptedContents bool  `koanf:"deleteEncryptedContents"`
-	SelectedRegion          uint8 `koanf:"selectedRegion"`
-	DidInitialSetup         bool  `koanf:"didInitialSetup"`
+	DarkMode                bool   `koanf:"darkMode"`
+	DecryptContents         bool   `koanf:"decryptContents"`
+	DeleteEncryptedContents bool   `koanf:"deleteEncryptedContents"`
+	SelectedRegion          uint8  `koanf:"selectedRegion"`
+	DidInitialSetup         bool   `koanf:"didInitialSetup"`
+	LastSelectedPath        string `koanf:"lastSelectedPath"`
 	saveConfigCallback      func()
 	saveMutex               *sync.Mutex
 }
@@ -40,6 +41,7 @@ func getDefaultConfig() *Config {
 		DeleteEncryptedContents: false,
 		SelectedRegion:          wiiudownloader.MCP_REGION_EUROPE | wiiudownloader.MCP_REGION_USA | wiiudownloader.MCP_REGION_JAPAN,
 		DidInitialSetup:         false,
+		LastSelectedPath:        "",
 		saveConfigCallback:      nil,
 		saveMutex:               &sync.Mutex{},
 	}

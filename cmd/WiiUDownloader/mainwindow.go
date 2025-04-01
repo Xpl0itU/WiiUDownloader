@@ -678,7 +678,7 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string) error {
 	})
 
 	mw.queuePane.Clear()
-	glib.IdleAdd(func() {
+	glib.IdleAddPriority(glib.PRIORITY_HIGH, func() {
 		mw.progressWindow.Window.Hide()
 	})
 	mw.updateTitlesInQueue()

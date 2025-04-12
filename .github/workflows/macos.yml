@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-12
+    runs-on: macos-13
     steps:
       - name: Check out repository code
         uses: actions/checkout@v4

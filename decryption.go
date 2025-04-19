@@ -17,6 +17,16 @@ import (
 
 var commonKey = []byte{0xD7, 0xB0, 0x04, 0x02, 0x65, 0x9B, 0xA2, 0xAB, 0xD2, 0xCB, 0x0D, 0xB2, 0x7F, 0xA2, 0xB6, 0x56}
 
+var (
+	encryptedHashedContentBuffer = make([]byte, BLOCK_SIZE_HASHED)
+	decryptedHashedContentBuffer = make([]byte, BLOCK_SIZE_HASHED)
+)
+
+var (
+	encryptedContentBuffer = make([]byte, BLOCK_SIZE)
+	decryptedContentBuffer = make([]byte, BLOCK_SIZE)
+)
+
 const (
 	BLOCK_SIZE        = 0x8000
 	BLOCK_SIZE_HASHED = 0x10000
@@ -54,8 +64,6 @@ type FSTData struct {
 }
 
 func extractFileHash(src *os.File, partDataOffset uint64, fileOffset uint64, size uint64, path string, contentId uint16, cipherHashTree cipher.Block) error {
-	encryptedContent := make([]byte, BLOCK_SIZE_HASHED)
-	decryptedContent := make([]byte, BLOCK_SIZE_HASHED)
 	hashes := make([]byte, HASHES_SIZE)
 
 	writeSize := HASH_BLOCK_SIZE
@@ -84,13 +92,13 @@ func extractFileHash(src *os.File, partDataOffset uint64, fileOffset uint64, siz
 			writeSize = int(size)
 		}
 
-		if _, err := io.ReadFull(src, encryptedContent); err != nil {
+		if _, err := io.ReadFull(src, encryptedHashedContentBuffer); err != nil {
 			return fmt.Errorf("could not read %d bytes from '%s': %w", BLOCK_SIZE_HASHED, path, err)
 		}
 
 		iv := make([]byte, aes.BlockSize)
 		iv[1] = byte(contentId)
-		cipher.NewCBCDecrypter(cipherHashTree, iv).CryptBlocks(hashes, encryptedContent[:HASHES_SIZE])
+		cipher.NewCBCDecrypter(cipherHashTree, iv).CryptBlocks(hashes, encryptedHashedContentBuffer[:HASHES_SIZE])
 
 		h0Hash := hashes[0x14*blockNumber : 0x14*blockNumber+sha1.Size]
 		iv = hashes[0x14*blockNumber : 0x14*blockNumber+aes.BlockSize]
@@ -99,9 +107,9 @@ func extractFileHash(src *os.File, partDataOffset uint64, fileOffset uint64, siz
 			iv[1] ^= byte(contentId)
 		}
 
-		cipher.NewCBCDecrypter(cipherHashTree, iv).CryptBlocks(decryptedContent, encryptedContent[HASHES_SIZE:])
+		cipher.NewCBCDecrypter(cipherHashTree, iv).CryptBlocks(decryptedHashedContentBuffer, encryptedHashedContentBuffer[HASHES_SIZE:])
 
-		hash := sha1.Sum(decryptedContent[:HASH_BLOCK_SIZE])
+		hash := sha1.Sum(decryptedHashedContentBuffer[:HASH_BLOCK_SIZE])
 
 		if !reflect.DeepEqual(hash[:], h0Hash) {
 			return errors.New("h0 hash mismatch")
@@ -109,7 +117,7 @@ func extractFileHash(src *os.File, partDataOffset uint64, fileOffset uint64, siz
 
 		size -= uint64(writeSize)
 
-		_, err = dst.Write(decryptedContent[soffset : soffset+uint64(writeSize)])
+		_, err = dst.Write(decryptedHashedContentBuffer[soffset : soffset+uint64(writeSize)])
 		if err != nil {
 			return err
 		}
@@ -129,9 +137,6 @@ func extractFileHash(src *os.File, partDataOffset uint64, fileOffset uint64, siz
 }
 
 func extractFile(src *os.File, partDataOffset uint64, fileOffset uint64, size uint64, path string, contentId uint16, cipherHashTree cipher.Block) error {
-	encryptedContent := make([]byte, BLOCK_SIZE)
-	decryptedContent := make([]byte, BLOCK_SIZE)
-
 	writeSize := BLOCK_SIZE
 
 	dst, err := os.Create(path)
@@ -162,13 +167,13 @@ func extractFile(src *os.File, partDataOffset uint64, fileOffset uint64, size ui
 			writeSize = int(size)
 		}
 
-		if n, err := io.ReadFull(src, encryptedContent); err != nil && n != BLOCK_SIZE {
+		if n, err := io.ReadFull(src, encryptedContentBuffer); err != nil && n != BLOCK_SIZE {
 			return fmt.Errorf("could not read %d bytes from '%s': %w", BLOCK_SIZE, path, err)
 		}
 
-		aesCipher.CryptBlocks(decryptedContent, encryptedContent)
+		aesCipher.CryptBlocks(decryptedContentBuffer, encryptedContentBuffer)
 
-		n, err := dst.Write(decryptedContent[soffset : soffset+uint64(writeSize)])
+		n, err := dst.Write(decryptedContentBuffer[soffset : soffset+uint64(writeSize)])
 		if err != nil {
 			return err
 		}
@@ -510,7 +515,7 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 			}
 			pathOffset = fst.FSTEntries[i].NameOffset & 0x00FFFFFF
 			fst.FSTReader.Seek(int64(fst.NamesOffset+pathOffset), io.SeekStart)
-			outputPath = filepath.Join(outputPath, readString(fst.FSTReader))
+			outputPath = filepath.Clean(filepath.Join(outputPath, readString(fst.FSTReader)))
 			contentOffset := uint64(fst.FSTEntries[i].Offset)
 			if fst.FSTEntries[i].Flags&4 == 0 {
 				contentOffset <<= 5
@@ -534,6 +539,9 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 			}
 		}
 	}
+
+	progressReporter.UpdateDecryptionProgress(1.0)
+
 	if deleteEncryptedContents {
 		doDeleteEncryptedContents(path)
 	}

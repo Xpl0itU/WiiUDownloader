@@ -189,100 +189,139 @@ func extractFile(src *os.File, partDataOffset uint64, fileOffset uint64, size ui
 	return nil
 }
 
-func parseFSTEntry(fst *FSTData) error {
+func (fst *FSTData) Parse() error {
+	var err error // Hack to avoid shadowing
+
+	if _, err := fst.FSTReader.Seek(0x8, io.SeekStart); err != nil {
+		return fmt.Errorf("failed to seek to entry count: %w", err)
+	}
+	if fst.EntryCount, err = readInt(fst.FSTReader, 4); err != nil {
+		return fmt.Errorf("failed to read entry count: %w", err)
+	}
+
+	if _, err := fst.FSTReader.Seek(int64(0x20+fst.EntryCount*0x20+8), io.SeekStart); err != nil {
+		return fmt.Errorf("failed to seek to entries: %w", err)
+	}
+	if fst.Entries, err = readInt(fst.FSTReader, 4); err != nil {
+		return fmt.Errorf("failed to read entries: %w", err)
+	}
+	fst.NamesOffset = 0x20 + fst.EntryCount*0x20 + fst.Entries*0x10
+
+	if _, err := fst.FSTReader.Seek(4, io.SeekCurrent); err != nil {
+		return fmt.Errorf("failed to seek to names offset: %w", err)
+	}
+
 	for i := uint32(0); i < fst.Entries; i++ {
 		entry := FEntry{}
-		entry.Type = readByte(fst.FSTReader)
-		entry.NameOffset = uint32(read3BytesBE(fst.FSTReader))
-		entry.Offset = readInt(fst.FSTReader, 4)
-		entry.Length = readInt(fst.FSTReader, 4)
-		entry.Flags = readInt16(fst.FSTReader, 2)
-		entry.ContentID = readInt16(fst.FSTReader, 2)
+		if entry.Type, err = readByte(fst.FSTReader); err != nil {
+			return fmt.Errorf("failed to read entry type for entry %d: %w", i, err)
+		}
+
+		nameOffset, err := read3BytesBE(fst.FSTReader)
+		if err != nil {
+			return fmt.Errorf("failed to read name offset for entry %d: %w", i, err)
+		}
+		entry.NameOffset = uint32(nameOffset)
+
+		if entry.Offset, err = readInt(fst.FSTReader, 4); err != nil {
+			return fmt.Errorf("failed to read entry offset for entry %d: %w", i, err)
+		}
+		if entry.Length, err = readInt(fst.FSTReader, 4); err != nil {
+			return fmt.Errorf("failed to read entry length for entry %d: %w", i, err)
+		}
+
+		flags, err := readInt16(fst.FSTReader, 2)
+		if err != nil {
+			return fmt.Errorf("failed to read flags for entry %d: %w", i, err)
+		}
+		entry.Flags = flags
+
+		contentID, err := readInt16(fst.FSTReader, 2)
+		if err != nil {
+			return fmt.Errorf("failed to read content ID for entry %d: %w", i, err)
+		}
+		entry.ContentID = contentID
+
 		fst.FSTEntries = append(fst.FSTEntries, entry)
 	}
+
 	return nil
 }
 
-func parseFST(fst *FSTData) {
-	fst.FSTReader.Seek(0x8, io.SeekStart)
-	fst.EntryCount = readInt(fst.FSTReader, 4)
-	fst.FSTReader.Seek(int64(0x20+fst.EntryCount*0x20+8), io.SeekStart)
-	fst.Entries = readInt(fst.FSTReader, 4)
-	fst.NamesOffset = 0x20 + fst.EntryCount*0x20 + fst.Entries*0x10
-	fst.FSTReader.Seek(4, io.SeekCurrent)
-	parseFSTEntry(fst)
-}
-
-func readByte(f io.ReadSeeker) byte {
+func readByte(f io.ReadSeeker) (byte, error) {
 	buf := make([]byte, 1)
 	n, err := f.Read(buf)
 	if err != nil {
-		panic(err)
+		return 0, err
 	}
 	if n < 1 {
-		panic(io.ErrUnexpectedEOF)
+		return 0, io.ErrUnexpectedEOF
 	}
-	return buf[0]
+	return buf[0], nil
 }
 
-func readInt(f io.ReadSeeker, s int) uint32 {
+func readInt(f io.ReadSeeker, s int) (uint32, error) {
 	bufSize := 4 // Buffer size is always 4 for uint32
 	buf := make([]byte, bufSize)
 
 	n, err := f.Read(buf[:s])
 	if err != nil {
-		panic(err)
+		return 0, err
 	}
 
 	if n < s {
 		// If we didn't read the expected number of bytes, seek back to the
 		// previous position in the file and return an error.
 		if _, err := f.Seek(int64(-n), io.SeekCurrent); err != nil {
-			panic(err)
+			return 0, err
 		}
-		panic(io.ErrUnexpectedEOF)
+		return 0, io.ErrUnexpectedEOF
 	}
 
-	return binary.BigEndian.Uint32(buf)
+	return binary.BigEndian.Uint32(buf), nil
 }
 
-func readInt16(f io.ReadSeeker, s int) uint16 {
+func readInt16(f io.ReadSeeker, s int) (uint16, error) {
 	bufSize := 2 // Buffer size is always 2 for uint16
 	buf := make([]byte, bufSize)
 
 	n, err := f.Read(buf[:s])
 	if err != nil {
-		panic(err)
+		return 0, err
 	}
 
 	if n < s {
 		// If we didn't read the expected number of bytes, seek back to the
 		// previous position in the file and return an error.
 		if _, err := f.Seek(int64(-n), io.SeekCurrent); err != nil {
-			panic(err)
+			return 0, err
 		}
-		panic(io.ErrUnexpectedEOF)
+		return 0, io.ErrUnexpectedEOF
 	}
 
-	return binary.BigEndian.Uint16(buf)
+	return binary.BigEndian.Uint16(buf), nil
 }
 
-func readString(f io.ReadSeeker) string {
+func readString(f io.ReadSeeker) (string, error) {
 	buf := []byte{}
 	for {
 		char := make([]byte, 1)
-		f.Read(char)
+		if _, err := f.Read(char); err != nil {
+			return "", err
+		}
 		if char[0] == byte(0) || len(char) == 0 {
-			return string(buf)
+			return string(buf), nil
 		}
 		buf = append(buf, char[0])
 	}
 }
 
-func read3BytesBE(f io.ReadSeeker) int {
+func read3BytesBE(f io.ReadSeeker) (int, error) {
 	b := make([]byte, 3)
-	f.Read(b)
-	return int(uint(b[2]) | uint(b[1])<<8 | uint(b[0])<<16)
+	if _, err := f.Read(b); err != nil {
+		return 0, err
+	}
+	return int(uint(b[2]) | uint(b[1])<<8 | uint(b[0])<<16), nil
 }
 
 func decryptContentToBuffer(encryptedFile *os.File, decryptedBuffer *bytes.Buffer, cipherHashTree cipher.Block, content Content) error {
@@ -482,7 +521,9 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 	}
 	fstEncFile.Close()
 	fst := FSTData{FSTReader: bytes.NewReader(bytes.Clone(decryptedBuffer.Bytes())), FSTEntries: make([]FEntry, 0), EntryCount: 0, Entries: 0, NamesOffset: 0}
-	parseFST(&fst)
+	if err := fst.Parse(); err != nil {
+		return err
+	}
 
 	outputPath := path
 	entry := make([]uint32, 0x10)
@@ -510,12 +551,20 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 			for j := uint32(0); j < level; j++ {
 				pathOffset = fst.FSTEntries[entry[j]].NameOffset & 0x00FFFFFF
 				fst.FSTReader.Seek(int64(fst.NamesOffset+pathOffset), io.SeekStart)
-				outputPath = filepath.Join(outputPath, readString(fst.FSTReader))
+				directory, err := readString(fst.FSTReader)
+				if err != nil {
+					return fmt.Errorf("failed to read directory name: %w", err)
+				}
+				outputPath = filepath.Join(outputPath, directory)
 				os.MkdirAll(outputPath, 0755)
 			}
 			pathOffset = fst.FSTEntries[i].NameOffset & 0x00FFFFFF
 			fst.FSTReader.Seek(int64(fst.NamesOffset+pathOffset), io.SeekStart)
-			outputPath = filepath.Clean(filepath.Join(outputPath, readString(fst.FSTReader)))
+			fileName, err := readString(fst.FSTReader)
+			if err != nil {
+				return fmt.Errorf("failed to read file name: %w", err)
+			}
+			outputPath = filepath.Clean(filepath.Join(outputPath, fileName))
 			contentOffset := uint64(fst.FSTEntries[i].Offset)
 			if fst.FSTEntries[i].Flags&4 == 0 {
 				contentOffset <<= 5

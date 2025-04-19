@@ -12,7 +12,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"reflect"
 )
 
 var commonKey = []byte{0xD7, 0xB0, 0x04, 0x02, 0x65, 0x9B, 0xA2, 0xAB, 0xD2, 0xCB, 0x0D, 0xB2, 0x7F, 0xA2, 0xB6, 0x56}
@@ -20,11 +19,18 @@ var commonKey = []byte{0xD7, 0xB0, 0x04, 0x02, 0x65, 0x9B, 0xA2, 0xAB, 0xD2, 0xC
 var (
 	encryptedHashedContentBuffer = make([]byte, BLOCK_SIZE_HASHED)
 	decryptedHashedContentBuffer = make([]byte, BLOCK_SIZE_HASHED)
+	decryptedDataBuffer          = make([]byte, 0xFC00)
 )
 
 var (
 	encryptedContentBuffer = make([]byte, BLOCK_SIZE)
 	decryptedContentBuffer = make([]byte, BLOCK_SIZE)
+)
+
+var (
+	iv           = make([]byte, aes.BlockSize)
+	hashes       = make([]byte, HASHES_SIZE)
+	hashesBuffer = make([]byte, HASHES_SIZE)
 )
 
 const (
@@ -36,6 +42,8 @@ const (
 )
 
 const READ_SIZE = 8 * 1024 * 1024
+
+var readSizedBuffer = make([]byte, READ_SIZE)
 
 type Content struct {
 	ID     uint32
@@ -64,8 +72,6 @@ type FSTData struct {
 }
 
 func extractFileHash(src *os.File, partDataOffset uint64, fileOffset uint64, size uint64, path string, contentId uint16, cipherHashTree cipher.Block) error {
-	hashes := make([]byte, HASHES_SIZE)
-
 	writeSize := HASH_BLOCK_SIZE
 	blockNumber := (fileOffset / HASH_BLOCK_SIZE) & 0x0F
 
@@ -96,7 +102,8 @@ func extractFileHash(src *os.File, partDataOffset uint64, fileOffset uint64, siz
 			return fmt.Errorf("could not read %d bytes from '%s': %w", BLOCK_SIZE_HASHED, path, err)
 		}
 
-		iv := make([]byte, aes.BlockSize)
+		clear(hashes)
+		clear(iv)
 		iv[1] = byte(contentId)
 		cipher.NewCBCDecrypter(cipherHashTree, iv).CryptBlocks(hashes, encryptedHashedContentBuffer[:HASHES_SIZE])
 
@@ -111,7 +118,7 @@ func extractFileHash(src *os.File, partDataOffset uint64, fileOffset uint64, siz
 
 		hash := sha1.Sum(decryptedHashedContentBuffer[:HASH_BLOCK_SIZE])
 
-		if !reflect.DeepEqual(hash[:], h0Hash) {
+		if !bytes.Equal(hash[:], h0Hash) {
 			return errors.New("h0 hash mismatch")
 		}
 
@@ -157,7 +164,7 @@ func extractFile(src *os.File, partDataOffset uint64, fileOffset uint64, size ui
 		return err
 	}
 
-	iv := make([]byte, aes.BlockSize)
+	clear(iv)
 	iv[1] = byte(contentId)
 
 	aesCipher := cipher.NewCBCDecrypter(cipherHashTree, iv)
@@ -261,8 +268,7 @@ func readByte(f io.ReadSeeker) (byte, error) {
 }
 
 func readInt(f io.ReadSeeker, s int) (uint32, error) {
-	bufSize := 4 // Buffer size is always 4 for uint32
-	buf := make([]byte, bufSize)
+	buf := make([]byte, 4) // Buffer size is always 4 for uint32
 
 	n, err := f.Read(buf[:s])
 	if err != nil {
@@ -282,8 +288,7 @@ func readInt(f io.ReadSeeker, s int) (uint32, error) {
 }
 
 func readInt16(f io.ReadSeeker, s int) (uint16, error) {
-	bufSize := 2 // Buffer size is always 2 for uint16
-	buf := make([]byte, bufSize)
+	buf := make([]byte, 2) // Buffer size is always 2 for uint16
 
 	n, err := f.Read(buf[:s])
 	if err != nil {
@@ -303,25 +308,56 @@ func readInt16(f io.ReadSeeker, s int) (uint16, error) {
 }
 
 func readString(f io.ReadSeeker) (string, error) {
-	buf := []byte{}
+	buffer := bytes.NewBuffer(nil)
+	chunk := make([]byte, 64) // Read in chunks of 64 bytes
+
 	for {
-		char := make([]byte, 1)
-		if _, err := f.Read(char); err != nil {
+		n, err := f.Read(chunk)
+		if err != nil && err != io.EOF {
 			return "", err
 		}
-		if char[0] == byte(0) || len(char) == 0 {
-			return string(buf), nil
+
+		if n == 0 {
+			break
 		}
-		buf = append(buf, char[0])
+
+		// Look for null terminator in this chunk
+		nullIndex := bytes.IndexByte(chunk[:n], 0)
+		if nullIndex != -1 {
+			// Found the null terminator
+			buffer.Write(chunk[:nullIndex])
+
+			// Seek back to position right after the null terminator
+			_, err = f.Seek(int64(-(n - nullIndex - 1)), io.SeekCurrent)
+			if err != nil {
+				return "", err
+			}
+
+			return buffer.String(), nil
+		}
+
+		// No null terminator found, append the whole chunk
+		buffer.Write(chunk[:n])
+
+		if err == io.EOF {
+			break
+		}
 	}
+
+	// If we get here without finding a null terminator
+	if buffer.Len() == 0 {
+		return "", io.EOF
+	}
+
+	return buffer.String(), nil
 }
 
-func read3BytesBE(f io.ReadSeeker) (int, error) {
+func read3BytesBE(f io.ReadSeeker) (uint32, error) {
 	b := make([]byte, 3)
 	if _, err := f.Read(b); err != nil {
 		return 0, err
 	}
-	return int(uint(b[2]) | uint(b[1])<<8 | uint(b[0])<<16), nil
+	return uint32(b[2]) | uint32(b[1])<<8 | uint32(b[0])<<16, nil
 }
 
 func decryptContentToBuffer(encryptedFile *os.File, decryptedBuffer *bytes.Buffer, cipherHashTree cipher.Block, content Content) error {
@@ -349,12 +385,13 @@ func decryptContentToBuffer(encryptedFile *os.File, decryptedBuffer *bytes.Buffe
 		h2HashNum := int64(0)
 		h3HashNum := int64(0)
 
-		hashes := make([]byte, 0x400)
-		buffer := make([]byte, 0x400)
+		clear(hashes)
+		clear(hashesBuffer)
 
 		for chunkNum := int64(0); chunkNum < chunkCount; chunkNum++ {
-			encryptedFile.Read(buffer)
-			cipher.NewCBCDecrypter(cipherHashTree, make([]byte, aes.BlockSize)).CryptBlocks(hashes, buffer)
+			encryptedFile.Read(hashesBuffer)
+			clear(iv)
+			cipher.NewCBCDecrypter(cipherHashTree, iv).CryptBlocks(hashes, hashesBuffer)
 
 			h0Hashes := hashes[0:0x140]
 			h1Hashes := hashes[0x140:0x280]
@@ -369,23 +406,22 @@ func decryptContentToBuffer(encryptedFile *os.File, decryptedBuffer *bytes.Buffe
 			h1HashesHash := sha1.Sum(h1Hashes)
 			h2HashesHash := sha1.Sum(h2Hashes)
 
-			if !reflect.DeepEqual(h0HashesHash[:], h1Hash) {
+			if !bytes.Equal(h0HashesHash[:], h1Hash) {
 				return errors.New("h0 Hashes Hash mismatch")
 			}
-			if !reflect.DeepEqual(h1HashesHash[:], h2Hash) {
+			if !bytes.Equal(h1HashesHash[:], h2Hash) {
 				return errors.New("h1 Hashes Hash mismatch")
 			}
-			if !reflect.DeepEqual(h2HashesHash[:], h3Hash) {
+			if !bytes.Equal(h2HashesHash[:], h3Hash) {
 				return errors.New("h2 Hashes Hash mismatch")
 			}
 
-			decryptedData := make([]byte, 0xFC00)
-			encryptedFile.Read(decryptedData)
+			encryptedFile.Read(decryptedDataBuffer)
 
-			cipher.NewCBCDecrypter(cipherHashTree, h0Hash[:16]).CryptBlocks(decryptedData, decryptedData)
-			decryptedDataHash := sha1.Sum(decryptedData)
+			cipher.NewCBCDecrypter(cipherHashTree, h0Hash[:16]).CryptBlocks(decryptedDataBuffer, decryptedDataBuffer)
+			decryptedDataHash := sha1.Sum(decryptedDataBuffer)
 
-			if !reflect.DeepEqual(decryptedDataHash[:], h0Hash) {
+			if !bytes.Equal(decryptedDataHash[:], h0Hash) {
 				return errors.New("data block hash invalid")
 			}
 
@@ -393,7 +429,7 @@ func decryptContentToBuffer(encryptedFile *os.File, decryptedBuffer *bytes.Buffe
 			if err != nil {
 				return err
 			}
-			_, err = decryptedBuffer.Write(decryptedData)
+			_, err = decryptedBuffer.Write(decryptedDataBuffer)
 			if err != nil {
 				return err
 			}
@@ -422,14 +458,13 @@ func decryptContentToBuffer(encryptedFile *os.File, decryptedBuffer *bytes.Buffe
 			toRead := min(READ_SIZE, left)
 			toReadHash := min(READ_SIZE, leftHash)
 
-			encryptedContent := make([]byte, toRead)
-			_, err = io.ReadFull(encryptedFile, encryptedContent)
+			_, err = io.ReadFull(encryptedFile, readSizedBuffer[:toRead])
 			if err != nil {
 				return err
 			}
 
-			decryptedContent := make([]byte, len(encryptedContent))
-			cipherContent.CryptBlocks(decryptedContent, encryptedContent)
+			decryptedContent := make([]byte, toRead)
+			cipherContent.CryptBlocks(decryptedContent, readSizedBuffer[:toRead])
 			contentHash.Write(decryptedContent[:toReadHash])
 			_, err = decryptedBuffer.Write(decryptedContent)
 			if err != nil {
@@ -443,7 +478,7 @@ func decryptContentToBuffer(encryptedFile *os.File, decryptedBuffer *bytes.Buffe
 				break
 			}
 		}
-		if !reflect.DeepEqual(content.Hash[:sha1.Size], contentHash.Sum(nil)) {
+		if !bytes.Equal(content.Hash[:sha1.Size], contentHash.Sum(nil)) {
 			return errors.New("content hash mismatch")
 		}
 	}
@@ -466,7 +501,7 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 	}
 
 	// Check if all contents are present and how they are named
-	for i := 0; i < len(tmd.Contents); i++ {
+	for i := range tmd.Contents {
 		tmd.Contents[i].CIDStr = fmt.Sprintf("%08X", tmd.Contents[i].ID)
 		_, err := os.Stat(filepath.Join(path, tmd.Contents[i].CIDStr+".app"))
 		if err != nil {
@@ -489,7 +524,9 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 			cetk.Seek(0x1BF, 0)
 			encryptedTitleKey = make([]byte, 0x10)
 			cetk.Read(encryptedTitleKey)
-			cetk.Close()
+			if err := cetk.Close(); err != nil {
+				return err
+			}
 		}
 	}
 	c, err := aes.NewCipher(commonKey)
@@ -516,11 +553,15 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 
 	decryptedBuffer := bytes.Buffer{}
 	if err := decryptContentToBuffer(fstEncFile, &decryptedBuffer, cipherHashTree, tmd.Contents[0]); err != nil {
-		fstEncFile.Close()
+		if err := fstEncFile.Close(); err != nil {
+			return err
+		}
 		return err
 	}
-	fstEncFile.Close()
-	fst := FSTData{FSTReader: bytes.NewReader(bytes.Clone(decryptedBuffer.Bytes())), FSTEntries: make([]FEntry, 0), EntryCount: 0, Entries: 0, NamesOffset: 0}
+	if err := fstEncFile.Close(); err != nil {
+		return err
+	}
+	fst := FSTData{FSTReader: bytes.NewReader(decryptedBuffer.Bytes()), FSTEntries: make([]FEntry, 0), EntryCount: 0, Entries: 0, NamesOffset: 0}
 	if err := fst.Parse(); err != nil {
 		return err
 	}

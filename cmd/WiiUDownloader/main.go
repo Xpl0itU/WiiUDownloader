@@ -15,6 +15,11 @@ import (
 )
 
 func main() {
+	runtime.LockOSThread() // macOS Crash Fix
+
+	// Initialize Go's threading system to avoid races
+	runtime.GOMAXPROCS(runtime.NumCPU())
+
 	// Check if user is running macOS
 	if runtime.GOOS == "darwin" {
 		execPath, err := os.Executable()
@@ -73,29 +78,22 @@ func main() {
 			}
 			assistant.SetPostSetupCallback(func() {
 				win.SetApplicationForGTKWindow(app)
-				glib.IdleAddPriority(glib.PRIORITY_HIGH, func() {
-					win.ShowAll()
-					app.AddWindow(win.window)
-					app.GetActiveWindow().Show()
-				})
-			})
-			glib.IdleAddPriority(glib.PRIORITY_HIGH, func() {
-				assistant.assistantWindow.ShowAll()
-				app.AddWindow(assistant.assistantWindow)
-				app.GetActiveWindow().Show()
-				win.window.Hide()
-			})
-		} else {
-			win.SetApplicationForGTKWindow(app)
-			glib.IdleAddPriority(glib.PRIORITY_HIGH, func() {
 				win.ShowAll()
 				app.AddWindow(win.window)
 				app.GetActiveWindow().Show()
 			})
+
+			assistant.assistantWindow.ShowAll()
+			app.AddWindow(assistant.assistantWindow)
+			app.GetActiveWindow().Show()
+			win.window.Hide()
+		} else {
+			win.SetApplicationForGTKWindow(app)
+			win.ShowAll()
+			app.AddWindow(win.window)
+			app.GetActiveWindow().Show()
 		}
 	})
-	app.ConnectAfter("activate", func(app *gtk.Application) {
-		gtk.Main()
-	})
-	glib.ApplicationGetDefault().Run(os.Args)
+
+	app.Run(os.Args)
 }

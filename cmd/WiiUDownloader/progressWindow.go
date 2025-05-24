@@ -72,16 +72,11 @@ type ProgressWindow struct {
 }
 
 func (pw *ProgressWindow) SetGameTitle(title string) {
-	glib.IdleAdd(func() {
-		pw.gameLabel.SetText(title)
-	})
-	for gtk.EventsPending() {
-		gtk.MainIteration()
-	}
+	pw.gameLabel.SetText(title)
 }
 
 func (pw *ProgressWindow) UpdateDownloadProgress(downloaded int64, filename string) {
-	glib.IdleAdd(func() {
+	glib.IdleAdd(func() bool {
 		pw.cancelButton.SetSensitive(true)
 		pw.progressMutex.Lock()
 		pw.progressPerFile[filename] += downloaded
@@ -93,21 +88,17 @@ func (pw *ProgressWindow) UpdateDownloadProgress(downloaded int64, filename stri
 		pw.bar.SetFraction(float64(total) / float64(pw.totalToDownload))
 		pw.speedAverager.AddSpeed(calculateDownloadSpeed(total, pw.startTime, time.Now()))
 		pw.bar.SetText(fmt.Sprintf("Downloading... (%s/%s) (%s/s)", humanize.Bytes(uint64(total)), humanize.Bytes(uint64(pw.totalToDownload)), humanize.Bytes(uint64(int64(pw.speedAverager.GetAverageSpeed())))))
+		return false
 	})
-	for gtk.EventsPending() {
-		gtk.MainIteration()
-	}
 }
 
 func (pw *ProgressWindow) UpdateDecryptionProgress(progress float64) {
-	glib.IdleAdd(func() {
+	glib.IdleAdd(func() bool {
 		pw.cancelButton.SetSensitive(false)
 		pw.bar.SetFraction(progress)
 		pw.bar.SetText(fmt.Sprintf("Decrypting (%.2f%%)", progress*100))
+		return false
 	})
-	for gtk.EventsPending() {
-		gtk.MainIteration()
-	}
 }
 
 func (pw *ProgressWindow) Cancelled() bool {
@@ -118,13 +109,12 @@ func (pw *ProgressWindow) Cancelled() bool {
 }
 
 func (pw *ProgressWindow) SetCancelled() {
-	glib.IdleAdd(func() {
+	glib.IdleAdd(func() bool {
+		pw.cancelled = true
 		pw.cancelButton.SetSensitive(false)
-		pw.SetGameTitle("Cancelling...")
+		pw.gameLabel.SetText("Cancelling...")
+		return false
 	})
-	for gtk.EventsPending() {
-		gtk.MainIteration()
-	}
 }
 
 func (pw *ProgressWindow) SetDownloadSize(size int64) {

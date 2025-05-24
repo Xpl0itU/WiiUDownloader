@@ -423,13 +423,24 @@ func (mw *MainWindow) ShowAll() {
 		if err != nil {
 			return
 		}
-		selectedPath, err := dialog.Directory().Title("Select a path to save the games to").Browse()
+		dialog := dialog.Directory().Title("Select a path to save the games to")
+		config, err := loadConfig()
+		if err != nil {
+			return
+		}
+		if config.LastSelectedPath != "" {
+			dialog.SetStartDir(config.LastSelectedPath) // no need to check validity, startDir only works if it is a valid existing directory, else works as if not set
+		}
+		selectedPath, err := dialog.Browse()
 		if err != nil {
 			glib.IdleAdd(func() {
 				mw.progressWindow.Window.Hide()
 			})
 			return
 		}
+		config.LastSelectedPath = selectedPath
+		_ = config.Save() // ignore error on saving new path
+
 		mw.progressWindow.Window.ShowAll()
 
 		go func() {

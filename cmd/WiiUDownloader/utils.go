@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 	"strings"
 
 	"github.com/gotk3/gotk3/gtk"
@@ -46,4 +47,14 @@ func setDarkTheme(darkMode bool) {
 		log.Println(err.Error())
 	}
 	gSettings.SetProperty("gtk-application-prefer-dark-theme", darkMode)
+}
+
+func isValidPath(path string) bool {
+	if path == "" {
+		return false
+	}
+	if pathInfo, err := os.Stat(path); os.IsNotExist(err) || !pathInfo.IsDir() {
+		return false
+	}
+	return true
 }

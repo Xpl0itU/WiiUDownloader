@@ -111,9 +111,6 @@ func (mw *MainWindow) updateTitles(titles []wiiudownloader.TitleEntry) {
 }
 
 func (mw *MainWindow) createConfigWindow(config *Config) error {
-	if mw.configWindow != nil {
-		return nil
-	}
 	configWindow, err := NewConfigWindow(config)
 	if err != nil {
 		return err
@@ -428,23 +425,23 @@ func (mw *MainWindow) ShowAll() {
 		if err != nil {
 			return
 		}
-		if config.LastSelectedPath != "" {
-			dialog.SetStartDir(config.LastSelectedPath) // no need to check validity, startDir only works if it is a valid existing directory, else works as if not set
+
+		if !(isValidPath(config.LastSelectedPath)) {
+			selectedPath, err := dialog.Browse()
+			if err != nil {
+				glib.IdleAdd(func() {
+					mw.progressWindow.Window.Hide()
+				})
+				return
+			}
+			config.LastSelectedPath = selectedPath
+			_ = config.Save() // ignore error on saving new path
 		}
-		selectedPath, err := dialog.Browse()
-		if err != nil {
-			glib.IdleAdd(func() {
-				mw.progressWindow.Window.Hide()
-			})
-			return
-		}
-		config.LastSelectedPath = selectedPath
-		_ = config.Save() // ignore error on saving new path
 
 		mw.progressWindow.Window.ShowAll()
 
 		go func() {
-			if err := mw.onDownloadQueueClicked(selectedPath); err != nil {
+			if err := mw.onDownloadQueueClicked(config.LastSelectedPath); err != nil {
 				glib.IdleAdd(func() {
 					mw.showError(err)
 				})
@@ -689,7 +686,7 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string) error {
 	})
 
 	mw.queuePane.Clear()
-	glib.IdleAddPriority(glib.PRIORITY_HIGH, func() {
+	glib.IdleAdd(func() {
 		mw.progressWindow.Window.Hide()
 	})
 	mw.updateTitlesInQueue()

@@ -33,20 +33,64 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 	darkModeCheck.SetActive(config.DarkMode)
 	grid.Attach(darkModeCheck, 0, 0, 1, 1)
 
+	downloadPathLabel, err := gtk.LabelNew("Download Path:")
+	if err != nil {
+		return nil, err
+	}
+	grid.AttachNextTo(downloadPathLabel, darkModeCheck, gtk.POS_BOTTOM, 1, 1)
+
+	downloadPathEntry, err := gtk.EntryNew()
+	if err != nil {
+		return nil, err
+	}
+	downloadPathEntry.SetText(config.LastSelectedPath)
+	downloadPathEntry.SetWidthChars(40)
+	downloadPathEntry.SetMarginEnd(10)
+	grid.AttachNextTo(downloadPathEntry, downloadPathLabel, gtk.POS_RIGHT, 1, 1)
+
+	downloadPathButton, err := gtk.ButtonNewWithLabel("Browse")
+	if err != nil {
+		return nil, err
+	}
+	downloadPathButton.Connect("clicked", func() {
+		dialog, err := gtk.FileChooserDialogNewWith2Buttons("Select Download Path", win, gtk.FILE_CHOOSER_ACTION_SELECT_FOLDER, "Select", gtk.RESPONSE_ACCEPT, "Cancel", gtk.RESPONSE_CANCEL)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		defer dialog.Destroy()
+		if dialog.Run() == gtk.RESPONSE_ACCEPT {
+			downloadPathEntry.SetText(dialog.GetFilename())
+		}
+	})
+	grid.AttachNextTo(downloadPathButton, downloadPathEntry, gtk.POS_RIGHT, 1, 1)
+
 	saveButton, err := gtk.ButtonNewWithLabel("Save and Apply")
 	if err != nil {
 		return nil, err
 	}
-	grid.AttachNextTo(saveButton, darkModeCheck, gtk.POS_BOTTOM, 1, 1)
+	grid.AttachNextTo(saveButton, downloadPathLabel, gtk.POS_BOTTOM, 1, 1)
 
 	saveButton.Connect("clicked", func() {
 		config.DarkMode = darkModeCheck.GetActive()
-		if err := config.Save(); err != nil {
-			log.Println(err)
+
+		var newPath = downloadPathEntry.GetLayout().GetText()
+		if newPath != "" && !isValidPath(newPath) {
+			errorDialog := gtk.MessageDialogNew(win, gtk.DIALOG_MODAL, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, "Invalid download path. Please select a valid directory.")
+			defer errorDialog.Destroy()
+			errorDialog.Run()
+		} else {
+			config.LastSelectedPath = newPath
+
+			if err := config.Save(); err != nil {
+				log.Println(err)
+			}
 		}
 	})
 
 	win.SetDefaultSize(grid.GetAllocatedWidth()+125, grid.GetAllocatedHeight()+70)
+	win.SetPosition(gtk.WIN_POS_CENTER_ON_PARENT)
+	win.SetBorderWidth(15)
 
 	configWindow := ConfigWindow{
 		Window: win,

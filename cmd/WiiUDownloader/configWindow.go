@@ -67,7 +67,7 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 	})
 	grid.AttachNextTo(downloadPathButton, downloadPathEntry, gtk.POS_RIGHT, 1, 1)
 
-	rememberPathCheck, err := gtk.CheckButtonNewWithLabel("Remember last path, do not ask every time")
+	rememberPathCheck, err := gtk.CheckButtonNewWithLabel("Automatically save files to last used location")
 	if err != nil {
 		return nil, err
 	}

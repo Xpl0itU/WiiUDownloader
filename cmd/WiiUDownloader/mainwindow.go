@@ -426,7 +426,11 @@ func (mw *MainWindow) ShowAll() {
 			return
 		}
 
-		if !(isValidPath(config.LastSelectedPath)) {
+		if !config.RememberLastPath || !(isValidPath(config.LastSelectedPath)) {
+			if config.LastSelectedPath != "" {
+				dialog.SetStartDir(config.LastSelectedPath) // no need to check validity, startDir only works if it is a valid existing directory, else works as if not set
+			}
+
 			selectedPath, err := dialog.Browse()
 			if err != nil {
 				glib.IdleAdd(func() {

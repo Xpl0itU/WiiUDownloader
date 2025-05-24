@@ -20,6 +20,7 @@ type Config struct {
 	SelectedRegion          uint8  `koanf:"selectedRegion"`
 	DidInitialSetup         bool   `koanf:"didInitialSetup"`
 	LastSelectedPath        string `koanf:"lastSelectedPath"`
+	RememberLastPath        bool   `koanf:"rememberLastPath"`
 	saveConfigCallback      func()
 	saveMutex               *sync.Mutex
 }
@@ -42,6 +43,7 @@ func getDefaultConfig() *Config {
 		SelectedRegion:          wiiudownloader.MCP_REGION_EUROPE | wiiudownloader.MCP_REGION_USA | wiiudownloader.MCP_REGION_JAPAN,
 		DidInitialSetup:         false,
 		LastSelectedPath:        "",
+		RememberLastPath:        false,
 		saveConfigCallback:      nil,
 		saveMutex:               &sync.Mutex{},
 	}

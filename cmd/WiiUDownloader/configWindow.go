@@ -37,6 +37,8 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 	if err != nil {
 		return nil, err
 	}
+	downloadPathLabel.SetHAlign(gtk.ALIGN_START)
+	downloadPathLabel.SetMarginTop(10)
 	grid.AttachNextTo(downloadPathLabel, darkModeCheck, gtk.POS_BOTTOM, 1, 1)
 
 	downloadPathEntry, err := gtk.EntryNew()
@@ -46,7 +48,7 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 	downloadPathEntry.SetText(config.LastSelectedPath)
 	downloadPathEntry.SetWidthChars(40)
 	downloadPathEntry.SetMarginEnd(10)
-	grid.AttachNextTo(downloadPathEntry, downloadPathLabel, gtk.POS_RIGHT, 1, 1)
+	grid.AttachNextTo(downloadPathEntry, downloadPathLabel, gtk.POS_BOTTOM, 1, 1)
 
 	downloadPathButton, err := gtk.ButtonNewWithLabel("Browse")
 	if err != nil {
@@ -65,11 +67,20 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 	})
 	grid.AttachNextTo(downloadPathButton, downloadPathEntry, gtk.POS_RIGHT, 1, 1)
 
+	rememberPathCheck, err := gtk.CheckButtonNewWithLabel("Remember last path, do not ask every time")
+	if err != nil {
+		return nil, err
+	}
+	rememberPathCheck.SetActive(config.RememberLastPath)
+	rememberPathCheck.SetMarginTop(10)
+	grid.AttachNextTo(rememberPathCheck, downloadPathEntry, gtk.POS_BOTTOM, 1, 1)
+
 	saveButton, err := gtk.ButtonNewWithLabel("Save and Apply")
 	if err != nil {
 		return nil, err
 	}
-	grid.AttachNextTo(saveButton, downloadPathLabel, gtk.POS_BOTTOM, 1, 1)
+	saveButton.SetMarginTop(10)
+	grid.AttachNextTo(saveButton, rememberPathCheck, gtk.POS_BOTTOM, 1, 1)
 
 	saveButton.Connect("clicked", func() {
 		config.DarkMode = darkModeCheck.GetActive()
@@ -79,12 +90,14 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 			errorDialog := gtk.MessageDialogNew(win, gtk.DIALOG_MODAL, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, "Invalid download path. Please select a valid directory.")
 			defer errorDialog.Destroy()
 			errorDialog.Run()
-		} else {
-			config.LastSelectedPath = newPath
+			return
+		}
 
-			if err := config.Save(); err != nil {
-				log.Println(err)
-			}
+		config.LastSelectedPath = newPath
+		config.RememberLastPath = rememberPathCheck.GetActive()
+
+		if err := config.Save(); err != nil {
+			log.Println(err)
 		}
 	})
 

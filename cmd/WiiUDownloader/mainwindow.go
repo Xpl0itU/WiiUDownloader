@@ -384,7 +384,7 @@ func (mw *MainWindow) ShowAll() {
 		log.Fatalln("Unable to create box:", err)
 	}
 
-	downloadQueueButton, err := gtk.ButtonNewWithLabel("Download queue")
+	downloadQueueButton, err := gtk.ButtonNewWithLabel("Download Queue")
 	if err != nil {
 		log.Fatalln("Unable to create button:", err)
 	}

@@ -83,6 +83,8 @@ func NewQueuePane() (*QueuePane, error) {
 	if err != nil {
 		return nil, err
 	}
+	removeFromQueueButton.SetSizeRequest(-1, 42)
+
 	removeFromQueueButton.Connect("clicked", func() {
 		selection, err := titleTreeView.GetSelection()
 		if err != nil {

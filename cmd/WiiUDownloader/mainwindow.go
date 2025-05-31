@@ -689,7 +689,6 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string) error {
 		}
 	})
 
-	mw.queuePane.Clear()
 	glib.IdleAdd(func() {
 		mw.progressWindow.Window.Hide()
 	})

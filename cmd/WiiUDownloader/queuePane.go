@@ -11,11 +11,12 @@ import (
 )
 
 type QueuePane struct {
-	container     *gtk.Box
-	titleTreeView *gtk.TreeView
-	titleQueue    []wiiudownloader.TitleEntry
-	store         *gtk.ListStore
-	updateFunc    func()
+	container             *gtk.Box
+	titleTreeView         *gtk.TreeView
+	titleQueue            []wiiudownloader.TitleEntry
+	removeFromQueueButton *gtk.Button
+	store                 *gtk.ListStore
+	updateFunc            func()
 }
 
 func createColumn(renderer *gtk.CellRendererText, title string, id int) *gtk.TreeViewColumn {
@@ -72,18 +73,19 @@ func NewQueuePane() (*QueuePane, error) {
 	}
 	queueVBox.PackStart(scrolledWindow, true, true, 0)
 
-	queuePane := QueuePane{
-		container:     queueVBox,
-		titleTreeView: titleTreeView,
-		store:         store,
-		titleQueue:    make([]wiiudownloader.TitleEntry, 0),
-	}
-
 	removeFromQueueButton, err := gtk.ButtonNewWithLabel("Remove from Queue")
 	if err != nil {
 		return nil, err
 	}
 	removeFromQueueButton.SetSizeRequest(-1, 42)
+
+	queuePane := QueuePane{
+		container:             queueVBox,
+		titleTreeView:         titleTreeView,
+		store:                 store,
+		titleQueue:            make([]wiiudownloader.TitleEntry, 0),
+		removeFromQueueButton: removeFromQueueButton,
+	}
 
 	removeFromQueueButton.Connect("clicked", func() {
 		selection, err := titleTreeView.GetSelection()

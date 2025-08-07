@@ -30,6 +30,8 @@ type MainWindow struct {
 	queuePane                       *QueuePane
 	treeView                        *gtk.TreeView
 	searchEntry                     *gtk.Entry
+	downloadQueueButton             *gtk.Button
+	decryptContentsCheckbox         *gtk.CheckButton
 	deleteEncryptedContentsCheckbox *gtk.CheckButton
 	deleteEncryptedContents         bool
 	progressWindow                  *ProgressWindow
@@ -384,16 +386,16 @@ func (mw *MainWindow) ShowAll() {
 		log.Fatalln("Unable to create box:", err)
 	}
 
-	downloadQueueButton, err := gtk.ButtonNewWithLabel("Download Queue")
+	mw.downloadQueueButton, err = gtk.ButtonNewWithLabel("Download Queue")
 	if err != nil {
 		log.Fatalln("Unable to create button:", err)
 	}
 
-	decryptContentsCheckbox, err := gtk.CheckButtonNewWithLabel("Decrypt contents")
+	mw.decryptContentsCheckbox, err = gtk.CheckButtonNewWithLabel("Decrypt contents")
 	if err != nil {
 		log.Fatalln("Unable to create button:", err)
 	}
-	decryptContentsCheckbox.SetActive(mw.decryptContents)
+	mw.decryptContentsCheckbox.SetActive(mw.decryptContents)
 
 	mw.deleteEncryptedContentsCheckbox, err = gtk.CheckButtonNewWithLabel("Delete encrypted contents after decryption")
 	if err != nil {
@@ -412,7 +414,7 @@ func (mw *MainWindow) ShowAll() {
 		}
 	})
 
-	downloadQueueButton.Connect("clicked", func() {
+	mw.downloadQueueButton.Connect("clicked", func() {
 		if mw.queuePane.IsQueueEmpty() {
 			return
 		}
@@ -445,6 +447,33 @@ func (mw *MainWindow) ShowAll() {
 		mw.progressWindow.Window.ShowAll()
 
 		go func() {
+			// Disable the window while downloading to prevent multiple clicks
+			mw.treeView.SetSensitive(false)
+			defer mw.treeView.SetSensitive(true)
+
+			for _, button := range mw.categoryButtons {
+				button.SetSensitive(false)
+			}
+			defer func() {
+				for _, button := range mw.categoryButtons {
+					button.SetSensitive(true)
+				}
+			}()
+
+			mw.searchEntry.SetSensitive(false)
+			defer mw.searchEntry.SetSensitive(true)
+
+			mw.downloadQueueButton.SetSensitive(false)
+			defer mw.downloadQueueButton.SetSensitive(true)
+
+			mw.deleteEncryptedContentsCheckbox.SetSensitive(false)
+			defer mw.deleteEncryptedContentsCheckbox.SetSensitive(true)
+
+			mw.decryptContentsCheckbox.SetSensitive(false)
+			defer mw.decryptContentsCheckbox.SetSensitive(true)
+
+			mw.queuePane.removeFromQueueButton.SetSensitive(false)
+			defer mw.queuePane.removeFromQueueButton.SetSensitive(true)
 			if err := mw.onDownloadQueueClicked(config.LastSelectedPath); err != nil {
 				glib.IdleAdd(func() {
 					mw.showError(err)
@@ -452,14 +481,14 @@ func (mw *MainWindow) ShowAll() {
 			}
 		}()
 	})
-	decryptContentsCheckbox.Connect("clicked", mw.onDecryptContentsClicked)
-	bottomhBox.PackStart(downloadQueueButton, false, false, 0)
+	mw.decryptContentsCheckbox.Connect("clicked", mw.onDecryptContentsClicked)
+	bottomhBox.PackStart(mw.downloadQueueButton, false, false, 0)
 
 	checkboxvBox, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
 	if err != nil {
 		log.Fatalln("Unable to create box:", err)
 	}
-	checkboxvBox.PackStart(decryptContentsCheckbox, false, false, 0)
+	checkboxvBox.PackStart(mw.decryptContentsCheckbox, false, false, 0)
 	checkboxvBox.PackEnd(mw.deleteEncryptedContentsCheckbox, false, false, 0)
 
 	bottomhBox.PackStart(checkboxvBox, false, false, 0)

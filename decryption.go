@@ -98,8 +98,9 @@ func extractFileHash(src *os.File, partDataOffset uint64, fileOffset uint64, siz
 			writeSize = int(size)
 		}
 
-		if _, err := io.ReadFull(src, encryptedHashedContentBuffer); err != nil {
-			return fmt.Errorf("could not read %d bytes from '%s': %w", BLOCK_SIZE_HASHED, path, err)
+		if n, err := io.ReadFull(src, encryptedHashedContentBuffer); err != nil {
+			return fmt.Errorf("failed to read encrypted content block at offset %d (read %d of %d bytes): %w",
+				partDataOffset+roffset, n, BLOCK_SIZE_HASHED, err)
 		}
 
 		clear(hashes)
@@ -175,7 +176,8 @@ func extractFile(src *os.File, partDataOffset uint64, fileOffset uint64, size ui
 		}
 
 		if n, err := io.ReadFull(src, encryptedContentBuffer); err != nil && n != BLOCK_SIZE {
-			return fmt.Errorf("could not read %d bytes from '%s': %w", BLOCK_SIZE, path, err)
+			return fmt.Errorf("failed to read encrypted content block at offset %d (read %d of %d bytes): %w",
+				partDataOffset+roffset, n, BLOCK_SIZE_HASHED, err)
 		}
 
 		aesCipher.CryptBlocks(decryptedContentBuffer, encryptedContentBuffer)

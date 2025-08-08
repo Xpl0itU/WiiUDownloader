@@ -1,12 +1,12 @@
 package wiiudownloader
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/sha1"
 	"encoding/binary"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -28,7 +28,6 @@ var (
 )
 
 var (
-	iv           = make([]byte, aes.BlockSize)
 	hashes       = make([]byte, HASHES_SIZE)
 	hashesBuffer = make([]byte, HASHES_SIZE)
 )
@@ -80,6 +79,8 @@ func extractFileHash(src *os.File, partDataOffset uint64, fileOffset uint64, siz
 		return fmt.Errorf("could not create '%s': %w", path, err)
 	}
 	defer dst.Close()
+	bw := bufio.NewWriterSize(dst, BLOCK_SIZE_HASHED)
+	defer bw.Flush()
 
 	roffset := fileOffset / HASH_BLOCK_SIZE * BLOCK_SIZE_HASHED
 	soffset := fileOffset - (fileOffset / HASH_BLOCK_SIZE * HASH_BLOCK_SIZE)
@@ -98,37 +99,32 @@ func extractFileHash(src *os.File, partDataOffset uint64, fileOffset uint64, siz
 			writeSize = int(size)
 		}
 
-		if n, err := io.ReadFull(src, encryptedHashedContentBuffer); err != nil {
+		if _, err := io.ReadFull(src, encryptedHashedContentBuffer); err != nil {
 			return fmt.Errorf("failed to read encrypted content block at offset %d (read %d of %d bytes): %w",
-				partDataOffset+roffset, n, BLOCK_SIZE_HASHED, err)
+				partDataOffset+roffset, 0, BLOCK_SIZE_HASHED, err)
 		}
 
-		clear(hashes)
-		clear(iv)
-		iv[1] = byte(contentId)
-		cipher.NewCBCDecrypter(cipherHashTree, iv).CryptBlocks(hashes, encryptedHashedContentBuffer[:HASHES_SIZE])
+		var zeroIV [aes.BlockSize]byte
+		cipher.NewCBCDecrypter(cipherHashTree, zeroIV[:]).CryptBlocks(hashes, encryptedHashedContentBuffer[:HASHES_SIZE])
 
 		h0Hash := hashes[0x14*blockNumber : 0x14*blockNumber+sha1.Size]
-		iv = hashes[0x14*blockNumber : 0x14*blockNumber+aes.BlockSize]
 
-		if blockNumber == 0 {
-			iv[1] ^= byte(contentId)
-		}
+		var ivBlock [aes.BlockSize]byte
+		copy(ivBlock[:], hashes[0x14*blockNumber:0x14*blockNumber+aes.BlockSize])
 
-		cipher.NewCBCDecrypter(cipherHashTree, iv).CryptBlocks(decryptedHashedContentBuffer, encryptedHashedContentBuffer[HASHES_SIZE:])
+		cipher.NewCBCDecrypter(cipherHashTree, ivBlock[:]).CryptBlocks(decryptedHashedContentBuffer, encryptedHashedContentBuffer[HASHES_SIZE:])
 
 		hash := sha1.Sum(decryptedHashedContentBuffer[:HASH_BLOCK_SIZE])
-
 		if !bytes.Equal(hash[:], h0Hash) {
 			return errors.New("h0 hash mismatch")
 		}
 
-		size -= uint64(writeSize)
-
-		_, err = dst.Write(decryptedHashedContentBuffer[soffset : soffset+uint64(writeSize)])
+		n, err := bw.Write(decryptedHashedContentBuffer[soffset : soffset+uint64(writeSize)])
 		if err != nil {
 			return err
 		}
+
+		size -= uint64(n)
 
 		blockNumber++
 		if blockNumber >= 16 {
@@ -152,6 +148,8 @@ func extractFile(src *os.File, partDataOffset uint64, fileOffset uint64, size ui
 		return fmt.Errorf("could not create '%s': %w", path, err)
 	}
 	defer dst.Close()
+	bw := bufio.NewWriterSize(dst, BLOCK_SIZE)
+	defer bw.Flush()
 
 	roffset := fileOffset / BLOCK_SIZE * BLOCK_SIZE
 	soffset := fileOffset - (fileOffset / BLOCK_SIZE * BLOCK_SIZE)
@@ -165,24 +163,23 @@ func extractFile(src *os.File, partDataOffset uint64, fileOffset uint64, size ui
 		return err
 	}
 
-	clear(iv)
-	iv[1] = byte(contentId)
-
-	aesCipher := cipher.NewCBCDecrypter(cipherHashTree, iv)
+	var ivLocal [aes.BlockSize]byte
+	ivLocal[1] = byte(contentId)
+	aesCipher := cipher.NewCBCDecrypter(cipherHashTree, ivLocal[:])
 
 	for size > 0 {
 		if uint64(writeSize) > size {
 			writeSize = int(size)
 		}
 
-		if n, err := io.ReadFull(src, encryptedContentBuffer); err != nil && n != BLOCK_SIZE {
-			return fmt.Errorf("failed to read encrypted content block at offset %d (read %d of %d bytes): %w",
-				partDataOffset+roffset, n, BLOCK_SIZE_HASHED, err)
+		if _, err := io.ReadFull(src, encryptedContentBuffer); err != nil {
+			return fmt.Errorf("failed to read encrypted content block at offset %d (expected %d bytes): %w",
+				partDataOffset+roffset, BLOCK_SIZE, err)
 		}
 
 		aesCipher.CryptBlocks(decryptedContentBuffer, encryptedContentBuffer)
 
-		n, err := dst.Write(decryptedContentBuffer[soffset : soffset+uint64(writeSize)])
+		n, err := bw.Write(decryptedContentBuffer[soffset : soffset+uint64(writeSize)])
 		if err != nil {
 			return err
 		}
@@ -371,6 +368,12 @@ func decryptContentToBuffer(encryptedFile *os.File, decryptedBuffer *bytes.Buffe
 	encryptedSize := encryptedStat.Size()
 	path := filepath.Dir(encryptedFile.Name())
 
+	if hasHashTree {
+		decryptedBuffer.Grow(int(encryptedSize))
+	} else {
+		decryptedBuffer.Grow(int(content.Size))
+	}
+
 	if hasHashTree { // if has a hash tree
 		chunkCount := encryptedSize / 0x10000
 		h3Data, err := os.ReadFile(filepath.Join(path, fmt.Sprintf("%s.h3", content.CIDStr)))
@@ -378,7 +381,7 @@ func decryptContentToBuffer(encryptedFile *os.File, decryptedBuffer *bytes.Buffe
 			return err
 		}
 		h3BytesSHASum := sha1.Sum(h3Data)
-		if hex.EncodeToString(h3BytesSHASum[:]) != hex.EncodeToString(content.Hash) {
+		if !bytes.Equal(h3BytesSHASum[:], content.Hash[:sha1.Size]) {
 			return errors.New("H3 Hash mismatch")
 		}
 
@@ -391,9 +394,11 @@ func decryptContentToBuffer(encryptedFile *os.File, decryptedBuffer *bytes.Buffe
 		clear(hashesBuffer)
 
 		for chunkNum := int64(0); chunkNum < chunkCount; chunkNum++ {
-			encryptedFile.Read(hashesBuffer)
-			clear(iv)
-			cipher.NewCBCDecrypter(cipherHashTree, iv).CryptBlocks(hashes, hashesBuffer)
+			if _, err := io.ReadFull(encryptedFile, hashesBuffer); err != nil {
+				return err
+			}
+			var zeroIV [aes.BlockSize]byte
+			cipher.NewCBCDecrypter(cipherHashTree, zeroIV[:]).CryptBlocks(hashes, hashesBuffer)
 
 			h0Hashes := hashes[0:0x140]
 			h1Hashes := hashes[0x140:0x280]
@@ -418,7 +423,9 @@ func decryptContentToBuffer(encryptedFile *os.File, decryptedBuffer *bytes.Buffe
 				return errors.New("h2 Hashes Hash mismatch")
 			}
 
-			encryptedFile.Read(decryptedDataBuffer)
+			if _, err := io.ReadFull(encryptedFile, decryptedDataBuffer); err != nil {
+				return err
+			}
 
 			cipher.NewCBCDecrypter(cipherHashTree, h0Hash[:16]).CryptBlocks(decryptedDataBuffer, decryptedDataBuffer)
 			decryptedDataHash := sha1.Sum(decryptedDataBuffer)
@@ -427,12 +434,10 @@ func decryptContentToBuffer(encryptedFile *os.File, decryptedBuffer *bytes.Buffe
 				return errors.New("data block hash invalid")
 			}
 
-			_, err = decryptedBuffer.Write(hashes)
-			if err != nil {
+			if _, err = decryptedBuffer.Write(hashes); err != nil {
 				return err
 			}
-			_, err = decryptedBuffer.Write(decryptedDataBuffer)
-			if err != nil {
+			if _, err = decryptedBuffer.Write(decryptedDataBuffer); err != nil {
 				return err
 			}
 
@@ -451,25 +456,26 @@ func decryptContentToBuffer(encryptedFile *os.File, decryptedBuffer *bytes.Buffe
 			}
 		}
 	} else {
-		cipherContent := cipher.NewCBCDecrypter(cipherHashTree, append(content.Index, make([]byte, 14)...))
+		var ivContent [aes.BlockSize]byte
+		copy(ivContent[:], content.Index)
+		cipherContent := cipher.NewCBCDecrypter(cipherHashTree, ivContent[:])
 		contentHash := sha1.New()
 		left := content.Size
 		leftHash := content.Size
+
+		decBuf := make([]byte, READ_SIZE)
 
 		for i := 0; i <= int(content.Size/READ_SIZE)+1; i++ {
 			toRead := min(READ_SIZE, left)
 			toReadHash := min(READ_SIZE, leftHash)
 
-			_, err = io.ReadFull(encryptedFile, readSizedBuffer[:toRead])
-			if err != nil {
+			if _, err = io.ReadFull(encryptedFile, readSizedBuffer[:toRead]); err != nil {
 				return err
 			}
 
-			decryptedContent := make([]byte, toRead)
-			cipherContent.CryptBlocks(decryptedContent, readSizedBuffer[:toRead])
-			contentHash.Write(decryptedContent[:toReadHash])
-			_, err = decryptedBuffer.Write(decryptedContent)
-			if err != nil {
+			cipherContent.CryptBlocks(decBuf[:toRead], readSizedBuffer[:toRead])
+			contentHash.Write(decBuf[:toReadHash])
+			if _, err = decryptedBuffer.Write(decBuf[:toRead]); err != nil {
 				return err
 			}
 
@@ -523,9 +529,12 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 	if _, err := os.Stat(ticketPath); err == nil {
 		cetk, err := os.Open(ticketPath)
 		if err == nil {
-			cetk.Seek(0x1BF, 0)
+			_, _ = cetk.Seek(0x1BF, 0)
 			encryptedTitleKey = make([]byte, 0x10)
-			cetk.Read(encryptedTitleKey)
+			if _, err := io.ReadFull(cetk, encryptedTitleKey); err != nil {
+				_ = cetk.Close()
+				return err
+			}
 			if err := cetk.Close(); err != nil {
 				return err
 			}
@@ -536,9 +545,11 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 		return err
 	}
 
-	titleIDBytes := make([]byte, 8)
-	binary.BigEndian.PutUint64(titleIDBytes, tmd.TitleID)
-	cbc := cipher.NewCBCDecrypter(c, append(titleIDBytes, make([]byte, 8)...))
+	var titleIDBytes [8]byte
+	binary.BigEndian.PutUint64(titleIDBytes[:], tmd.TitleID)
+	var ivTitle [16]byte
+	copy(ivTitle[:], titleIDBytes[:])
+	cbc := cipher.NewCBCDecrypter(c, ivTitle[:])
 
 	decryptedTitleKey := make([]byte, len(encryptedTitleKey))
 	cbc.CryptBlocks(decryptedTitleKey, encryptedTitleKey)

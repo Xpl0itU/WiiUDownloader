@@ -11,6 +11,10 @@ WiiUDownloader is a Golang program that allows you to download Wii U games from 
 - Filter titles based on name or title ID.
 - Select regions (Japan, USA, and Europe) to filter available titles.
 
+## Usage Guide
+
+Check the [WiiUDownloader Usage Guide here](https://xpl0itu.github.io/WiiUDownloaderDocs/docs/)
+
 ## Installation
 
 To install WiiUDownloader, download the appropriate binary for your operating system from the links below:

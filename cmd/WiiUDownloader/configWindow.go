@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 
+	"github.com/Xpl0itU/dialog"
 	"github.com/gotk3/gotk3/gtk"
 )
 
@@ -55,14 +56,12 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 		return nil, err
 	}
 	downloadPathButton.Connect("clicked", func() {
-		dialog, err := gtk.FileChooserDialogNewWith2Buttons("Select Download Path", win, gtk.FILE_CHOOSER_ACTION_SELECT_FOLDER, "Select", gtk.RESPONSE_ACCEPT, "Cancel", gtk.RESPONSE_CANCEL)
+		selectedPath, err := dialog.Directory().Title("Select Download Path").Browse()
 		if err != nil {
-			log.Println(err)
 			return
 		}
-		defer dialog.Destroy()
-		if dialog.Run() == gtk.RESPONSE_ACCEPT {
-			downloadPathEntry.SetText(dialog.GetFilename())
+		if selectedPath != "" {
+			downloadPathEntry.SetText(selectedPath)
 		}
 	})
 	grid.AttachNextTo(downloadPathButton, downloadPathEntry, gtk.POS_RIGHT, 1, 1)

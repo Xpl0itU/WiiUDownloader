@@ -677,7 +677,7 @@ func (mw *MainWindow) showError(err error) {
 	glib.IdleAdd(func() {
 		mw.progressWindow.Window.Hide()
 	})
-	errorDialog := gtk.MessageDialogNew(mw.window, gtk.DIALOG_MODAL, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, err.Error())
+	errorDialog := gtk.MessageDialogNew(mw.window, gtk.DIALOG_MODAL, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, "%s", err.Error())
 	errorDialog.Run()
 	errorDialog.Destroy()
 }

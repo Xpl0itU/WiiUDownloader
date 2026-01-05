@@ -49,13 +49,13 @@ def merge_apps(intel_app, arm_app, output_app):
         # We assume both have roughly the same libs. We iterate over the output dir (copied from ARM)
         for root, dirs, files in os.walk(out_lib_dir):
             for file in files:
-                if file.endswith(".dylib"):
+                if file.endswith(".dylib") or file.endswith(".so"):
                     rel_path = os.path.relpath(os.path.join(root, file), out_lib_dir)
                     intel_dylib = os.path.join(intel_lib_dir, rel_path)
                     arm_dylib = os.path.join(arm_lib_dir, rel_path)
 
                     if os.path.exists(intel_dylib) and os.path.exists(arm_dylib):
-                        print(f"Merging library: {rel_path}")
+                        print(f"Merging binary: {rel_path}")
                         # Overwrite the one in output_app (which is currently just the ARM one)
                         out_dylib = os.path.join(root, file)
                         try:

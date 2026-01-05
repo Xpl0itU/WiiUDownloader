@@ -21,6 +21,7 @@ func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	// Check if user is running macOS
+	// Check if user is running macOS
 	if runtime.GOOS == "darwin" {
 		execPath, err := os.Executable()
 		if err != nil {
@@ -28,11 +29,41 @@ func main() {
 		}
 
 		bundlePath := filepath.Dir(filepath.Dir(execPath))
-		filePath := filepath.Join(bundlePath, "Resources", "lib", "share", "glib-schemas")
-		if _, err := os.Stat(filePath); os.IsNotExist(err) {
-			log.Println("glib-schemas not found")
+
+		// Set GSettings Schema Dir
+		glibPath := filepath.Join(bundlePath, "Resources", "share", "glib-2.0", "schemas")
+		// Older logic path check just in case or if structure changed
+		if _, err := os.Stat(glibPath); os.IsNotExist(err) {
+			// Try old path just in case
+			glibPath = filepath.Join(bundlePath, "Resources", "lib", "share", "glib-schemas")
+		}
+
+		if _, err := os.Stat(glibPath); err == nil {
+			os.Setenv("GSETTINGS_SCHEMA_DIR", glibPath)
 		} else {
-			os.Setenv("GSETTINGS_SCHEMA_DIR", filePath)
+			log.Println("Warning: glib-schemas not found in bundle.")
+		}
+
+		// Set GdkPixbuf Module Dir
+		// We bundle them in Contents/MacOS/lib/gdk-pixbuf-2.0/2.10.0/loaders (usually)
+		// But in create_bundle.py we copied 'lib/gdk-pixbuf-2.0' to 'Contents/MacOS/lib/gdk-pixbuf-2.0'
+		// We need to find the directory containing 'loaders'.
+		gdkLibPath := filepath.Join(bundlePath, "MacOS", "lib", "gdk-pixbuf-2.0")
+		filepath.Walk(gdkLibPath, func(path string, info os.FileInfo, err error) error {
+			if err == nil && info.IsDir() && info.Name() == "loaders" {
+				os.Setenv("GDK_PIXBUF_MODULE_DIR", path)
+				return filepath.SkipDir // Found it
+			}
+			return nil
+		})
+
+		// Set XDG_DATA_DIRS for icons
+		// Bundle: Contents/Resources/share
+		sharePath := filepath.Join(bundlePath, "Resources", "share")
+		if _, err := os.Stat(sharePath); err == nil {
+			os.Setenv("XDG_DATA_DIRS", sharePath)
+			// Force GTK to see the theme if needed?
+			// GTK3 usually checks XDG_DATA_DIRS for icons/themes.
 		}
 	}
 

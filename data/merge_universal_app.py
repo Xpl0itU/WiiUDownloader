@@ -35,6 +35,8 @@ def merge_apps(intel_app, arm_app, output_app):
     if os.path.exists(intel_exe) and os.path.exists(arm_exe):
         print(f"Merging main executable: {executable_name}")
         run_lipo(out_exe, [intel_exe, arm_exe])
+        # Ensure executable permissions
+        os.chmod(out_exe, 0o755)
     else:
         print(f"Error: Main executable not found in one of the bundles.")
         sys.exit(1)

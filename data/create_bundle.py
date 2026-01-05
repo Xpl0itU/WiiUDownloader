@@ -45,11 +45,9 @@ def safe_copy_directory(src, dst):
             print(f"Warning: Failed to copy {s}: {e}")
 
 
-# Set the paths to the executable and Info.plist
+# Set the paths
 executable_path = "main"
 info_plist_path = "data/Info.plist"
-
-# Set the path to the .app bundle
 app_bundle_path = "out/WiiUDownloader.app"
 contents_path = os.path.abspath(os.path.join(app_bundle_path, "Contents"))
 macos_path = os.path.join(contents_path, "MacOS")
@@ -61,67 +59,77 @@ try:
     brew_prefix = subprocess.check_output(["brew", "--prefix"]).decode("utf-8").strip()
 except Exception as e:
     print("Error getting brew prefix:", e)
-    brew_prefix = "/opt/homebrew"  # Fallback
+    brew_prefix = "/opt/homebrew"
 
-# Create the .app bundle structure
+# Create bundle structure
 if os.path.exists(app_bundle_path):
     shutil.rmtree(app_bundle_path)
 
 os.makedirs(macos_path)
 os.makedirs(resources_path)
+os.makedirs(lib_path)
 
 shutil.copy(info_plist_path, os.path.join(contents_path, "Info.plist"))
 shutil.copy(executable_path, os.path.join(macos_path, "WiiUDownloader"))
-
-# Fix permissions for main executable
 os.chmod(os.path.join(macos_path, "WiiUDownloader"), 0o755)
 
-# Run dylibbundler on the main executable
-# -s: add search path for libraries
+# CRITICAL: Manually copy ALL GTK/GDK libraries FIRST
+# dylibbundler is unreliable for these, so we force-copy them
+print("Manually copying critical GTK/GDK libraries...")
+critical_libs = [
+    "libgtk-3.0.dylib",
+    "libgtk-3.dylib",
+    "libgdk-3.0.dylib",
+    "libgdk-3.dylib",
+    "libgobject-2.0.0.dylib",
+    "libglib-2.0.0.dylib",
+    "libintl.8.dylib",
+    "libgio-2.0.0.dylib",
+    "libgmodule-2.0.0.dylib",
+    "libgthread-2.0.0.dylib",
+    "libcairo.2.dylib",
+    "libcairo-gobject.2.dylib",
+    "libpango-1.0.0.dylib",
+    "libpangocairo-1.0.0.dylib",
+    "libpangoft2-1.0.0.dylib",
+    "libatk-1.0.0.dylib",
+    "libgdk_pixbuf-2.0.0.dylib",
+    "libharfbuzz.0.dylib",
+    "libfontconfig.1.dylib",
+    "libfreetype.6.dylib",
+    "libpixman-1.0.dylib",
+    "libpng16.16.dylib",
+    "libjpeg.8.dylib",
+    "libtiff.6.dylib",
+    "libffi.8.dylib",
+    "libpcre2-8.0.dylib",
+]
+
+for lib in critical_libs:
+    src = os.path.join(brew_prefix, "lib", lib)
+    dst = os.path.join(lib_path, lib)
+    if os.path.exists(src) and not os.path.exists(dst):
+        print(f"  Copying {lib}...")
+        shutil.copy2(src, dst)
+        os.chmod(dst, 0o755)
+
+# Now run dylibbundler to fix references and pull in any missing deps
+print("Running dylibbundler to fix library references...")
 run_command(
     f"dylibbundler -od -b -x {os.path.abspath(os.path.join(macos_path, 'WiiUDownloader'))} "
     f"-d {os.path.abspath(lib_path)} -p @executable_path/lib "
     f"-s {os.path.abspath(os.path.join(brew_prefix, 'lib'))}"
 )
 
-# Verify critical libraries exist and recover them if missing
-critical_libs = [
-    "libgtk-3.0.dylib",
-    "libgdk-3.0.dylib",
-    "libgobject-2.0.0.dylib",
-    "libglib-2.0.0.dylib",
-    "libintl.8.dylib",
-]
-for lib in critical_libs:
-    bundled_lib_path = os.path.join(lib_path, lib)
-    if not os.path.exists(bundled_lib_path):
-        print(
-            f"Warning: {lib} missing from bundle after dylibbundler. Attempting manual recovery..."
-        )
-        # Try to find it in Homebrew
-        src_lib = os.path.join(brew_prefix, "lib", lib)
-        if os.path.exists(src_lib):
-            print(f"Copying {lib} from {src_lib}...")
-            shutil.copy2(src_lib, bundled_lib_path)
-            os.chmod(bundled_lib_path, 0o755)
-            # Fix dependencies of this manually copied lib
-            run_command(
-                f"dylibbundler -od -b -x {os.path.abspath(bundled_lib_path)} "
-                f"-d {os.path.abspath(lib_path)} -p @executable_path/lib "
-                f"-s {os.path.abspath(os.path.join(brew_prefix, 'lib'))}"
-            )
-        else:
-            print(f"Error: Could not find {lib} in {src_lib} to recover.")
-            sys.exit(1)
-
-# Double check
+# Verify GTK is present
 if not os.path.exists(os.path.join(lib_path, "libgtk-3.0.dylib")):
-    print("Error: libgtk-3.0.dylib is strictly missing. Build failed.")
+    print("FATAL: libgtk-3.0.dylib STILL missing after manual copy + dylibbundler!")
+    print(f"Contents of {lib_path}:")
+    if os.path.exists(lib_path):
+        print(os.listdir(lib_path))
     sys.exit(1)
 
-# --- Bundle Resources ---
-
-# 1. GdkPixbuf Loaders
+# Bundle Resources
 gdk_pixbuf_lib = os.path.join(brew_prefix, "lib", "gdk-pixbuf-2.0")
 dest_gdk_pixbuf = os.path.join(lib_path, "gdk-pixbuf-2.0")
 
@@ -129,25 +137,22 @@ if os.path.exists(gdk_pixbuf_lib):
     print(f"Copying GdkPixbuf loaders from {gdk_pixbuf_lib}...")
     safe_copy_directory(gdk_pixbuf_lib, dest_gdk_pixbuf)
 
-    # Remove loaders.cache to force runtime scanning
+    # Remove loaders.cache
     for root, dirs, files in os.walk(dest_gdk_pixbuf):
         for file in files:
             if file == "loaders.cache":
                 print(f"Removing build-time cache: {os.path.join(root, file)}")
                 os.remove(os.path.join(root, file))
 
-    # Fix paths in loaders (.so files)
+    # Fix loader paths (soft-fail)
     print("Fixing GdkPixbuf loader paths...")
     for root, dirs, files in os.walk(dest_gdk_pixbuf):
         for file in files:
             if file.endswith(".so"):
                 so_path = os.path.join(root, file)
                 if os.path.exists(so_path) and not os.path.islink(so_path):
-                    # Ensure write permissions
                     try:
                         os.chmod(so_path, 0o755)
-                        # We soft-fail on loaders because some might be weird or dylibbundler might flake out
-                        # and we don't want to kill the whole build for a minor loader.
                         run_command(
                             f"dylibbundler -od -b -x {os.path.abspath(so_path)} "
                             f"-d {os.path.abspath(lib_path)} -p @executable_path/lib "
@@ -157,29 +162,21 @@ if os.path.exists(gdk_pixbuf_lib):
                     except Exception as e:
                         print(f"Warning: Failed to process loader {so_path}: {e}")
 
-else:
-    print("Warning: GdkPixbuf lib directory not found.")
-
-# 2. Icons / Share
+# Copy icons/schemas/themes
 share_src = os.path.join(brew_prefix, "share")
 dest_share = os.path.join(resources_path, "share")
 os.makedirs(dest_share, exist_ok=True)
 
-# Icons
 icons_src = os.path.join(share_src, "icons")
 if os.path.exists(icons_src):
     print("Copying icons...")
     safe_copy_directory(icons_src, os.path.join(dest_share, "icons"))
 
-# GLib Schemas
 schemas_src = os.path.join(share_src, "glib-2.0", "schemas")
 if os.path.exists(schemas_src):
     print("Copying GLib schemas...")
     safe_copy_directory(schemas_src, os.path.join(dest_share, "glib-2.0", "schemas"))
-else:
-    print("Warning: GLib schemas not found.")
 
-# Adwaita Theme
 adwaita_src = os.path.join(share_src, "themes", "Adwaita")
 if os.path.exists(adwaita_src):
     print("Copying Adwaita theme...")

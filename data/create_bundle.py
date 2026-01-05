@@ -5,12 +5,13 @@ import sys
 
 
 # Helper to run system commands with check
-def run_command(command):
+def run_command(command, ignore_errors=False):
     print(f"Running: {command}")
     ret = os.system(command)
     if ret != 0:
         print(f"Error: Command failed with exit code {ret}")
-        sys.exit(1)
+        if not ignore_errors:
+            sys.exit(1)
 
 
 # Helper for robust copying
@@ -26,7 +27,6 @@ def safe_copy_directory(src, dst):
         try:
             if os.path.islink(s):
                 link_target = os.readlink(s)
-                # If absolute, check existence. If relative, resolve it (approximate)
                 if not os.path.isabs(link_target):
                     link_target = os.path.join(os.path.dirname(s), link_target)
 
@@ -78,14 +78,13 @@ os.chmod(os.path.join(macos_path, "WiiUDownloader"), 0o755)
 
 # Run dylibbundler on the main executable
 # -s: add search path for libraries
-# Use absolute paths
 run_command(
     f"dylibbundler -od -b -x {os.path.abspath(os.path.join(macos_path, 'WiiUDownloader'))} "
     f"-d {os.path.abspath(lib_path)} -p @executable_path/lib "
     f"-s {os.path.abspath(os.path.join(brew_prefix, 'lib'))}"
 )
 
-# Verify critical libraries exist
+# Verify critical libraries exist and recover them if missing
 critical_libs = [
     "libgtk-3.0.dylib",
     "libgdk-3.0.dylib",
@@ -130,8 +129,7 @@ if os.path.exists(gdk_pixbuf_lib):
     print(f"Copying GdkPixbuf loaders from {gdk_pixbuf_lib}...")
     safe_copy_directory(gdk_pixbuf_lib, dest_gdk_pixbuf)
 
-    # Remove loaders.cache to force runtime scanning (fixes absolute path issues)
-    # It is usually at lib/gdk-pixbuf-2.0/2.10.0/loaders.cache
+    # Remove loaders.cache to force runtime scanning
     for root, dirs, files in os.walk(dest_gdk_pixbuf):
         for file in files:
             if file == "loaders.cache":
@@ -144,14 +142,21 @@ if os.path.exists(gdk_pixbuf_lib):
         for file in files:
             if file.endswith(".so"):
                 so_path = os.path.join(root, file)
-                if os.path.exists(so_path):
+                if os.path.exists(so_path) and not os.path.islink(so_path):
                     # Ensure write permissions
-                    os.chmod(so_path, 0o755)
-                    run_command(
-                        f"dylibbundler -od -b -x {os.path.abspath(so_path)} "
-                        f"-d {os.path.abspath(lib_path)} -p @executable_path/lib "
-                        f"-s {os.path.abspath(os.path.join(brew_prefix, 'lib'))}"
-                    )
+                    try:
+                        os.chmod(so_path, 0o755)
+                        # We soft-fail on loaders because some might be weird or dylibbundler might flake out
+                        # and we don't want to kill the whole build for a minor loader.
+                        run_command(
+                            f"dylibbundler -od -b -x {os.path.abspath(so_path)} "
+                            f"-d {os.path.abspath(lib_path)} -p @executable_path/lib "
+                            f"-s {os.path.abspath(os.path.join(brew_prefix, 'lib'))}",
+                            ignore_errors=True,
+                        )
+                    except Exception as e:
+                        print(f"Warning: Failed to process loader {so_path}: {e}")
+
 else:
     print("Warning: GdkPixbuf lib directory not found.")
 

@@ -16,22 +16,6 @@ import (
 
 var commonKey = []byte{0xD7, 0xB0, 0x04, 0x02, 0x65, 0x9B, 0xA2, 0xAB, 0xD2, 0xCB, 0x0D, 0xB2, 0x7F, 0xA2, 0xB6, 0x56}
 
-var (
-	encryptedHashedContentBuffer = make([]byte, BLOCK_SIZE_HASHED)
-	decryptedHashedContentBuffer = make([]byte, BLOCK_SIZE_HASHED)
-	decryptedDataBuffer          = make([]byte, 0xFC00)
-)
-
-var (
-	encryptedContentBuffer = make([]byte, BLOCK_SIZE)
-	decryptedContentBuffer = make([]byte, BLOCK_SIZE)
-)
-
-var (
-	hashes       = make([]byte, HASHES_SIZE)
-	hashesBuffer = make([]byte, HASHES_SIZE)
-)
-
 const (
 	BLOCK_SIZE        = 0x8000
 	BLOCK_SIZE_HASHED = 0x10000
@@ -41,8 +25,6 @@ const (
 )
 
 const READ_SIZE = 8 * 1024 * 1024
-
-var readSizedBuffer = make([]byte, READ_SIZE)
 
 type Content struct {
 	ID     uint32
@@ -93,6 +75,10 @@ func extractFileHash(src *os.File, partDataOffset uint64, fileOffset uint64, siz
 	if err != nil {
 		return err
 	}
+
+	encryptedHashedContentBuffer := make([]byte, BLOCK_SIZE_HASHED)
+	decryptedHashedContentBuffer := make([]byte, BLOCK_SIZE_HASHED)
+	hashes := make([]byte, HASHES_SIZE)
 
 	for size > 0 {
 		if uint64(writeSize) > size {
@@ -166,6 +152,9 @@ func extractFile(src *os.File, partDataOffset uint64, fileOffset uint64, size ui
 	var ivLocal [aes.BlockSize]byte
 	ivLocal[1] = byte(contentId)
 	aesCipher := cipher.NewCBCDecrypter(cipherHashTree, ivLocal[:])
+
+	encryptedContentBuffer := make([]byte, BLOCK_SIZE)
+	decryptedContentBuffer := make([]byte, BLOCK_SIZE)
 
 	for size > 0 {
 		if uint64(writeSize) > size {
@@ -390,8 +379,9 @@ func decryptContentToBuffer(encryptedFile *os.File, decryptedBuffer *bytes.Buffe
 		h2HashNum := int64(0)
 		h3HashNum := int64(0)
 
-		clear(hashes)
-		clear(hashesBuffer)
+		hashes := make([]byte, HASHES_SIZE)
+		hashesBuffer := make([]byte, HASHES_SIZE)
+		decryptedDataBuffer := make([]byte, 0xFC00)
 
 		for chunkNum := int64(0); chunkNum < chunkCount; chunkNum++ {
 			if _, err := io.ReadFull(encryptedFile, hashesBuffer); err != nil {
@@ -464,6 +454,7 @@ func decryptContentToBuffer(encryptedFile *os.File, decryptedBuffer *bytes.Buffe
 		leftHash := content.Size
 
 		decBuf := make([]byte, READ_SIZE)
+		readSizedBuffer := make([]byte, READ_SIZE)
 
 		for i := 0; i <= int(content.Size/READ_SIZE)+1; i++ {
 			toRead := min(READ_SIZE, left)
@@ -610,7 +601,9 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 					return fmt.Errorf("failed to read directory name: %w", err)
 				}
 				outputPath = filepath.Join(outputPath, directory)
-				os.MkdirAll(outputPath, 0755)
+				if err := os.MkdirAll(outputPath, 0755); err != nil {
+					return fmt.Errorf("failed to create directory: %w", err)
+				}
 			}
 			pathOffset = fst.FSTEntries[i].NameOffset & 0x00FFFFFF
 			fst.FSTReader.Seek(int64(fst.NamesOffset+pathOffset), io.SeekStart)

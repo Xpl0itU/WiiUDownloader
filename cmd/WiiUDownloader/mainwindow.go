@@ -446,35 +446,37 @@ func (mw *MainWindow) ShowAll() {
 
 		mw.progressWindow.Window.ShowAll()
 
+		// Capture state on main thread before spawning goroutine
+		decryptContents := mw.decryptContents
+		deleteEncryptedContents := mw.getDeleteEncryptedContents()
+
 		go func() {
 			// Disable the window while downloading to prevent multiple clicks
-			mw.treeView.SetSensitive(false)
-			defer mw.treeView.SetSensitive(true)
+			glib.IdleAdd(func() {
+				mw.treeView.SetSensitive(false)
+				for _, button := range mw.categoryButtons {
+					button.SetSensitive(false)
+				}
+				mw.searchEntry.SetSensitive(false)
+				mw.downloadQueueButton.SetSensitive(false)
+				mw.deleteEncryptedContentsCheckbox.SetSensitive(false)
+				mw.decryptContentsCheckbox.SetSensitive(false)
+				mw.queuePane.removeFromQueueButton.SetSensitive(false)
+			})
 
-			for _, button := range mw.categoryButtons {
-				button.SetSensitive(false)
-			}
-			defer func() {
+			defer glib.IdleAdd(func() {
+				mw.treeView.SetSensitive(true)
 				for _, button := range mw.categoryButtons {
 					button.SetSensitive(true)
 				}
-			}()
+				mw.searchEntry.SetSensitive(true)
+				mw.downloadQueueButton.SetSensitive(true)
+				mw.deleteEncryptedContentsCheckbox.SetSensitive(true)
+				mw.decryptContentsCheckbox.SetSensitive(true)
+				mw.queuePane.removeFromQueueButton.SetSensitive(true)
+			})
 
-			mw.searchEntry.SetSensitive(false)
-			defer mw.searchEntry.SetSensitive(true)
-
-			mw.downloadQueueButton.SetSensitive(false)
-			defer mw.downloadQueueButton.SetSensitive(true)
-
-			mw.deleteEncryptedContentsCheckbox.SetSensitive(false)
-			defer mw.deleteEncryptedContentsCheckbox.SetSensitive(true)
-
-			mw.decryptContentsCheckbox.SetSensitive(false)
-			defer mw.decryptContentsCheckbox.SetSensitive(true)
-
-			mw.queuePane.removeFromQueueButton.SetSensitive(false)
-			defer mw.queuePane.removeFromQueueButton.SetSensitive(true)
-			if err := mw.onDownloadQueueClicked(config.LastSelectedPath); err != nil {
+			if err := mw.onDownloadQueueClicked(config.LastSelectedPath, decryptContents, deleteEncryptedContents); err != nil {
 				glib.IdleAdd(func() {
 					mw.showError(err)
 				})
@@ -682,7 +684,7 @@ func (mw *MainWindow) showError(err error) {
 	errorDialog.Destroy()
 }
 
-func (mw *MainWindow) onDownloadQueueClicked(selectedPath string) error {
+func (mw *MainWindow) onDownloadQueueClicked(selectedPath string, decryptContents, deleteEncryptedContents bool) error {
 	if mw.queuePane.IsQueueEmpty() {
 		return nil
 	}
@@ -693,7 +695,12 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string) error {
 	defer close(queueStatusChan)
 	errGroup := errgroup.Group{}
 
-	mw.queuePane.ForEachRemoving(func(title wiiudownloader.TitleEntry) {
+	mw.queuePane.ForEachRemoving(func(title wiiudownloader.TitleEntry) bool {
+		// Check for cancellation before starting next download
+		if mw.progressWindow.Cancelled() {
+			return false
+		}
+
 		errGroup.Go(func() error {
 			if mw.progressWindow.cancelled {
 				queueStatusChan <- true
@@ -701,7 +708,7 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string) error {
 			}
 			tidStr := fmt.Sprintf("%016x", title.TitleID)
 			titlePath := filepath.Join(selectedPath, fmt.Sprintf("%s [%s] [%s]", normalizeFilename(title.Name), wiiudownloader.GetFormattedKind(title.TitleID), tidStr))
-			if err := wiiudownloader.DownloadTitle(tidStr, titlePath, mw.decryptContents, mw.progressWindow, mw.getDeleteEncryptedContents(), mw.client); err != nil && err != context.Canceled {
+			if err := wiiudownloader.DownloadTitle(tidStr, titlePath, decryptContents, mw.progressWindow, deleteEncryptedContents, mw.client); err != nil && err != context.Canceled {
 				return err
 			}
 
@@ -710,12 +717,15 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string) error {
 		})
 
 		if err = errGroup.Wait(); err != nil {
-			queueStatusChan <- false
+			if mw.progressWindow.Cancelled() {
+				err = nil               // Suppress error so it doesn't show popup
+				queueStatusChan <- true // Processed (cancelled), so remove this one
+			} else {
+				queueStatusChan <- false // Failed, keep in queue
+			}
 		}
 
-		if !<-queueStatusChan {
-			return
-		}
+		return <-queueStatusChan
 	})
 
 	glib.IdleAdd(func() {

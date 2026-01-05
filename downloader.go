@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -24,8 +23,27 @@ const (
 )
 
 var (
-	errCancel = fmt.Errorf("cancelled download")
+	errCancel       = fmt.Errorf("cancelled download")
+	downloadTimeout = 30 * time.Second
 )
+
+type WatchdogReader struct {
+	io.Reader
+	timer *time.Timer
+}
+
+func (r *WatchdogReader) Read(p []byte) (int, error) {
+	if !r.timer.Stop() {
+		// If the timer already fired, we might be too late, but we entered Read, so we are alive.
+		// However, the context might be cancelling. We rely on the timer reset.
+		select {
+		case <-r.timer.C:
+		default:
+		}
+	}
+	r.timer.Reset(downloadTimeout)
+	return r.Reader.Read(p)
+}
 
 type ProgressReporter interface {
 	SetGameTitle(title string)
@@ -49,12 +67,14 @@ func downloadFileWithSemaphore(ctx context.Context, progressReporter ProgressRep
 	basePath := filepath.Base(dstPath)
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		req := &http.Request{}
-		parsedURL, err := url.Parse(downloadURL)
+		// specific retry context
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+
+		req, err := http.NewRequestWithContext(ctx, "GET", downloadURL, nil)
 		if err != nil {
 			return err
 		}
-		req.URL = parsedURL
 
 		resp, err := client.Do(req)
 		if err != nil {
@@ -80,11 +100,22 @@ func downloadFileWithSemaphore(ctx context.Context, progressReporter ProgressRep
 			return err
 		}
 
+		timer := time.AfterFunc(downloadTimeout, func() {
+			cancel()
+		})
+
 		progressReporter.SetTotalDownloadedForFile(basePath, 0)
 		writerProgress := newWriterProgress(file, progressReporter, basePath)
 		writerProgressWithContext := ctxio.NewWriter(ctx, writerProgress)
-		bodyReaderWithContext := ctxio.NewReader(ctx, resp.Body)
-		_, err = io.Copy(writerProgressWithContext, bodyReaderWithContext)
+
+		watchdog := &WatchdogReader{
+			Reader: resp.Body,
+			timer:  timer,
+		}
+
+		_, err = io.Copy(writerProgressWithContext, watchdog)
+		timer.Stop()
+
 		if err != nil {
 			file.Close()
 			resp.Body.Close()
@@ -107,7 +138,10 @@ func downloadFileWithSemaphore(ctx context.Context, progressReporter ProgressRep
 
 func downloadFile(progressReporter ProgressReporter, client *http.Client, downloadURL, dstPath string, doRetries bool) error {
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		req, err := http.NewRequest("GET", downloadURL, nil)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		req, err := http.NewRequestWithContext(ctx, "GET", downloadURL, nil)
 		if err != nil {
 			return err
 		}
@@ -138,8 +172,20 @@ func downloadFile(progressReporter ProgressReporter, client *http.Client, downlo
 			return err
 		}
 
+		timer := time.AfterFunc(downloadTimeout, func() {
+			cancel()
+		})
+
 		writerProgress := newWriterProgress(file, progressReporter, filepath.Base(dstPath))
-		_, err = io.Copy(writerProgress, resp.Body)
+
+		watchdog := &WatchdogReader{
+			Reader: resp.Body,
+			timer:  timer,
+		}
+
+		_, err = io.Copy(writerProgress, watchdog)
+		timer.Stop()
+
 		if err != nil {
 			file.Close()
 			resp.Body.Close()

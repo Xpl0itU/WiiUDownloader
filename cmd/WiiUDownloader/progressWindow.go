@@ -126,6 +126,10 @@ func (pw *ProgressWindow) SetDownloadSize(size int64) {
 }
 
 func (pw *ProgressWindow) ResetTotals() {
+	glib.IdleAdd(func() {
+		pw.bar.SetFraction(0)
+		pw.bar.SetText("Preparing...")
+	})
 	pw.progressMutex.Lock()
 	defer pw.progressMutex.Unlock()
 	pw.progressPerFile = make(map[string]int64)

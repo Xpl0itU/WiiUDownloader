@@ -13,20 +13,27 @@ func min(a, b uint64) uint64 {
 	return b
 }
 
-func isThisDecryptedFile(path string) bool {
-	return strings.Contains(path, "code") || strings.Contains(path, "content") || strings.Contains(path, "meta")
-}
-
 func doDeleteEncryptedContents(path string) error {
-	return filepath.Walk(path, func(filePath string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
 		}
-		if info.Mode().IsRegular() && !isThisDecryptedFile(filePath) {
-			if err := os.Remove(filePath); err != nil {
+
+		name := entry.Name()
+		if strings.HasSuffix(name, ".app") ||
+			strings.HasSuffix(name, ".h3") ||
+			name == "title.tmd" ||
+			name == "title.tik" ||
+			name == "title.cert" {
+			if err := os.Remove(filepath.Join(path, name)); err != nil {
 				return err
 			}
 		}
-		return nil
-	})
+	}
+	return nil
 }

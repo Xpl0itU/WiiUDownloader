@@ -194,12 +194,16 @@ func (qp *QueuePane) IsTitleInQueue(title wiiudownloader.TitleEntry) bool {
 	return false
 }
 
-func (qp *QueuePane) ForEachRemoving(f func(wiiudownloader.TitleEntry)) {
+func (qp *QueuePane) ForEachRemoving(f func(wiiudownloader.TitleEntry) bool) {
 	titleQueueCopy := make([]wiiudownloader.TitleEntry, len(qp.titleQueue))
 	copy(titleQueueCopy, qp.titleQueue)
 	for _, title := range titleQueueCopy {
-		f(title)
-		qp.RemoveTitle(title)
+		shouldContinue := f(title)
+		if shouldContinue {
+			qp.RemoveTitle(title)
+		} else {
+			break
+		}
 	}
 }
 

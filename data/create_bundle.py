@@ -51,7 +51,7 @@ info_plist_path = "data/Info.plist"
 
 # Set the path to the .app bundle
 app_bundle_path = "out/WiiUDownloader.app"
-contents_path = os.path.join(app_bundle_path, "Contents")
+contents_path = os.path.abspath(os.path.join(app_bundle_path, "Contents"))
 macos_path = os.path.join(contents_path, "MacOS")
 resources_path = os.path.join(contents_path, "Resources")
 lib_path = os.path.join(macos_path, "lib")
@@ -78,8 +78,11 @@ os.chmod(os.path.join(macos_path, "WiiUDownloader"), 0o755)
 
 # Run dylibbundler on the main executable
 # -s: add search path for libraries
+# Use absolute paths
 run_command(
-    f"dylibbundler -od -b -x {os.path.join(macos_path, 'WiiUDownloader')} -d {lib_path} -p @executable_path/lib -s {os.path.join(brew_prefix, 'lib')}"
+    f"dylibbundler -od -b -x {os.path.abspath(os.path.join(macos_path, 'WiiUDownloader'))} "
+    f"-d {os.path.abspath(lib_path)} -p @executable_path/lib "
+    f"-s {os.path.abspath(os.path.join(brew_prefix, 'lib'))}"
 )
 
 # Verify critical libraries exist
@@ -104,7 +107,9 @@ for lib in critical_libs:
             os.chmod(bundled_lib_path, 0o755)
             # Fix dependencies of this manually copied lib
             run_command(
-                f"dylibbundler -od -b -x {bundled_lib_path} -d {lib_path} -p @executable_path/lib -s {os.path.join(brew_prefix, 'lib')}"
+                f"dylibbundler -od -b -x {os.path.abspath(bundled_lib_path)} "
+                f"-d {os.path.abspath(lib_path)} -p @executable_path/lib "
+                f"-s {os.path.abspath(os.path.join(brew_prefix, 'lib'))}"
             )
         else:
             print(f"Error: Could not find {lib} in {src_lib} to recover.")
@@ -125,6 +130,14 @@ if os.path.exists(gdk_pixbuf_lib):
     print(f"Copying GdkPixbuf loaders from {gdk_pixbuf_lib}...")
     safe_copy_directory(gdk_pixbuf_lib, dest_gdk_pixbuf)
 
+    # Remove loaders.cache to force runtime scanning (fixes absolute path issues)
+    # It is usually at lib/gdk-pixbuf-2.0/2.10.0/loaders.cache
+    for root, dirs, files in os.walk(dest_gdk_pixbuf):
+        for file in files:
+            if file == "loaders.cache":
+                print(f"Removing build-time cache: {os.path.join(root, file)}")
+                os.remove(os.path.join(root, file))
+
     # Fix paths in loaders (.so files)
     print("Fixing GdkPixbuf loader paths...")
     for root, dirs, files in os.walk(dest_gdk_pixbuf):
@@ -135,7 +148,9 @@ if os.path.exists(gdk_pixbuf_lib):
                     # Ensure write permissions
                     os.chmod(so_path, 0o755)
                     run_command(
-                        f"dylibbundler -od -b -x {so_path} -d {lib_path} -p @executable_path/lib"
+                        f"dylibbundler -od -b -x {os.path.abspath(so_path)} "
+                        f"-d {os.path.abspath(lib_path)} -p @executable_path/lib "
+                        f"-s {os.path.abspath(os.path.join(brew_prefix, 'lib'))}"
                     )
 else:
     print("Warning: GdkPixbuf lib directory not found.")

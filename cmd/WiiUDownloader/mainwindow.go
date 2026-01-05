@@ -720,8 +720,8 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string) error {
 
 	glib.IdleAdd(func() {
 		mw.progressWindow.Window.Hide()
+		mw.updateTitlesInQueue()
 	})
-	mw.updateTitlesInQueue()
 
 	return err
 }

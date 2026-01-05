@@ -72,7 +72,9 @@ type ProgressWindow struct {
 }
 
 func (pw *ProgressWindow) SetGameTitle(title string) {
-	pw.gameLabel.SetText(title)
+	glib.IdleAdd(func() {
+		pw.gameLabel.SetText(title)
+	})
 }
 
 func (pw *ProgressWindow) UpdateDownloadProgress(downloaded int64, filename string) {
@@ -118,10 +120,14 @@ func (pw *ProgressWindow) SetCancelled() {
 }
 
 func (pw *ProgressWindow) SetDownloadSize(size int64) {
+	pw.progressMutex.Lock()
+	defer pw.progressMutex.Unlock()
 	pw.totalToDownload = size
 }
 
 func (pw *ProgressWindow) ResetTotals() {
+	pw.progressMutex.Lock()
+	defer pw.progressMutex.Unlock()
 	pw.progressPerFile = make(map[string]int64)
 	pw.totalDownloaded = 0
 	pw.totalToDownload = 0
@@ -141,6 +147,8 @@ func (pw *ProgressWindow) SetTotalDownloadedForFile(filename string, downloaded 
 }
 
 func (pw *ProgressWindow) SetStartTime(startTime time.Time) {
+	pw.progressMutex.Lock()
+	defer pw.progressMutex.Unlock()
 	pw.startTime = startTime
 }
 

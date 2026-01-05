@@ -14,7 +14,7 @@ RUN mkdir -p /usr/share/man/man1 /usr/share/man/man2 && \
 RUN apt-fast -y --no-install-recommends update && \
     apt-fast -y --no-install-recommends upgrade && \
     apt-fast install -y --no-install-recommends build-essential libgcrypt20-dev libgtk-3-dev libfuse2 libtool librsvg2-dev && \
-    wget https://go.dev/dl/go1.25.1.linux-amd64.tar.gz && \
+    wget https://go.dev/dl/go1.25.5.linux-amd64.tar.gz && \
     tar -C /usr/local -xzf go*.linux-amd64.tar.gz && \
     chmod +x /usr/local/go/bin/go* && \
     LINUXDEPLOY="/usr/bin/linuxdeploy.AppImage" && \

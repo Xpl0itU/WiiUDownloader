@@ -43,7 +43,7 @@ dest_gdk_pixbuf = os.path.join(lib_path, "gdk-pixbuf-2.0")
 
 if os.path.exists(gdk_pixbuf_lib):
     print(f"Copying GdkPixbuf loaders from {gdk_pixbuf_lib}...")
-    shutil.copytree(gdk_pixbuf_lib, dest_gdk_pixbuf, symlinks=True)
+    shutil.copytree(gdk_pixbuf_lib, dest_gdk_pixbuf, symlinks=False)
 
     # Fix paths in loaders (.so files)
     # We need to run dylibbundler on each .so to ensure they reference the bundled libs
@@ -69,14 +69,14 @@ os.makedirs(dest_share, exist_ok=True)
 icons_src = os.path.join(share_src, "icons")
 if os.path.exists(icons_src):
     print("Copying icons...")
-    shutil.copytree(icons_src, os.path.join(dest_share, "icons"), symlinks=True)
+    shutil.copytree(icons_src, os.path.join(dest_share, "icons"), symlinks=False)
 
 # GLib Schemas
 schemas_src = os.path.join(share_src, "glib-2.0", "schemas")
 if os.path.exists(schemas_src):
     print("Copying GLib schemas...")
     shutil.copytree(
-        schemas_src, os.path.join(dest_share, "glib-2.0", "schemas"), symlinks=True
+        schemas_src, os.path.join(dest_share, "glib-2.0", "schemas"), symlinks=False
     )
 else:
     print("Warning: GLib schemas not found.")
@@ -87,7 +87,7 @@ adwaita_src = os.path.join(share_src, "themes", "Adwaita")
 if os.path.exists(adwaita_src):
     print("Copying Adwaita theme...")
     shutil.copytree(
-        adwaita_src, os.path.join(dest_share, "themes", "Adwaita"), symlinks=True
+        adwaita_src, os.path.join(dest_share, "themes", "Adwaita"), symlinks=False
     )
 
 print("Bundle creation complete.")

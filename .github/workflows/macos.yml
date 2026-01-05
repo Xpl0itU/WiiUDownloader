@@ -37,8 +37,6 @@ jobs:
       - name: Package
         run: |
           python3 data/create_bundle.py
-          mkdir -p out/WiiUDownloader.app/Contents/Resources/lib/share/glib-schemas
-          cp $(brew --prefix)/share/glib-2.0/schemas/* out/WiiUDownloader.app/Contents/Resources/lib/share/glib-schemas
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:

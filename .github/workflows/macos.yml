@@ -59,7 +59,7 @@ jobs:
       - name: Download Intel Artifact
         uses: actions/download-artifact@v4
         with:
-          name: WiiUDownloader-App-macos-13
+          name: WiiUDownloader-App-macos-15-intel
           path: intel_dist
       - name: Download ARM Artifact
         uses: actions/download-artifact@v4

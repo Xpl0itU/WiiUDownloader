@@ -9,7 +9,11 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-13
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-13, macos-latest]
     steps:
       - name: Check out repository code
         uses: actions/checkout@v4
@@ -35,8 +39,40 @@ jobs:
           python3 data/create_bundle.py
           mkdir -p out/WiiUDownloader.app/Contents/Resources/lib/share/glib-schemas
           cp $(brew --prefix)/share/glib-2.0/schemas/* out/WiiUDownloader.app/Contents/Resources/lib/share/glib-schemas
-          sudo codesign --force --sign -  out/WiiUDownloader.app
-          create-dmg \
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WiiUDownloader-App-${{ matrix.os }}
+          path: out/WiiUDownloader.app
+
+  release:
+    name: Release Universal Binary
+    runs-on: macos-latest
+    needs: build
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v4
+      - name: Install Homebrew Dependencies
+        uses: tecolicom/actions-use-homebrew-tools@v1
+        with:
+          tools: create-dmg
+      - name: Download Intel Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: WiiUDownloader-App-macos-13
+          path: intel_dist
+      - name: Download ARM Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: WiiUDownloader-App-macos-latest
+          path: arm_dist
+      - name: Merge Universal Binary
+        run: |
+          python3 data/merge_universal_app.py "intel_dist" "arm_dist" "out/WiiUDownloader.app"
+      - name: Sign and DMG
+        run: |
+           sudo codesign --force --sign - out/WiiUDownloader.app
+           create-dmg \
             --volname "WiiUDownloader" \
             --window-pos 200 120 \
             --window-size 800 400 \

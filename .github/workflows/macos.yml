@@ -13,7 +13,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-13, macos-latest]
+        os: [macos-15, macos-latest]
     steps:
       - name: Check out repository code
         uses: actions/checkout@v4

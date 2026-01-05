@@ -41,9 +41,40 @@ os.system(
 gdk_pixbuf_lib = os.path.join(brew_prefix, "lib", "gdk-pixbuf-2.0")
 dest_gdk_pixbuf = os.path.join(lib_path, "gdk-pixbuf-2.0")
 
+
+def safe_copy_directory(src, dst):
+    """Recursively copies files from src to dst, ignoring broken symlinks."""
+    if not os.path.exists(dst):
+        os.makedirs(dst)
+
+    for item in os.listdir(src):
+        s = os.path.join(src, item)
+        d = os.path.join(dst, item)
+
+        try:
+            if os.path.islink(s):
+                if os.path.exists(s):
+                    if os.path.isdir(s):
+                        safe_copy_directory(s, d)
+                    else:
+                        shutil.copy2(s, d)
+                else:
+                    print(f"Warning: Skipping broken symlink {s}")
+            elif os.path.isdir(s):
+                safe_copy_directory(s, d)
+            else:
+                shutil.copy2(s, d)
+        except Exception as e:
+            print(f"Warning: Failed to copy {s}: {e}")
+
+
+# 1. GdkPixbuf Loaders
+gdk_pixbuf_lib = os.path.join(brew_prefix, "lib", "gdk-pixbuf-2.0")
+dest_gdk_pixbuf = os.path.join(lib_path, "gdk-pixbuf-2.0")
+
 if os.path.exists(gdk_pixbuf_lib):
     print(f"Copying GdkPixbuf loaders from {gdk_pixbuf_lib}...")
-    shutil.copytree(gdk_pixbuf_lib, dest_gdk_pixbuf, symlinks=False)
+    safe_copy_directory(gdk_pixbuf_lib, dest_gdk_pixbuf)
 
     # Fix paths in loaders (.so files)
     # We need to run dylibbundler on each .so to ensure they reference the bundled libs
@@ -53,9 +84,11 @@ if os.path.exists(gdk_pixbuf_lib):
             if file.endswith(".so"):
                 so_path = os.path.join(root, file)
                 # We use the SAME lib dir so they share the already bundled dylibs
-                os.system(
-                    f"dylibbundler -od -b -x {so_path} -d {lib_path} -p @executable_path/lib"
-                )
+                # Check if file exists just in case
+                if os.path.exists(so_path):
+                    os.system(
+                        f"dylibbundler -od -b -x {so_path} -d {lib_path} -p @executable_path/lib"
+                    )
 else:
     print("Warning: GdkPixbuf lib directory not found.")
 
@@ -69,15 +102,13 @@ os.makedirs(dest_share, exist_ok=True)
 icons_src = os.path.join(share_src, "icons")
 if os.path.exists(icons_src):
     print("Copying icons...")
-    shutil.copytree(icons_src, os.path.join(dest_share, "icons"), symlinks=False)
+    safe_copy_directory(icons_src, os.path.join(dest_share, "icons"))
 
 # GLib Schemas
 schemas_src = os.path.join(share_src, "glib-2.0", "schemas")
 if os.path.exists(schemas_src):
     print("Copying GLib schemas...")
-    shutil.copytree(
-        schemas_src, os.path.join(dest_share, "glib-2.0", "schemas"), symlinks=False
-    )
+    safe_copy_directory(schemas_src, os.path.join(dest_share, "glib-2.0", "schemas"))
 else:
     print("Warning: GLib schemas not found.")
 
@@ -86,8 +117,6 @@ else:
 adwaita_src = os.path.join(share_src, "themes", "Adwaita")
 if os.path.exists(adwaita_src):
     print("Copying Adwaita theme...")
-    shutil.copytree(
-        adwaita_src, os.path.join(dest_share, "themes", "Adwaita"), symlinks=False
-    )
+    safe_copy_directory(adwaita_src, os.path.join(dest_share, "themes", "Adwaita"))
 
 print("Bundle creation complete.")

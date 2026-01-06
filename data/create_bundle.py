@@ -5,62 +5,30 @@ import sys
 import glob
 
 
-# Helper to run system commands with check
-def run_command(command, ignore_errors=False):
+def run_command(command):
     print(f"Running: {command}")
     ret = os.system(command)
     if ret != 0:
         print(f"Error: Command failed with exit code {ret}")
-        if not ignore_errors:
-            sys.exit(1)
-    return ret == 0
+        sys.exit(1)
 
 
-# Helper for robust copying
-def safe_copy_directory(src, dst):
-    """Recursively copies files from src to dst, ignoring broken symlinks."""
-    if not os.path.exists(dst):
-        os.makedirs(dst)
-
-    for item in os.listdir(src):
-        s = os.path.join(src, item)
-        d = os.path.join(dst, item)
-
-        try:
-            if os.path.islink(s):
-                link_target = os.readlink(s)
-                if not os.path.isabs(link_target):
-                    link_target = os.path.join(os.path.dirname(s), link_target)
-
-                if os.path.exists(link_target):
-                    if os.path.isdir(s):
-                        safe_copy_directory(s, d)
-                    else:
-                        shutil.copy2(s, d)
-                else:
-                    print(f"Warning: Skipping broken symlink {s}")
-            elif os.path.isdir(s):
-                safe_copy_directory(s, d)
-            else:
-                shutil.copy2(s, d)
-        except Exception as e:
-            print(f"Warning: Failed to copy {s}: {e}")
-
-
-def copy_lib(src, dst):
-    """Copy a library file, following symlinks to get real content."""
-    if os.path.exists(src):
-        # Resolve symlinks to get the actual file
-        real_src = os.path.realpath(src)
-        if os.path.exists(real_src):
-            print(f"  Copying {os.path.basename(src)} (from {real_src})...")
-            shutil.copy2(real_src, dst)
-            os.chmod(dst, 0o755)
-            return True
+def copy_lib(src, lib_path):
+    """Copy a library file, following symlinks."""
+    lib_name = os.path.basename(src)
+    dst = os.path.join(lib_path, lib_name)
+    if os.path.exists(dst):
+        return False
+    real_src = os.path.realpath(src)
+    if os.path.exists(real_src):
+        print(f"  Copying {lib_name}...")
+        shutil.copy2(real_src, dst)
+        os.chmod(dst, 0o755)
+        return True
     return False
 
 
-# Set the paths
+# Paths
 executable_path = "main"
 info_plist_path = "data/Info.plist"
 app_bundle_path = "out/WiiUDownloader.app"
@@ -72,12 +40,11 @@ lib_path = os.path.join(macos_path, "lib")
 # Get Homebrew prefix
 try:
     brew_prefix = subprocess.check_output(["brew", "--prefix"]).decode("utf-8").strip()
-except Exception as e:
-    print("Error getting brew prefix:", e)
+except:
     brew_prefix = "/opt/homebrew"
 
 brew_lib = os.path.join(brew_prefix, "lib")
-print(f"Using Homebrew lib path: {brew_lib}")
+print(f"Homebrew lib: {brew_lib}")
 
 # Create bundle structure
 if os.path.exists(app_bundle_path):
@@ -91,123 +58,92 @@ shutil.copy(info_plist_path, os.path.join(contents_path, "Info.plist"))
 shutil.copy(executable_path, os.path.join(macos_path, "WiiUDownloader"))
 os.chmod(os.path.join(macos_path, "WiiUDownloader"), 0o755)
 
-# CRITICAL: Find and copy ALL GTK-related libraries by pattern
-print("Finding and copying GTK/GDK libraries...")
-lib_patterns = [
-    "libgtk-3*.dylib",
-    "libgdk-3*.dylib",
-    "libgobject-2.0*.dylib",
-    "libglib-2.0*.dylib",
-    "libgio-2.0*.dylib",
-    "libgmodule-2.0*.dylib",
-    "libgthread-2.0*.dylib",
-    "libintl*.dylib",
-    "libcairo*.dylib",
-    "libpango*.dylib",
-    "libatk-1.0*.dylib",
-    "libgdk_pixbuf-2.0*.dylib",
-    "libharfbuzz*.dylib",
-    "libfontconfig*.dylib",
-    "libfreetype*.dylib",
-    "libpixman-1*.dylib",
-    "libpng*.dylib",
-    "libjpeg*.dylib",
-    "libtiff*.dylib",
-    "libffi*.dylib",
-    "libpcre2*.dylib",
-    "libfribidi*.dylib",
-    "libepoxy*.dylib",
-    "libgraphite2*.dylib",
-    "liblzma*.dylib",
-    "libz*.dylib",
-    "libbz2*.dylib",
-    "libX*.dylib",
-    "libxcb*.dylib",
-]
+# Find ALL Homebrew library search paths (opt/*/lib directories)
+search_paths = [brew_lib]
+opt_dir = os.path.join(brew_prefix, "opt")
+if os.path.exists(opt_dir):
+    for item in os.listdir(opt_dir):
+        lib_dir = os.path.join(opt_dir, item, "lib")
+        if os.path.isdir(lib_dir):
+            search_paths.append(lib_dir)
 
-copied_libs = set()
-for pattern in lib_patterns:
-    for lib_file in glob.glob(os.path.join(brew_lib, pattern)):
-        lib_name = os.path.basename(lib_file)
-        dst = os.path.join(lib_path, lib_name)
-        if lib_name not in copied_libs and not os.path.exists(dst):
-            if copy_lib(lib_file, dst):
-                copied_libs.add(lib_name)
+print(f"Found {len(search_paths)} library search paths")
 
-print(f"Copied {len(copied_libs)} libraries")
+# Build search path argument for dylibbundler
+search_args = " ".join(
+    [f"-s {p}" for p in search_paths[:20]]
+)  # Limit to 20 to avoid command line length issues
 
-# Verify GTK exists - check for any libgtk file
-gtk_files = glob.glob(os.path.join(lib_path, "libgtk-3*.dylib"))
-print(f"GTK files in bundle: {gtk_files}")
-if not gtk_files:
-    print("FATAL: No libgtk-3 libraries found in bundle!")
-    print(f"Available GTK in brew: {glob.glob(os.path.join(brew_lib, 'libgtk*'))}")
-    sys.exit(1)
-
-# Now run dylibbundler to fix references and pull in any missing deps
-print("Running dylibbundler to fix library references...")
+# Run dylibbundler with ALL search paths
+print("Running dylibbundler with comprehensive search paths...")
 run_command(
     f"dylibbundler -od -b -x {os.path.abspath(os.path.join(macos_path, 'WiiUDownloader'))} "
-    f"-d {os.path.abspath(lib_path)} -p @executable_path/lib "
-    f"-s {os.path.abspath(brew_lib)}"
+    f"-d {os.path.abspath(lib_path)} -p @executable_path/lib {search_args}"
 )
 
-# Final verification
-print("Final library check:")
-for name in ["libgtk-3", "libgdk-3", "libglib-2.0", "libgio-2.0"]:
-    found = glob.glob(os.path.join(lib_path, f"{name}*.dylib"))
-    print(f"  {name}: {found}")
-
-# Bundle GdkPixbuf loaders
-gdk_pixbuf_lib = os.path.join(brew_prefix, "lib", "gdk-pixbuf-2.0")
-dest_gdk_pixbuf = os.path.join(lib_path, "gdk-pixbuf-2.0")
-
-if os.path.exists(gdk_pixbuf_lib):
-    print(f"Copying GdkPixbuf loaders from {gdk_pixbuf_lib}...")
-    safe_copy_directory(gdk_pixbuf_lib, dest_gdk_pixbuf)
-
-    # Remove loaders.cache
-    for root, dirs, files in os.walk(dest_gdk_pixbuf):
-        for file in files:
-            if file == "loaders.cache":
-                os.remove(os.path.join(root, file))
-
-    # Fix loader paths (soft-fail)
-    for root, dirs, files in os.walk(dest_gdk_pixbuf):
-        for file in files:
-            if file.endswith(".so"):
-                so_path = os.path.join(root, file)
-                if os.path.exists(so_path) and not os.path.islink(so_path):
-                    try:
-                        os.chmod(so_path, 0o755)
-                        run_command(
-                            f"dylibbundler -od -b -x {os.path.abspath(so_path)} "
-                            f"-d {os.path.abspath(lib_path)} -p @executable_path/lib "
-                            f"-s {os.path.abspath(brew_lib)}",
-                            ignore_errors=True,
-                        )
-                    except Exception as e:
-                        print(f"Warning: {e}")
-
-# Copy resources
-share_src = os.path.join(brew_prefix, "share")
-dest_share = os.path.join(resources_path, "share")
-os.makedirs(dest_share, exist_ok=True)
-
-for src_name, dst_name in [
-    ("icons", "icons"),
-    ("glib-2.0/schemas", "glib-2.0/schemas"),
-    ("themes/Adwaita", "themes/Adwaita"),
-]:
-    src = os.path.join(share_src, src_name)
-    dst = os.path.join(dest_share, dst_name)
-    if os.path.exists(src):
-        print(f"Copying {src_name}...")
-        safe_copy_directory(src, dst)
-
-print("Bundle creation complete.")
-print(f"Library directory contents ({len(os.listdir(lib_path))} files):")
-for f in sorted(os.listdir(lib_path))[:20]:
+# Check what dylibbundler copied
+print(f"\nAfter dylibbundler - lib contains {len(os.listdir(lib_path))} files")
+for f in sorted(os.listdir(lib_path)):
     print(f"  {f}")
-if len(os.listdir(lib_path)) > 20:
-    print(f"  ... and {len(os.listdir(lib_path)) - 20} more")
+
+# Verify GTK is present
+gtk_present = any(f.startswith("libgtk-3") for f in os.listdir(lib_path))
+gdk_present = any(f.startswith("libgdk-3") for f in os.listdir(lib_path))
+
+if not gtk_present or not gdk_present:
+    print(f"\nGTK present: {gtk_present}, GDK present: {gdk_present}")
+    print("dylibbundler missed GTK/GDK - attempting manual copy...")
+
+    # Manually copy from all search paths
+    for search_path in search_paths:
+        for pattern in ["libgtk-3*.dylib", "libgdk-3*.dylib"]:
+            for lib_file in glob.glob(os.path.join(search_path, pattern)):
+                copy_lib(lib_file, lib_path)
+
+    # Run dylibbundler again to fix dependencies of manually copied libs
+    run_command(
+        f"dylibbundler -od -b -x {os.path.abspath(os.path.join(macos_path, 'WiiUDownloader'))} "
+        f"-d {os.path.abspath(lib_path)} -p @executable_path/lib {search_args}"
+    )
+
+# Final verification
+print("\n=== FINAL VERIFICATION ===")
+lib_files = os.listdir(lib_path)
+print(f"Total files in lib: {len(lib_files)}")
+
+gtk_files = [f for f in lib_files if "gtk" in f.lower()]
+gdk_files = [f for f in lib_files if "gdk" in f.lower()]
+print(f"GTK files: {gtk_files}")
+print(f"GDK files: {gdk_files}")
+
+if not any(f.startswith("libgtk-3") for f in lib_files):
+    print("FATAL: libgtk-3 not in bundle!")
+    sys.exit(1)
+
+# Copy schemas (but NOT with recursive directory copy that might break things)
+schemas_dst = os.path.join(resources_path, "share", "glib-2.0", "schemas")
+os.makedirs(schemas_dst, exist_ok=True)
+
+schemas_src = os.path.join(brew_prefix, "share", "glib-2.0", "schemas")
+if os.path.exists(schemas_src):
+    print("Copying GLib schemas...")
+    for f in os.listdir(schemas_src):
+        src = os.path.join(schemas_src, f)
+        dst = os.path.join(schemas_dst, f)
+        if os.path.isfile(src) and not os.path.islink(src):
+            try:
+                shutil.copy2(src, dst)
+            except:
+                pass
+        elif os.path.islink(src):
+            target = os.path.realpath(src)
+            if os.path.exists(target):
+                try:
+                    shutil.copy2(target, dst)
+                except:
+                    pass
+
+print("\n=== BUNDLE COMPLETE ===")
+print(f"Final lib directory contents ({len(os.listdir(lib_path))} files):")
+for f in sorted(os.listdir(lib_path)):
+    print(f"  {f}")

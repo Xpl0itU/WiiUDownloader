@@ -191,5 +191,7 @@ if os.path.exists(query_loaders):
             [query_loaders] + bundled_loaders, capture_output=True, text=True
         )
         if res.returncode == 0:
-            with open(os.path.join(lib_path, "loaders.cache"), "w") as f:
+            # Place it in Resources instead of MacOS/lib to satisfy codesign
+            with open(os.path.join(resources_path, "loaders.cache"), "w") as f:
                 f.write(res.stdout)
+            print("Created loaders.cache in Resources")

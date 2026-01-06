@@ -80,7 +80,7 @@ jobs:
           python3 data/merge_universal_app.py "intel_dist" "arm_dist" "out/WiiUDownloader.app"
       - name: Sign and DMG
         run: |
-           sudo codesign --force --sign - out/WiiUDownloader.app
+           codesign --force --deep --sign - out/WiiUDownloader.app
            create-dmg \
             --volname "WiiUDownloader" \
             --window-pos 200 120 \

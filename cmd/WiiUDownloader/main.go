@@ -47,14 +47,16 @@ func main() {
 			// 3. Set GdkPixbuf Module Dir (Crucial for icons)
 			// Our new script puts them in lib/loaders
 			os.Setenv("GDK_PIXBUF_MODULE_DIR", filepath.Join(bundlePath, "MacOS", "lib", "loaders"))
-			// Also point to the cache if we generated one
-			cachePath := filepath.Join(bundlePath, "MacOS", "lib", "loaders.cache")
+			// Also point to the cache located in Resources
+			cachePath := filepath.Join(bundlePath, "Resources", "loaders.cache")
 			if _, err := os.Stat(cachePath); err == nil {
 				os.Setenv("GDK_PIXBUF_MODULE_FILE", cachePath)
 			}
 
 			// 4. Set GIO Module Dir
-			os.Setenv("GIO_MODULE_DIR", filepath.Join(bundlePath, "MacOS", "lib", "gio-modules"))
+			gioModPath := filepath.Join(bundlePath, "MacOS", "lib", "gio-modules")
+			os.Setenv("GIO_MODULE_DIR", gioModPath)
+			os.Setenv("GIO_EXTRA_MODULES", gioModPath)
 
 			// 5. Set XDG_DATA_DIRS for icons and themes
 			sharePath := filepath.Join(bundlePath, "Resources", "share")

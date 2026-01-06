@@ -34,17 +34,6 @@ jobs:
         run: |
           python3 grabTitles.py
           go build -ldflags="-s -w" cmd/WiiUDownloader/main.go cmd/WiiUDownloader/config.go cmd/WiiUDownloader/configWindow.go cmd/WiiUDownloader/darkMode.go cmd/WiiUDownloader/initialSetupAssistant.go cmd/WiiUDownloader/mainwindow.go cmd/WiiUDownloader/progressWindow.go cmd/WiiUDownloader/queuePane.go cmd/WiiUDownloader/utils.go
-      - name: Debug - Check GTK Installation
-        run: |
-          echo "=== Homebrew Prefix ==="
-          brew --prefix
-          echo "=== GTK Libraries in Homebrew ==="
-          ls -la $(brew --prefix)/lib/libgtk* || echo "No libgtk found in $(brew --prefix)/lib"
-          ls -la $(brew --prefix)/lib/libgdk* || echo "No libgdk found in $(brew --prefix)/lib"
-          echo "=== Binary Dependencies ==="
-          otool -L main | head -50
-          echo "=== PKG_CONFIG_PATH ==="
-          pkg-config --libs gtk+-3.0 || echo "pkg-config failed"
       - name: Package
         run: |
           python3 data/create_bundle.py

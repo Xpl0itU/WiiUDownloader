@@ -20,50 +20,44 @@ func main() {
 	// Initialize Go's threading system to avoid races
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
-	// Check if user is running macOS
-	// Check if user is running macOS
+	// Check if user is running macOS and inside a bundle
 	if runtime.GOOS == "darwin" {
 		execPath, err := os.Executable()
 		if err != nil {
 			log.Fatal(err.Error())
 		}
 
-		bundlePath := filepath.Dir(filepath.Dir(execPath))
+		// Check if we are inside a .app bundle
+		// path/to/WiiUDownloader.app/Contents/MacOS/WiiUDownloader
+		if filepath.Base(filepath.Dir(execPath)) == "MacOS" {
+			bundlePath := filepath.Dir(filepath.Dir(execPath))
 
-		// Set GSettings Schema Dir
-		glibPath := filepath.Join(bundlePath, "Resources", "share", "glib-2.0", "schemas")
-		// Older logic path check just in case or if structure changed
-		if _, err := os.Stat(glibPath); os.IsNotExist(err) {
-			// Try old path just in case
-			glibPath = filepath.Join(bundlePath, "Resources", "lib", "share", "glib-schemas")
-		}
+			// 1. Isolation: Clear DYLD variables to prevent Homebrew leaks
+			os.Unsetenv("DYLD_LIBRARY_PATH")
+			os.Unsetenv("DYLD_FALLBACK_LIBRARY_PATH")
 
-		if _, err := os.Stat(glibPath); err == nil {
-			os.Setenv("GSETTINGS_SCHEMA_DIR", glibPath)
-		} else {
-			log.Println("Warning: glib-schemas not found in bundle.")
-		}
-
-		// Set GdkPixbuf Module Dir
-		// We bundle them in Contents/MacOS/lib/gdk-pixbuf-2.0/2.10.0/loaders (usually)
-		// But in create_bundle.py we copied 'lib/gdk-pixbuf-2.0' to 'Contents/MacOS/lib/gdk-pixbuf-2.0'
-		// We need to find the directory containing 'loaders'.
-		gdkLibPath := filepath.Join(bundlePath, "MacOS", "lib", "gdk-pixbuf-2.0")
-		filepath.Walk(gdkLibPath, func(path string, info os.FileInfo, err error) error {
-			if err == nil && info.IsDir() && info.Name() == "loaders" {
-				os.Setenv("GDK_PIXBUF_MODULE_DIR", path)
-				return filepath.SkipDir // Found it
+			// 2. Set GSettings Schema Dir
+			glibPath := filepath.Join(bundlePath, "Resources", "share", "glib-2.0", "schemas")
+			if _, err := os.Stat(glibPath); err == nil {
+				os.Setenv("GSETTINGS_SCHEMA_DIR", glibPath)
 			}
-			return nil
-		})
 
-		// Set XDG_DATA_DIRS for icons
-		// Bundle: Contents/Resources/share
-		sharePath := filepath.Join(bundlePath, "Resources", "share")
-		if _, err := os.Stat(sharePath); err == nil {
-			os.Setenv("XDG_DATA_DIRS", sharePath)
-			// Force GTK to see the theme if needed?
-			// GTK3 usually checks XDG_DATA_DIRS for icons/themes.
+			// 3. Set GdkPixbuf Module Dir (Crucial for icons)
+			gdkLibPath := filepath.Join(bundlePath, "MacOS", "lib", "gdk-pixbuf-2.0")
+			filepath.Walk(gdkLibPath, func(path string, info os.FileInfo, err error) error {
+				if err == nil && info.IsDir() && info.Name() == "loaders" {
+					os.Setenv("GDK_PIXBUF_MODULE_DIR", path)
+					return filepath.SkipDir
+				}
+				return nil
+			})
+
+			// 4. Set XDG_DATA_DIRS for icons and themes
+			sharePath := filepath.Join(bundlePath, "Resources", "share")
+			if _, err := os.Stat(sharePath); err == nil {
+				os.Setenv("XDG_DATA_DIRS", sharePath)
+				os.Setenv("GTK_THEME", "Adwaita")
+			}
 		}
 	}
 

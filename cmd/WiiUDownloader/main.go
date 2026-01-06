@@ -35,6 +35,7 @@ func main() {
 			// 1. Isolation: Clear DYLD variables to prevent Homebrew leaks
 			os.Unsetenv("DYLD_LIBRARY_PATH")
 			os.Unsetenv("DYLD_FALLBACK_LIBRARY_PATH")
+			os.Unsetenv("PKG_CONFIG_PATH")
 
 			// 2. Set GSettings Schema Dir
 			glibPath := filepath.Join(bundlePath, "Resources", "share", "glib-2.0", "schemas")
@@ -43,16 +44,13 @@ func main() {
 			}
 
 			// 3. Set GdkPixbuf Module Dir (Crucial for icons)
-			gdkLibPath := filepath.Join(bundlePath, "MacOS", "lib", "gdk-pixbuf-2.0")
-			filepath.Walk(gdkLibPath, func(path string, info os.FileInfo, err error) error {
-				if err == nil && info.IsDir() && info.Name() == "loaders" {
-					os.Setenv("GDK_PIXBUF_MODULE_DIR", path)
-					return filepath.SkipDir
-				}
-				return nil
-			})
+			// Our new script puts them in lib/loaders
+			os.Setenv("GDK_PIXBUF_MODULE_DIR", filepath.Join(bundlePath, "MacOS", "lib", "loaders"))
 
-			// 4. Set XDG_DATA_DIRS for icons and themes
+			// 4. Set GIO Extra Modules
+			os.Setenv("GIO_EXTRA_MODULES", filepath.Join(bundlePath, "MacOS", "lib", "gio-modules"))
+
+			// 5. Set XDG_DATA_DIRS for icons and themes
 			sharePath := filepath.Join(bundlePath, "Resources", "share")
 			if _, err := os.Stat(sharePath); err == nil {
 				os.Setenv("XDG_DATA_DIRS", sharePath)

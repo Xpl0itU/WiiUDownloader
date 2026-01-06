@@ -62,12 +62,26 @@ func main() {
 			sharePath := filepath.Join(bundlePath, "Resources", "share")
 			if _, err := os.Stat(sharePath); err == nil {
 				os.Setenv("XDG_DATA_DIRS", sharePath)
-				os.Setenv("GTK_THEME", "Adwaita")
+				if isDarkMode() {
+					os.Setenv("GTK_THEME", "Adwaita:dark")
+				} else {
+					os.Setenv("GTK_THEME", "Adwaita")
+				}
 			}
 		}
 	}
 
 	gtk.Init(nil)
+
+	// Robust Dark Mode application
+	settings, _ := gtk.SettingsGetDefault()
+	if isDarkMode() {
+		settings.SetProperty("gtk-application-prefer-dark-theme", true)
+		settings.SetProperty("gtk-theme-name", "Adwaita")
+	} else {
+		settings.SetProperty("gtk-application-prefer-dark-theme", false)
+		settings.SetProperty("gtk-theme-name", "Adwaita")
+	}
 
 	app, err := gtk.ApplicationNew("io.github.xpl0itu.wiiudownloader", glib.APPLICATION_FLAGS_NONE)
 	if err != nil {

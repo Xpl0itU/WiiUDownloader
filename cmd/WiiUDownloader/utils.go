@@ -58,3 +58,9 @@ func isValidPath(path string) bool {
 	}
 	return true
 }
+
+func ShowErrorDialog(window *gtk.Window, err error) {
+	dialog := gtk.MessageDialogNew(window, gtk.DIALOG_MODAL, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, "%s", err.Error())
+	dialog.Run()
+	dialog.Destroy()
+}

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"log"
+	"fmt"
 	"os"
 
 	wiiudownloader "github.com/Xpl0itU/WiiUDownloader"
@@ -48,7 +48,8 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	skipButton.Connect("clicked", func() {
 		config.DidInitialSetup = true
 		if err := config.Save(); err != nil {
-			log.Fatalf("Failed to save config: %v", err)
+			ShowErrorDialog(nil, fmt.Errorf("Failed to save config: %w", err))
+			return
 		}
 		assistant.Hide()
 		assistant.Emit("close", glib.TYPE_BOOLEAN, nil)
@@ -195,7 +196,8 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 		config.DecryptContents = cemuCheck.GetActive()
 		config.DeleteEncryptedContents = !wiiUCheck.GetActive()
 		if err := config.Save(); err != nil {
-			log.Fatalf("Failed to save config: %v", err)
+			ShowErrorDialog(nil, fmt.Errorf("Failed to save config: %w", err))
+			return
 		}
 		assistant.Hide()
 		assistant.Emit("close", glib.TYPE_BOOLEAN, nil)

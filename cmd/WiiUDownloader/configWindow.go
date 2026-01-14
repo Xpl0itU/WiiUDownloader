@@ -1,8 +1,6 @@
 package main
 
 import (
-	"log"
-
 	"github.com/Xpl0itU/dialog"
 	"github.com/gotk3/gotk3/gtk"
 )
@@ -96,7 +94,7 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 		config.RememberLastPath = rememberPathCheck.GetActive()
 
 		if err := config.Save(); err != nil {
-			log.Println(err)
+			ShowErrorDialog(win, err)
 		}
 	})
 

@@ -302,27 +302,66 @@ func (mw *MainWindow) BuildUI() {
 		if err != nil {
 			return
 		}
-		parentDir := filepath.Dir(tmdPath)
-		tmdData, err := os.ReadFile(tmdPath)
+
+		mw.progressWindow, err = createProgressWindow(mw.window)
 		if err != nil {
+			log.Printf("Failed to create progress window: %v", err)
 			return
 		}
+		mw.progressWindow.Window.ShowAll()
+		mw.progressWindow.SetGameTitle("Generating Ticket and Cert...")
+		mw.progressWindow.ResetTotals()
 
-		tmd, err := wiiudownloader.ParseTMD(tmdData)
-		if err != nil {
-			return
-		}
+		go func() {
+			defer glib.IdleAdd(func() {
+				mw.progressWindow.Window.Hide()
+			})
 
-		titleKey, err := wiiudownloader.GenerateKey(fmt.Sprintf("%016x", tmd.TitleID))
-		if err != nil {
-			return
-		}
+			parentDir := filepath.Dir(tmdPath)
+			tmdData, err := os.ReadFile(tmdPath)
+			if err != nil {
+				glib.IdleAdd(func() {
+					ShowErrorDialog(mw.window, err)
+				})
+				return
+			}
 
-		wiiudownloader.GenerateTicket(filepath.Join(parentDir, "title.tik"), tmd.TitleID, titleKey, tmd.TitleVersion)
+			tmd, err := wiiudownloader.ParseTMD(tmdData)
+			if err != nil {
+				glib.IdleAdd(func() {
+					ShowErrorDialog(mw.window, err)
+				})
+				return
+			}
 
-		if err := wiiudownloader.GenerateCert(tmd, filepath.Join(parentDir, "title.cert"), mw.progressWindow, http.DefaultClient); err != nil {
-			return
-		}
+			titleKey, err := wiiudownloader.GenerateKey(fmt.Sprintf("%016x", tmd.TitleID))
+			if err != nil {
+				glib.IdleAdd(func() {
+					ShowErrorDialog(mw.window, err)
+				})
+				return
+			}
+
+			if err := wiiudownloader.GenerateTicket(filepath.Join(parentDir, "title.tik"), tmd.TitleID, titleKey, tmd.TitleVersion); err != nil {
+				glib.IdleAdd(func() {
+					ShowErrorDialog(mw.window, err)
+				})
+				return
+			}
+
+			if err := wiiudownloader.GenerateCert(tmd, filepath.Join(parentDir, "title.cert"), mw.progressWindow, http.DefaultClient); err != nil {
+				glib.IdleAdd(func() {
+					ShowErrorDialog(mw.window, err)
+				})
+				return
+			}
+
+			glib.IdleAdd(func() {
+				infoDialog := gtk.MessageDialogNew(mw.window, gtk.DIALOG_MODAL, gtk.MESSAGE_INFO, gtk.BUTTONS_OK, "Successfully generated fake ticket and cert.")
+				infoDialog.Run()
+				infoDialog.Destroy()
+			})
+		}()
 	})
 	toolsSubMenu.Append(generateFakeTicketCert)
 
@@ -418,6 +457,7 @@ func (mw *MainWindow) BuildUI() {
 		}
 		config.DeleteEncryptedContents = mw.getDeleteEncryptedContents()
 		if err := config.Save(); err != nil {
+			ShowErrorDialog(mw.window, err)
 			return
 		}
 	})
@@ -449,7 +489,11 @@ func (mw *MainWindow) BuildUI() {
 				return
 			}
 			config.LastSelectedPath = selectedPath
-			_ = config.Save() // ignore error on saving new path
+			if err := config.Save(); err != nil {
+				glib.IdleAdd(func() {
+					ShowErrorDialog(mw.window, err)
+				})
+			}
 		}
 
 		mw.progressWindow.Window.ShowAll()
@@ -566,6 +610,7 @@ func (mw *MainWindow) onRegionChange(button *gtk.CheckButton, region uint8) {
 	}
 	config.SelectedRegion = mw.currentRegion
 	if err := config.Save(); err != nil {
+		ShowErrorDialog(mw.window, err)
 		return
 	}
 }
@@ -653,6 +698,7 @@ func (mw *MainWindow) onDecryptContentsClicked() {
 	}
 	config.DecryptContents = mw.decryptContents
 	if err := config.Save(); err != nil {
+		ShowErrorDialog(mw.window, err)
 		return
 	}
 }

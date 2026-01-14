@@ -92,6 +92,38 @@ shutil.copy("data/Info.plist", os.path.join(contents_path, "Info.plist"))
 shutil.copy(executable_path, os.path.join(macos_path, "WiiUDownloader"))
 os.chmod(os.path.join(macos_path, "WiiUDownloader"), 0o755)
 
+# Generate ICNS
+print("=== Generating Icon ===")
+icon_src = "data/WiiUDownloader.png"
+if os.path.exists(icon_src):
+    iconset = "WiiUDownloader.iconset"
+    if os.path.exists(iconset):
+        shutil.rmtree(iconset)
+    os.makedirs(iconset)
+
+    # Standard sizes
+    sizes = [16, 32, 128, 256, 512]
+    for s in sizes:
+        subprocess.run(
+            f"sips -z {s} {s} {icon_src} --out {iconset}/icon_{s}x{s}.png", shell=True
+        )
+        subprocess.run(
+            f"sips -z {s*2} {s*2} {icon_src} --out {iconset}/icon_{s}x{s}@2x.png",
+            shell=True,
+        )
+
+    subprocess.run(f"iconutil -c icns {iconset}", shell=True)
+    if os.path.exists("WiiUDownloader.icns"):
+        shutil.move(
+            "WiiUDownloader.icns", os.path.join(resources_path, "WiiUDownloader.icns")
+        )
+        print("Icon created and installed.")
+    else:
+        print("Error: Failed to create icns file.")
+    shutil.rmtree(iconset)
+else:
+    print(f"Warning: {icon_src} not found")
+
 # 1. Recursive Bundle
 processed = set()
 main_exe = os.path.join(macos_path, "WiiUDownloader")

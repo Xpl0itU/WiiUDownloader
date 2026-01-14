@@ -24,7 +24,10 @@ const (
 	MAX_LEVELS        = 0x10
 )
 
-const READ_SIZE = 8 * 1024 * 1024
+const (
+	READ_SIZE    = 8 * 1024 * 1024
+	MAX_FST_SIZE = 200 * 1024 * 1024
+)
 
 type Content struct {
 	ID     uint32
@@ -52,7 +55,7 @@ type FSTData struct {
 	FSTEntries  []FEntry
 }
 
-func extractFileHash(src *os.File, partDataOffset uint64, fileOffset uint64, size uint64, path string, contentId uint16, cipherHashTree cipher.Block) error {
+func extractFileHash(src *os.File, partDataOffset uint64, fileOffset uint64, size uint64, path string, cipherHashTree cipher.Block) error {
 	writeSize := HASH_BLOCK_SIZE
 	blockNumber := (fileOffset / HASH_BLOCK_SIZE) & 0x0F
 
@@ -357,11 +360,18 @@ func decryptContentToBuffer(encryptedFile *os.File, decryptedBuffer *bytes.Buffe
 	encryptedSize := encryptedStat.Size()
 	path := filepath.Dir(encryptedFile.Name())
 
+	var growSize int64
 	if hasHashTree {
-		decryptedBuffer.Grow(int(encryptedSize))
+		growSize = encryptedSize
 	} else {
-		decryptedBuffer.Grow(int(content.Size))
+		growSize = int64(content.Size)
 	}
+
+	if growSize > MAX_FST_SIZE {
+		return fmt.Errorf("FST size %d exceeds maximum limit of %d", growSize, MAX_FST_SIZE)
+	}
+
+	decryptedBuffer.Grow(int(growSize))
 
 	if hasHashTree { // if has a hash tree
 		chunkCount := encryptedSize / 0x10000
@@ -624,7 +634,7 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 					return err
 				}
 				if tmdFlags&0x02 != 0 {
-					err = extractFileHash(srcFile, 0, contentOffset, uint64(fst.FSTEntries[i].Length), outputPath, fst.FSTEntries[i].ContentID, cipherHashTree)
+					err = extractFileHash(srcFile, 0, contentOffset, uint64(fst.FSTEntries[i].Length), outputPath, cipherHashTree)
 				} else {
 					err = extractFile(srcFile, 0, contentOffset, uint64(fst.FSTEntries[i].Length), outputPath, fst.FSTEntries[i].ContentID, cipherHashTree)
 				}

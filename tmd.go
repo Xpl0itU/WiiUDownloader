@@ -104,28 +104,47 @@ func ParseTMD(data []byte) (*TMD, error) {
 
 		for c := uint16(0); c < tmd.ContentCount; c++ {
 			offset := 2820 + (48 * c)
+			if int64(offset) >= reader.Size() {
+				return nil, fmt.Errorf("offset %d out of bounds", offset)
+			}
 			reader.Seek(int64(offset), io.SeekStart)
 			if err := binary.Read(reader, binary.BigEndian, &tmd.Contents[c].ID); err != nil {
 				return nil, err
 			}
 
-			reader.Seek(0xB08+(0x30*int64(c)), io.SeekStart)
+			indexOffset := 0xB08 + (0x30 * int64(c))
+			if indexOffset+2 > reader.Size() {
+				return nil, fmt.Errorf("index offset %d out of bounds", indexOffset)
+			}
+			reader.Seek(indexOffset, io.SeekStart)
 			tmd.Contents[c].Index = make([]byte, 2)
 			if _, err := io.ReadFull(reader, tmd.Contents[c].Index); err != nil {
 				return nil, err
 			}
 
-			reader.Seek(0xB0A+(0x30*int64(c)), io.SeekStart)
+			typeOffset := 0xB0A + (0x30 * int64(c))
+			if typeOffset+2 > reader.Size() {
+				return nil, fmt.Errorf("type offset %d out of bounds", typeOffset)
+			}
+			reader.Seek(typeOffset, io.SeekStart)
 			if err := binary.Read(reader, binary.BigEndian, &tmd.Contents[c].Type); err != nil {
 				return nil, err
 			}
 
-			reader.Seek(0xB0C+(0x30*int64(c)), io.SeekStart)
+			sizeOffset := 0xB0C + (0x30 * int64(c))
+			if sizeOffset+8 > reader.Size() {
+				return nil, fmt.Errorf("size offset %d out of bounds", sizeOffset)
+			}
+			reader.Seek(sizeOffset, io.SeekStart)
 			if err := binary.Read(reader, binary.BigEndian, &tmd.Contents[c].Size); err != nil {
 				return nil, err
 			}
 
-			reader.Seek(0xB14+(0x30*int64(c)), io.SeekStart)
+			hashOffset := 0xB14 + (0x30 * int64(c))
+			if hashOffset+0x20 > reader.Size() {
+				return nil, fmt.Errorf("hash offset %d out of bounds", hashOffset)
+			}
+			reader.Seek(hashOffset, io.SeekStart)
 			tmd.Contents[c].Hash = make([]byte, 0x20)
 			if err := binary.Read(reader, binary.BigEndian, &tmd.Contents[c].Hash); err != nil {
 				return nil, err

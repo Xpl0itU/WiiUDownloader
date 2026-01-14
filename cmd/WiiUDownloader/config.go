@@ -30,10 +30,13 @@ const (
 	configFilename          = "config.json"
 )
 
-var globalConfig *Config
-var k = koanf.NewWithConf(koanf.Conf{
-	Delim: ".",
-})
+var (
+	globalConfig     *Config
+	globalConfigOnce sync.Once
+	k                = koanf.NewWithConf(koanf.Conf{
+		Delim: ".",
+	})
+)
 
 func getDefaultConfig() *Config {
 	return &Config{
@@ -73,30 +76,35 @@ func createDefaultConfigFile() error {
 }
 
 func loadConfig() (*Config, error) {
-	if globalConfig != nil {
-		return globalConfig, nil
-	}
+	var err error
+	globalConfigOnce.Do(func() {
+		globalConfig = getDefaultConfig()
 
-	globalConfig = getDefaultConfig()
-
-	userConfigDir, err := os.UserConfigDir()
-	if err != nil {
-		log.Fatalf("error getting user config dir: %v", err)
-	}
-
-	if err := k.Load(file.Provider(filepath.Join(userConfigDir, wiiudownloaderConfigDir, configFilename)), json.Parser()); err != nil {
-		log.Printf("error loading config file: %v, writing defaults...\n", err)
-		if err := createDefaultConfigFile(); err != nil {
-			log.Fatalf("error creating default config file: %v", err)
+		userConfigDir, errConf := os.UserConfigDir()
+		if errConf != nil {
+			log.Printf("error getting user config dir: %v", errConf)
+			err = errConf
+			return
 		}
-		if err := k.Load(file.Provider(filepath.Join(userConfigDir, wiiudownloaderConfigDir, configFilename)), json.Parser()); err != nil {
-			log.Fatalf("error loading config file: %v", err)
+
+		if errConf := k.Load(file.Provider(filepath.Join(userConfigDir, wiiudownloaderConfigDir, configFilename)), json.Parser()); errConf != nil {
+			log.Printf("error loading config file: %v, writing defaults...\n", errConf)
+			if errConf := createDefaultConfigFile(); errConf != nil {
+				log.Fatalf("error creating default config file: %v", errConf)
+				err = errConf
+				return
+			}
+			if errConf := k.Load(file.Provider(filepath.Join(userConfigDir, wiiudownloaderConfigDir, configFilename)), json.Parser()); errConf != nil {
+				log.Fatalf("error loading config file: %v", errConf)
+				err = errConf
+				return
+			}
 		}
-	}
 
-	globalConfig.SetValuesFromConfig(k)
+		globalConfig.SetValuesFromConfig(k)
+	})
 
-	return globalConfig, nil
+	return globalConfig, err
 }
 
 func (c *Config) Save() error {

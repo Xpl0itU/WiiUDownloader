@@ -13,7 +13,7 @@ import (
 type QueuePane struct {
 	container             *gtk.Box
 	titleTreeView         *gtk.TreeView
-	titleQueue            []wiiudownloader.TitleEntry
+	titleQueue            *Locked[[]wiiudownloader.TitleEntry]
 	removeFromQueueButton *gtk.Button
 	store                 *gtk.ListStore
 	updateFunc            func()
@@ -83,7 +83,7 @@ func NewQueuePane() (*QueuePane, error) {
 		container:             queueVBox,
 		titleTreeView:         titleTreeView,
 		store:                 store,
-		titleQueue:            make([]wiiudownloader.TitleEntry, 0),
+		titleQueue:            NewLocked(make([]wiiudownloader.TitleEntry, 0)),
 		removeFromQueueButton: removeFromQueueButton,
 	}
 
@@ -115,6 +115,8 @@ func NewQueuePane() (*QueuePane, error) {
 			}
 		}()
 
+		titlesToRemove := make([]uint64, 0)
+
 		iter, _ := treeModel.GetIterFirst()
 		for iter != nil {
 			isSelected := selection.IterIsSelected(iter)
@@ -131,7 +133,7 @@ func NewQueuePane() (*QueuePane, error) {
 				if err != nil {
 					continue
 				}
-				queuePane.RemoveTitle(wiiudownloader.TitleEntry{TitleID: tidParsed})
+				titlesToRemove = append(titlesToRemove, tidParsed)
 
 				tid.Unset()
 			}
@@ -140,6 +142,19 @@ func NewQueuePane() (*QueuePane, error) {
 				break
 			}
 		}
+
+		// Perform removal in bulk or one by one, using the lock
+		queuePane.titleQueue.WithLock(func(queue *[]wiiudownloader.TitleEntry) {
+			for _, tidToRemove := range titlesToRemove {
+				for i, t := range *queue {
+					if t.TitleID == tidToRemove {
+						*queue = append((*queue)[:i], (*queue)[i+1:]...)
+						break
+					}
+				}
+			}
+		})
+
 		queuePane.Update(true)
 	})
 	queueVBox.PackEnd(removeFromQueueButton, false, false, 0)
@@ -148,20 +163,26 @@ func NewQueuePane() (*QueuePane, error) {
 }
 
 func (qp *QueuePane) AddTitle(title wiiudownloader.TitleEntry) {
-	qp.titleQueue = append(qp.titleQueue, title)
+	qp.titleQueue.WithLock(func(queue *[]wiiudownloader.TitleEntry) {
+		*queue = append(*queue, title)
+	})
 }
 
 func (qp *QueuePane) RemoveTitle(title wiiudownloader.TitleEntry) {
-	for i, t := range qp.titleQueue {
-		if t.TitleID == title.TitleID {
-			qp.titleQueue = append(qp.titleQueue[:i], qp.titleQueue[i+1:]...)
-			break
+	qp.titleQueue.WithLock(func(queue *[]wiiudownloader.TitleEntry) {
+		for i, t := range *queue {
+			if t.TitleID == title.TitleID {
+				*queue = append((*queue)[:i], (*queue)[i+1:]...)
+				break
+			}
 		}
-	}
+	})
 }
 
 func (qp *QueuePane) Clear() {
-	qp.titleQueue = make([]wiiudownloader.TitleEntry, 0)
+	qp.titleQueue.WithLock(func(queue *[]wiiudownloader.TitleEntry) {
+		*queue = make([]wiiudownloader.TitleEntry, 0)
+	})
 }
 
 func (qp *QueuePane) GetContainer() *gtk.Box {
@@ -169,34 +190,59 @@ func (qp *QueuePane) GetContainer() *gtk.Box {
 }
 
 func (qp *QueuePane) GetTitleQueue() []wiiudownloader.TitleEntry {
-	return qp.titleQueue
+	var result []wiiudownloader.TitleEntry
+	qp.titleQueue.WithRLock(func(queue []wiiudownloader.TitleEntry) {
+		result = make([]wiiudownloader.TitleEntry, len(queue))
+		copy(result, queue)
+	})
+	return result
 }
 
 func (qp *QueuePane) IsQueueEmpty() bool {
-	return len(qp.titleQueue) == 0
+	var empty bool
+	qp.titleQueue.WithRLock(func(queue []wiiudownloader.TitleEntry) {
+		empty = len(queue) == 0
+	})
+	return empty
 }
 
 func (qp *QueuePane) GetTitleQueueSize() int {
-	return len(qp.titleQueue)
+	var size int
+	qp.titleQueue.WithRLock(func(queue []wiiudownloader.TitleEntry) {
+		size = len(queue)
+	})
+	return size
 }
 
 func (qp *QueuePane) GetTitleQueueAtIndex(index int) wiiudownloader.TitleEntry {
-	return qp.titleQueue[index]
+	var entry wiiudownloader.TitleEntry
+	qp.titleQueue.WithRLock(func(queue []wiiudownloader.TitleEntry) {
+		entry = queue[index]
+	})
+	return entry
 }
 
 func (qp *QueuePane) IsTitleInQueue(title wiiudownloader.TitleEntry) bool {
-	for _, t := range qp.titleQueue {
-		if t.TitleID == title.TitleID {
-			return true
+	var found bool
+	qp.titleQueue.WithRLock(func(queue []wiiudownloader.TitleEntry) {
+		for _, t := range queue {
+			if t.TitleID == title.TitleID {
+				found = true
+				break
+			}
 		}
-	}
-
-	return false
+	})
+	return found
 }
 
 func (qp *QueuePane) ForEachRemoving(f func(wiiudownloader.TitleEntry) bool) {
-	titleQueueCopy := make([]wiiudownloader.TitleEntry, len(qp.titleQueue))
-	copy(titleQueueCopy, qp.titleQueue)
+	// Create a copy first to iterate safely without holding the lock during the callback (which might take time or call back)
+	var titleQueueCopy []wiiudownloader.TitleEntry
+	qp.titleQueue.WithRLock(func(queue []wiiudownloader.TitleEntry) {
+		titleQueueCopy = make([]wiiudownloader.TitleEntry, len(queue))
+		copy(titleQueueCopy, queue)
+	})
+
 	for _, title := range titleQueueCopy {
 		shouldContinue := f(title)
 		if shouldContinue {
@@ -218,7 +264,14 @@ func (qp *QueuePane) SetTitleTreeView(titleTreeView *gtk.TreeView) {
 func (qp *QueuePane) Update(doUpdateFunc bool) {
 	qp.store.Clear()
 
-	for _, title := range qp.titleQueue {
+	// Snapshot for UI update
+	var queueSnapshot []wiiudownloader.TitleEntry
+	qp.titleQueue.WithRLock(func(queue []wiiudownloader.TitleEntry) {
+		queueSnapshot = make([]wiiudownloader.TitleEntry, len(queue))
+		copy(queueSnapshot, queue)
+	})
+
+	for _, title := range queueSnapshot {
 		iter := qp.store.Append()
 
 		qp.store.Set(iter, []int{0, 1, 2}, []interface{}{title.Name, wiiudownloader.GetFormattedRegion(title.Region), fmt.Sprintf("%016x", title.TitleID)})

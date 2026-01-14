@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	wiiudownloader "github.com/Xpl0itU/WiiUDownloader"
 	"github.com/Xpl0itU/dialog"
@@ -42,6 +43,8 @@ type MainWindow struct {
 	decryptContents                 bool
 	currentRegion                   uint8
 	client                          *http.Client
+	uiBuilt                         bool
+	searchTimer                     *time.Timer
 }
 
 func NewMainWindow(entries []wiiudownloader.TitleEntry, client *http.Client, config *Config) *MainWindow {
@@ -128,7 +131,12 @@ func (mw *MainWindow) applyConfig(config *Config) {
 	mw.currentRegion = config.SelectedRegion
 }
 
-func (mw *MainWindow) ShowAll() {
+func (mw *MainWindow) BuildUI() {
+	if mw.uiBuilt {
+		return
+	}
+	mw.uiBuilt = true
+
 	store, err := gtk.ListStoreNew(glib.TYPE_BOOLEAN, glib.TYPE_STRING, glib.TYPE_STRING, glib.TYPE_STRING, glib.TYPE_STRING)
 	if err != nil {
 		log.Fatalln("Unable to create list store:", err)
@@ -563,12 +571,20 @@ func (mw *MainWindow) onRegionChange(button *gtk.CheckButton, region uint8) {
 }
 
 func (mw *MainWindow) onSearchEntryChanged() {
-	text, err := mw.searchEntry.GetText()
-	if err != nil {
-		log.Fatalln("Unable to get text:", err)
+	if mw.searchTimer != nil {
+		mw.searchTimer.Stop()
 	}
-	mw.lastSearchText = text
-	mw.filterTitles(text)
+	mw.searchTimer = time.AfterFunc(200*time.Millisecond, func() {
+		glib.IdleAdd(func() {
+			text, err := mw.searchEntry.GetText()
+			if err != nil {
+				log.Printf("Unable to get text: %v", err)
+				return
+			}
+			mw.lastSearchText = text
+			mw.filterTitles(text)
+		})
+	})
 }
 
 func (mw *MainWindow) filterTitles(filterText string) {
@@ -576,6 +592,14 @@ func (mw *MainWindow) filterTitles(filterText string) {
 	if err != nil {
 		log.Fatalln("Unable to get tree view model:", err)
 	}
+	// If store is somehow nil, we can't do anything.
+	if store == nil {
+		return
+	}
+
+	// Detach model to speed up bulk inserts
+	mw.treeView.SetModel(nil)
+	defer mw.treeView.SetModel(store)
 
 	storeRef := store.(*gtk.ListStore)
 	storeRef.Clear()

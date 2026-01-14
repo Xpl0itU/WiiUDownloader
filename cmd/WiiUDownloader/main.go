@@ -123,7 +123,7 @@ func main() {
 			}
 			assistant.SetPostSetupCallback(func() {
 				win.SetApplicationForGTKWindow(app)
-				win.ShowAll()
+				win.BuildUI()
 				app.AddWindow(win.window)
 				app.GetActiveWindow().Show()
 			})
@@ -134,7 +134,7 @@ func main() {
 			win.window.Hide()
 		} else {
 			win.SetApplicationForGTKWindow(app)
-			win.ShowAll()
+			win.BuildUI()
 			app.AddWindow(win.window)
 			app.GetActiveWindow().Show()
 		}

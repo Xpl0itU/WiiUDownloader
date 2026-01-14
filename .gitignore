@@ -11,7 +11,7 @@ out/
 log.txt
 db.go
 WiiUDownloader.icns
-WiiUDownloader
+/WiiUDownloader
 *.syso
 *.ico
 *.rc

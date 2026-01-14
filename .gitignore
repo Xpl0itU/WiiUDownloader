@@ -12,3 +12,6 @@ log.txt
 db.go
 WiiUDownloader.icns
 WiiUDownloader
+*.syso
+*.ico
+*.rc

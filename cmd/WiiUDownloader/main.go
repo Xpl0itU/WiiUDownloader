@@ -24,7 +24,8 @@ func main() {
 	if runtime.GOOS == "darwin" {
 		execPath, err := os.Executable()
 		if err != nil {
-			log.Fatal(err.Error())
+			log.Printf("Error getting executable path: %v", err)
+			return
 		}
 
 		// Check if we are inside a .app bundle
@@ -106,7 +107,10 @@ func main() {
 
 	config, err := loadConfig()
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("Error loading config: %v", err)
+		errorDialog := gtk.MessageDialogNew(nil, gtk.DIALOG_MODAL, gtk.MESSAGE_WARNING, gtk.BUTTONS_OK, "Error loading config: %v\n\nStarting with default settings.", err)
+		errorDialog.Run()
+		errorDialog.Destroy()
 	}
 
 	win := NewMainWindow(wiiudownloader.GetTitleEntries(wiiudownloader.TITLE_CATEGORY_GAME), client, config)
@@ -119,7 +123,8 @@ func main() {
 			// Open the initial setup assistant
 			assistant, err := NewInitialSetupAssistantWindow(config)
 			if err != nil {
-				log.Fatal(err)
+				log.Printf("Error creating setup assistant: %v", err)
+				return
 			}
 			assistant.SetPostSetupCallback(func() {
 				win.SetApplicationForGTKWindow(app)

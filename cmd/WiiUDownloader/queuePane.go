@@ -42,7 +42,7 @@ func NewQueuePane() (*QueuePane, error) {
 	}
 	selection, err := titleTreeView.GetSelection()
 	if err != nil {
-		log.Fatalln("Unable to get selection:", err)
+		log.Println("Unable to get selection:", err)
 	}
 	selection.SetMode(gtk.SELECTION_MULTIPLE)
 
@@ -111,7 +111,7 @@ func NewQueuePane() (*QueuePane, error) {
 
 		defer func() {
 			if r := recover(); r != nil {
-				log.Fatalln("Error updating model:", r)
+				log.Println("Error updating model:", r)
 			}
 		}()
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -90,18 +91,19 @@ func loadConfig() (*Config, error) {
 		if errConf := k.Load(file.Provider(filepath.Join(userConfigDir, wiiudownloaderConfigDir, configFilename)), json.Parser()); errConf != nil {
 			log.Printf("error loading config file: %v, writing defaults...\n", errConf)
 			if errConf := createDefaultConfigFile(); errConf != nil {
-				log.Fatalf("error creating default config file: %v", errConf)
-				err = errConf
+				err = fmt.Errorf("error creating default config file: %w", errConf)
 				return
 			}
 			if errConf := k.Load(file.Provider(filepath.Join(userConfigDir, wiiudownloaderConfigDir, configFilename)), json.Parser()); errConf != nil {
-				log.Fatalf("error loading config file: %v", errConf)
-				err = errConf
+				err = fmt.Errorf("error loading config file: %w", errConf)
 				return
 			}
 		}
 
-		globalConfig.SetValuesFromConfig(k)
+		if errConf := globalConfig.SetValuesFromConfig(k); errConf != nil {
+			err = fmt.Errorf("error setting values from config: %w", errConf)
+			return
+		}
 	})
 
 	return globalConfig, err
@@ -130,10 +132,11 @@ func (c *Config) Save() error {
 	return os.WriteFile(filepath.Join(userConfigDir, wiiudownloaderConfigDir, configFilename), confBytes, 0644)
 }
 
-func (c *Config) SetValuesFromConfig(newK *koanf.Koanf) {
+func (c *Config) SetValuesFromConfig(newK *koanf.Koanf) error {
 	c.saveMutex.Lock()
 	defer c.saveMutex.Unlock()
 	if err := newK.Unmarshal("", c); err != nil {
-		log.Fatalf("error setting values from config: %v", err)
+		return err
 	}
+	return nil
 }

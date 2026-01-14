@@ -635,7 +635,8 @@ func (mw *MainWindow) onSearchEntryChanged() {
 func (mw *MainWindow) filterTitles(filterText string) {
 	store, err := mw.treeView.GetModel()
 	if err != nil {
-		log.Fatalln("Unable to get tree view model:", err)
+		log.Println("Unable to get tree view model:", err)
+		return
 	}
 	// If store is somehow nil, we can't do anything.
 	if store == nil {
@@ -660,7 +661,7 @@ func (mw *MainWindow) filterTitles(filterText string) {
 				[]int{IN_QUEUE_COLUMN, KIND_COLUMN, TITLE_ID_COLUMN, REGION_COLUMN, NAME_COLUMN},
 				[]interface{}{mw.queuePane.IsTitleInQueue(entry), wiiudownloader.GetFormattedKind(entry.TitleID), fmt.Sprintf("%016x", entry.TitleID), wiiudownloader.GetFormattedRegion(entry.Region), entry.Name},
 			); err != nil {
-				log.Fatalln("Unable to set values:", err)
+				log.Println("Unable to set values:", err)
 			}
 		}
 	}
@@ -669,7 +670,8 @@ func (mw *MainWindow) filterTitles(filterText string) {
 func (mw *MainWindow) onCategoryToggled(button *gtk.ToggleButton) {
 	category, err := button.GetLabel()
 	if err != nil {
-		log.Fatalln("Unable to get label:", err)
+		log.Println("Unable to get label:", err)
+		return
 	}
 	mw.titles = wiiudownloader.GetTitleEntries(wiiudownloader.GetCategoryFromFormattedCategory(category))
 	mw.updateTitles(mw.titles)

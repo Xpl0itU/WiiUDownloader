@@ -28,10 +28,9 @@ jobs:
       - name: Build artifacts
         run: |
           docker run --rm -v ${PWD}:/project builder python3 grabTitles.py
-          docker run --rm -v ${PWD}:/project builder bash -lc "cd cmd/WiiUDownloader && go build -ldflags='-s -w' -o ../main ."
+          docker run --rm -v ${PWD}:/project builder bash -lc "go build -C cmd/WiiUDownloader -ldflags='-s -w' -o ../../WiiUDownloader ./main.go"
       - name: Deploy WiiUDownloader
         run: |
-          mv main WiiUDownloader
           docker run --privileged --rm -e DEPLOY_GTK_VERSION=3 -e OUTPUT="WiiUDownloader-Linux-x86_64.AppImage" -e UPDATE_INFORMATION="gh-releases-zsync|Xpl0itU|WiiUDownloader|latest|WiiUDownloader-*.AppImage.zsync" -v ${PWD}:/project builder linuxdeploy.AppImage --plugin gtk --plugin checkrt --output=appimage --create-desktop-file --executable=WiiUDownloader --appdir dist --icon-file data/WiiUDownloader.png
       - name: Upload Linux Artifact
         uses: ncipollo/release-action@v1

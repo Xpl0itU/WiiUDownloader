@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import sys
 import shutil
 import subprocess
 import sys
@@ -62,7 +63,26 @@ def bundle_lib(src_path, dest_dir, processed, search_paths):
 
 
 # Paths
-executable_path = "main"
+env_exec = os.environ.get("EXECUTABLE_PATH")
+if env_exec and os.path.exists(env_exec):
+    executable_path = env_exec
+else:
+    candidates = [
+        "main",
+        os.path.join("cmd", "WiiUDownloader", "main"),
+    ]
+    executable_path = None
+    for c in candidates:
+        if os.path.exists(c):
+            executable_path = c
+            break
+    if not executable_path:
+        try:
+            subprocess.check_call(["go", "build", "-o", "main", "./cmd/WiiUDownloader/main.go"])
+            executable_path = "main"
+        except subprocess.CalledProcessError as e:
+            print(f"Error building executable: {e}")
+            sys.exit(1)
 app_bundle_path = "out/WiiUDownloader.app"
 contents_path = os.path.join(app_bundle_path, "Contents")
 macos_path = os.path.join(contents_path, "MacOS")

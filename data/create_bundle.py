@@ -78,8 +78,9 @@ else:
             break
     if not executable_path:
         try:
-            subprocess.check_call(["go", "build", "-o", "main", "./cmd/WiiUDownloader/main.go"])
-            executable_path = "main"
+            build_dir = os.path.join("cmd", "WiiUDownloader")
+            subprocess.check_call(["go", "build", "-o", "main"], cwd=build_dir)
+            executable_path = os.path.join(build_dir, "main")
         except subprocess.CalledProcessError as e:
             print(f"Error building executable: {e}")
             sys.exit(1)

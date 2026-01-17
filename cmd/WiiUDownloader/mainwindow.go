@@ -55,6 +55,8 @@ func NewMainWindow(entries []wiiudownloader.TitleEntry, client *http.Client, con
 
 	win.SetTitle("WiiUDownloader")
 	win.SetDefaultSize(870, 400)
+	win.SetDecorated(true)
+	win.SetPosition(gtk.WIN_POS_CENTER)
 	win.Connect("destroy", func() {
 		os.Exit(0) // Hacky way to close the program
 	})
@@ -64,7 +66,8 @@ func NewMainWindow(entries []wiiudownloader.TitleEntry, client *http.Client, con
 		log.Fatalln("Unable to create entry:", err)
 	}
 	searchEntry.SetPlaceholderText("Search...")
-	searchEntry.SetHExpand(false)
+	searchEntry.SetHExpand(true)
+	searchEntry.SetWidthChars(24)
 
 	queuePane, err := NewQueuePane()
 	if err != nil {
@@ -84,6 +87,7 @@ func NewMainWindow(entries []wiiudownloader.TitleEntry, client *http.Client, con
 	queuePane.updateFunc = mainWindow.updateTitlesInQueue
 
 	mainWindow.applyConfig(config)
+	applyStyling()
 
 	searchEntry.Connect("changed", mainWindow.onSearchEntryChanged)
 
@@ -136,6 +140,7 @@ func (mw *MainWindow) BuildUI() {
 		return
 	}
 	mw.uiBuilt = true
+	// Use OS-provided window decorations
 
 	store, err := gtk.ListStoreNew(glib.TYPE_BOOLEAN, glib.TYPE_STRING, glib.TYPE_STRING, glib.TYPE_STRING, glib.TYPE_STRING)
 	if err != nil {
@@ -160,6 +165,7 @@ func (mw *MainWindow) BuildUI() {
 	if err != nil {
 		log.Fatalln("Unable to create tree view:", err)
 	}
+	mw.treeView.SetHeadersClickable(true)
 
 	selection, err := mw.treeView.GetSelection()
 	if err != nil {
@@ -228,30 +234,38 @@ func (mw *MainWindow) BuildUI() {
 	if err != nil {
 		log.Fatalln("Unable to create tree view column:", err)
 	}
+	column.SetResizable(true)
 	mw.treeView.AppendColumn(column)
 
 	column, err = gtk.TreeViewColumnNewWithAttribute("Title ID", renderer, "text", TITLE_ID_COLUMN)
 	if err != nil {
 		log.Fatalln("Unable to create tree view column:", err)
 	}
+	column.SetResizable(true)
 	mw.treeView.AppendColumn(column)
 
 	column, err = gtk.TreeViewColumnNewWithAttribute("Region", renderer, "text", REGION_COLUMN)
 	if err != nil {
 		log.Fatalln("Unable to create tree view column:", err)
 	}
+	column.SetResizable(true)
 	mw.treeView.AppendColumn(column)
 
 	column, err = gtk.TreeViewColumnNewWithAttribute("Name", renderer, "text", NAME_COLUMN)
 	if err != nil {
 		log.Fatalln("Unable to create tree view column:", err)
 	}
+	column.SetResizable(true)
 	mw.treeView.AppendColumn(column)
 
-	mainvBox, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
+	mainvBox, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 6)
 	if err != nil {
 		log.Fatalln("Unable to create box:", err)
 	}
+	mainvBox.SetMarginTop(6)
+	mainvBox.SetMarginBottom(6)
+	mainvBox.SetMarginStart(6)
+	mainvBox.SetMarginEnd(6)
 	menuBar, err := gtk.MenuBarNew()
 	if err != nil {
 		log.Fatalln("Unable to create menu bar:", err)
@@ -371,12 +385,12 @@ func (mw *MainWindow) BuildUI() {
 	if err != nil {
 		log.Fatalln("Unable to create menu:", err)
 	}
-	configMenuOption, err := gtk.MenuItemNewWithLabel("Config")
+	configMenuOption, err := gtk.MenuItemNewWithLabel("Settings")
 	if err != nil {
 		log.Fatalln("Unable to create menu item:", err)
 	}
 	configMenuOption.SetSubmenu(configSubMenu)
-	configOption, err := gtk.MenuItemNewWithLabel("Config")
+	configOption, err := gtk.MenuItemNewWithLabel("Settings")
 	if err != nil {
 		log.Fatalln("Unable to create menu item:", err)
 	}
@@ -388,12 +402,17 @@ func (mw *MainWindow) BuildUI() {
 		if err := mw.createConfigWindow(config); err != nil {
 			return
 		}
+		if mw.configWindow != nil && mw.window != nil {
+			mw.configWindow.Window.SetTransientFor(mw.window)
+			mw.configWindow.Window.SetPosition(gtk.WIN_POS_CENTER_ON_PARENT)
+			mw.configWindow.Window.SetDecorated(true)
+		}
 		mw.configWindow.Window.ShowAll()
 	})
 	configSubMenu.Append(configOption)
 	menuBar.Append(configMenuOption)
 	mainvBox.PackStart(menuBar, false, false, 0)
-	tophBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
+	tophBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 6)
 	if err != nil {
 		log.Fatalln("Unable to create box:", err)
 	}
@@ -403,6 +422,10 @@ func (mw *MainWindow) BuildUI() {
 		button, err := gtk.ToggleButtonNewWithLabel(cat)
 		if err != nil {
 			log.Fatalln("Unable to create toggle button:", err)
+		}
+		buttonStyle, _ := button.GetStyleContext()
+		if buttonStyle != nil {
+			buttonStyle.AddClass("category-toggle")
 		}
 		tophBox.PackStart(button, false, false, 0)
 		button.Connect("pressed", mw.onCategoryToggled)
@@ -415,7 +438,7 @@ func (mw *MainWindow) BuildUI() {
 		}
 		mw.categoryButtons = append(mw.categoryButtons, button)
 	}
-	tophBox.PackEnd(mw.searchEntry, false, false, 0)
+	tophBox.PackEnd(mw.searchEntry, true, true, 0)
 
 	mainvBox.PackStart(tophBox, false, false, 0)
 
@@ -428,7 +451,7 @@ func (mw *MainWindow) BuildUI() {
 
 	mainvBox.PackStart(scrollable, true, true, 0)
 
-	bottomhBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
+	bottomhBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 6)
 	if err != nil {
 		log.Fatalln("Unable to create box:", err)
 	}
@@ -437,6 +460,8 @@ func (mw *MainWindow) BuildUI() {
 	if err != nil {
 		log.Fatalln("Unable to create button:", err)
 	}
+	mw.downloadQueueButton.SetCanDefault(true)
+	mw.downloadQueueButton.GrabDefault()
 
 	mw.decryptContentsCheckbox, err = gtk.CheckButtonNewWithLabel("Decrypt contents")
 	if err != nil {
@@ -476,19 +501,30 @@ func (mw *MainWindow) BuildUI() {
 			return
 		}
 
-		if !config.RememberLastPath || !(isValidPath(config.LastSelectedPath)) {
-			if config.LastSelectedPath != "" {
-				dialog.SetStartDir(config.LastSelectedPath) // no need to check validity, startDir only works if it is a valid existing directory, else works as if not set
+		var selectedPath string
+		if config.RememberLastPath {
+			if isValidPath(config.LastSelectedPath) {
+				selectedPath = config.LastSelectedPath
+			} else {
+				glib.IdleAdd(func() {
+					ShowErrorDialog(mw.window, fmt.Errorf("Saved download path not found: %s", config.LastSelectedPath))
+				})
+				// fall through to dialog
 			}
-
-			selectedPath, err := dialog.Browse()
+		}
+		if selectedPath == "" {
+			if isValidPath(config.LastSelectedPath) {
+				dialog.SetStartDir(config.LastSelectedPath)
+			}
+			chosen, err := dialog.Browse()
 			if err != nil {
 				glib.IdleAdd(func() {
 					mw.progressWindow.Window.Hide()
 				})
 				return
 			}
-			config.LastSelectedPath = selectedPath
+			selectedPath = chosen
+			config.LastSelectedPath = chosen
 			if err := config.Save(); err != nil {
 				glib.IdleAdd(func() {
 					ShowErrorDialog(mw.window, err)
@@ -528,7 +564,7 @@ func (mw *MainWindow) BuildUI() {
 				mw.queuePane.removeFromQueueButton.SetSensitive(true)
 			})
 
-			if err := mw.onDownloadQueueClicked(config.LastSelectedPath, decryptContents, deleteEncryptedContents); err != nil {
+			if err := mw.onDownloadQueueClicked(selectedPath, decryptContents, deleteEncryptedContents); err != nil {
 				glib.IdleAdd(func() {
 					mw.showError(err)
 				})
@@ -679,7 +715,7 @@ func (mw *MainWindow) onCategoryToggled(button *gtk.ToggleButton) {
 	for _, catButton := range mw.categoryButtons {
 		catButton.SetActive(false)
 	}
-	button.Activate()
+	button.SetActive(true)
 }
 
 func (mw *MainWindow) onDecryptContentsMenuItemClicked(selectedPath string) error {

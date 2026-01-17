@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/gotk3/gotk3/gdk"
 	"github.com/gotk3/gotk3/gtk"
 )
 
@@ -49,6 +50,47 @@ func setDarkTheme(darkMode bool) {
 	gSettings.SetProperty("gtk-application-prefer-dark-theme", darkMode)
 }
 
+func applyStyling() {
+	provider, _ := gtk.CssProviderNew()
+	css := `
+	headerbar {
+		padding: 6px;
+	}
+	treeview.view {
+		padding: 6px;
+	}
+	.button {
+		padding: 4px 10px;
+	}
+	entry {
+		padding: 4px 8px;
+	}
+	button.category-toggle {
+		border-radius: 8px;
+		padding: 4px 10px;
+	}
+	button.category-toggle:checked {
+		background: @theme_selected_bg_color;
+		color: @theme_selected_fg_color;
+	}
+	button.category-toggle:hover {
+		background: shade(@theme_bg_color, 0.95);
+	}
+	.settings-window label {
+		font-weight: 600;
+	}
+	.settings-grid entry {
+		padding: 6px 10px;
+	}
+	.settings-grid button {
+		padding: 6px 10px;
+	}
+	`
+	_ = provider.LoadFromData(css)
+	screen, _ := gdk.ScreenGetDefault()
+	gtk.AddProviderForScreen(screen, provider, gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+}
+
 func isValidPath(path string) bool {
 	if path == "" {
 		return false
@@ -60,7 +102,11 @@ func isValidPath(path string) bool {
 }
 
 func ShowErrorDialog(window *gtk.Window, err error) {
-	dialog := gtk.MessageDialogNew(window, gtk.DIALOG_MODAL, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, "%s", err.Error())
+	flags := gtk.DIALOG_MODAL
+	if window == nil {
+		flags = 0
+	}
+	dialog := gtk.MessageDialogNew(window, flags, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, "%s", err.Error())
 	dialog.Run()
 	dialog.Destroy()
 }

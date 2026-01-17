@@ -74,15 +74,7 @@ func main() {
 
 	gtk.Init(nil)
 
-	// Robust Dark Mode application
-	settings, _ := gtk.SettingsGetDefault()
-	if isDarkMode() {
-		settings.SetProperty("gtk-application-prefer-dark-theme", true)
-		settings.SetProperty("gtk-theme-name", "Adwaita")
-	} else {
-		settings.SetProperty("gtk-application-prefer-dark-theme", false)
-		settings.SetProperty("gtk-theme-name", "Adwaita")
-	}
+// Theme will be applied after loading config
 
 	app, err := gtk.ApplicationNew("io.github.xpl0itu.wiiudownloader", glib.APPLICATION_FLAGS_NONE)
 	if err != nil {
@@ -108,10 +100,15 @@ func main() {
 	config, err := loadConfig()
 	if err != nil {
 		log.Printf("Error loading config: %v", err)
-		errorDialog := gtk.MessageDialogNew(nil, gtk.DIALOG_MODAL, gtk.MESSAGE_WARNING, gtk.BUTTONS_OK, "Error loading config: %v\n\nStarting with default settings.", err)
+		errorDialog := gtk.MessageDialogNew(nil, 0, gtk.MESSAGE_WARNING, gtk.BUTTONS_OK, "Error loading config: %v\n\nStarting with default settings.", err)
 		errorDialog.Run()
 		errorDialog.Destroy()
 	}
+
+// Apply theme preference from settings (fallback to OS if unset)
+settings, _ := gtk.SettingsGetDefault()
+settings.SetProperty("gtk-theme-name", "Adwaita")
+settings.SetProperty("gtk-application-prefer-dark-theme", config.DarkMode)
 
 	win := NewMainWindow(wiiudownloader.GetTitleEntries(wiiudownloader.TITLE_CATEGORY_GAME), client, config)
 	config.saveConfigCallback = func() {

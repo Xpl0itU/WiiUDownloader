@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/dustin/go-humanize"
+	"github.com/gotk3/gotk3/gdk"
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
 )
@@ -162,8 +163,15 @@ func createProgressWindow(parent *gtk.Window) (*ProgressWindow, error) {
 		return nil, err
 	}
 	win.SetTitle("WiiUDownloader - Downloading")
+	win.SetTypeHint(gdk.WINDOW_TYPE_HINT_DIALOG)
+	win.SetModal(true)
+	if parent != nil {
+		win.SetTransientFor(parent)
+		win.SetPosition(gtk.WIN_POS_CENTER_ON_PARENT)
+	} else {
+		win.SetPosition(gtk.WIN_POS_CENTER)
+	}
 
-	win.SetTransientFor(parent)
 	win.SetDeletable(false)
 
 	box, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 5)

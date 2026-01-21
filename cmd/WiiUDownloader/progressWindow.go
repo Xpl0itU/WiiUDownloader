@@ -79,9 +79,17 @@ func (pw *ProgressWindow) SetGameTitle(title string) {
 }
 
 func (pw *ProgressWindow) UpdateDownloadProgress(downloaded int64, filename string) {
+	if downloaded == 0 {
+		return
+	}
 	glib.IdleAdd(func() bool {
 		pw.cancelButton.SetSensitive(true)
 		pw.progressMutex.Lock()
+		if _, ok := pw.progressPerFile[filename]; !ok {
+			// This file was already marked as done, don't re-add it
+			pw.progressMutex.Unlock()
+			return false
+		}
 		pw.progressPerFile[filename] += downloaded
 		total := pw.totalDownloaded
 		for _, v := range pw.progressPerFile {

@@ -14,16 +14,10 @@ type WriterProgress struct {
 }
 
 func newWriterProgress(writer io.Writer, progressReporter ProgressReporter, filename string) *WriterProgress {
-	return &WriterProgress{writer: writer, progressReporter: progressReporter, updateProgressTicker: time.NewTicker(25 * time.Millisecond), downloadToReport: 0, filename: filename}
+	return &WriterProgress{writer: writer, progressReporter: progressReporter, updateProgressTicker: time.NewTicker(100 * time.Millisecond), downloadToReport: 0, filename: filename}
 }
 
 func (r *WriterProgress) Write(p []byte) (n int, err error) {
-	select {
-	case <-r.updateProgressTicker.C:
-		r.progressReporter.UpdateDownloadProgress(r.downloadToReport, r.filename)
-		r.downloadToReport = 0
-	default:
-	}
 	if r.progressReporter.Cancelled() {
 		return 0, nil
 	}
@@ -32,10 +26,23 @@ func (r *WriterProgress) Write(p []byte) (n int, err error) {
 		return n, err
 	}
 	r.downloadToReport += int64(n)
+
+	select {
+	case <-r.updateProgressTicker.C:
+		if r.downloadToReport > 0 {
+			r.progressReporter.UpdateDownloadProgress(r.downloadToReport, r.filename)
+			r.downloadToReport = 0
+		}
+	default:
+	}
 	return n, err
 }
 
 func (r *WriterProgress) Close() error {
 	r.updateProgressTicker.Stop()
+	if r.downloadToReport > 0 {
+		r.progressReporter.UpdateDownloadProgress(r.downloadToReport, r.filename)
+		r.downloadToReport = 0
+	}
 	return nil
 }

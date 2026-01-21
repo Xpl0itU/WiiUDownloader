@@ -85,6 +85,7 @@ func main() {
 
 	client := &http.Client{
 		Transport: &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 				dialer := &net.Dialer{
 					Timeout:   30 * time.Second,

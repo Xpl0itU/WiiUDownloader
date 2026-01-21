@@ -185,6 +185,7 @@ func downloadFile(progressReporter ProgressReporter, client *http.Client, downlo
 
 		_, err = io.Copy(writerProgress, watchdog)
 		timer.Stop()
+		writerProgress.Close()
 
 		if err != nil {
 			file.Close()
@@ -197,6 +198,7 @@ func downloadFile(progressReporter ProgressReporter, client *http.Client, downlo
 		}
 		file.Close()
 		resp.Body.Close()
+		progressReporter.MarkFileAsDone(filepath.Base(dstPath))
 		break
 	}
 

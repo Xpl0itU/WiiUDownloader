@@ -68,13 +68,20 @@ func applyStyling() {
 	button.category-toggle {
 		border-radius: 8px;
 		padding: 4px 10px;
+		transition: all 0.2s ease-in-out;
 	}
-	button.category-toggle:checked {
-		background: @theme_selected_bg_color;
-		color: @theme_selected_fg_color;
-	}
-	button.category-toggle:hover {
+	button.category-toggle:hover,
+	radio.category-toggle:hover {
 		background: shade(@theme_bg_color, 0.95);
+	}
+	button.category-toggle:checked,
+	radio.category-toggle:checked,
+	button.category-toggle:active,
+	radio.category-toggle:active {
+		background: @theme_selected_bg_color;
+		background-color: #3584e4; /* Explicit fallback blue (Adwaita blue) */
+		color: @theme_selected_fg_color;
+		color: white;
 	}
 	.settings-window label {
 		font-weight: 600;

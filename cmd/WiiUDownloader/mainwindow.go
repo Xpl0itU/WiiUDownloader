@@ -42,9 +42,12 @@ type MainWindow struct {
 	titles                          []wiiudownloader.TitleEntry
 	decryptContents                 bool
 	currentRegion                   uint8
+	currentCategory                 uint8
 	client                          *http.Client
 	uiBuilt                         bool
 	searchTimer                     *time.Timer
+	filterModel                     *gtk.TreeModelFilter
+	childStore                      *gtk.ListStore
 }
 
 func NewMainWindow(entries []wiiudownloader.TitleEntry, client *http.Client, config *Config) *MainWindow {
@@ -98,27 +101,6 @@ func (mw *MainWindow) SetApplicationForGTKWindow(app *gtk.Application) {
 	mw.window.SetApplication(app)
 }
 
-func (mw *MainWindow) updateTitles(titles []wiiudownloader.TitleEntry) {
-	store, err := gtk.ListStoreNew(glib.TYPE_BOOLEAN, glib.TYPE_STRING, glib.TYPE_STRING, glib.TYPE_STRING, glib.TYPE_STRING)
-	if err != nil {
-		log.Fatalln("Unable to create list store:", err)
-	}
-
-	for _, entry := range titles {
-		if (mw.currentRegion & entry.Region) == 0 {
-			continue
-		}
-		iter := store.Append()
-		if err := store.Set(iter,
-			[]int{IN_QUEUE_COLUMN, KIND_COLUMN, TITLE_ID_COLUMN, REGION_COLUMN, NAME_COLUMN},
-			[]interface{}{mw.queuePane.IsTitleInQueue(entry), wiiudownloader.GetFormattedKind(entry.TitleID), fmt.Sprintf("%016x", entry.TitleID), wiiudownloader.GetFormattedRegion(entry.Region), entry.Name},
-		); err != nil {
-			log.Fatalln("Unable to set values:", err)
-		}
-	}
-	mw.treeView.SetModel(store)
-}
-
 func (mw *MainWindow) createConfigWindow(config *Config) error {
 	configWindow, err := NewConfigWindow(config)
 	if err != nil {
@@ -142,17 +124,16 @@ func (mw *MainWindow) BuildUI() {
 	mw.uiBuilt = true
 	// Use OS-provided window decorations
 
-	store, err := gtk.ListStoreNew(glib.TYPE_BOOLEAN, glib.TYPE_STRING, glib.TYPE_STRING, glib.TYPE_STRING, glib.TYPE_STRING)
+	var err error
+	mw.childStore, err = gtk.ListStoreNew(glib.TYPE_BOOLEAN, glib.TYPE_STRING, glib.TYPE_STRING, glib.TYPE_STRING, glib.TYPE_STRING)
 	if err != nil {
 		log.Fatalln("Unable to create list store:", err)
 	}
 
-	for _, entry := range mw.titles {
-		if (mw.currentRegion & entry.Region) == 0 {
-			continue
-		}
-		iter := store.Append()
-		err = store.Set(iter,
+	allTitles := wiiudownloader.GetTitleEntries(wiiudownloader.TITLE_CATEGORY_ALL)
+	for _, entry := range allTitles {
+		iter := mw.childStore.Append()
+		err = mw.childStore.Set(iter,
 			[]int{IN_QUEUE_COLUMN, KIND_COLUMN, TITLE_ID_COLUMN, REGION_COLUMN, NAME_COLUMN},
 			[]interface{}{mw.queuePane.IsTitleInQueue(entry), wiiudownloader.GetFormattedKind(entry.TitleID), fmt.Sprintf("%016x", entry.TitleID), wiiudownloader.GetFormattedRegion(entry.Region), entry.Name},
 		)
@@ -161,19 +142,70 @@ func (mw *MainWindow) BuildUI() {
 		}
 	}
 
-	mw.treeView, err = gtk.TreeViewNew()
+	mw.filterModel, err = mw.childStore.ToTreeModel().FilterNew(nil)
+	if err != nil {
+		log.Fatalln("Unable to create filter model:", err)
+	}
+
+	mw.filterModel.SetVisibleFunc(func(model *gtk.TreeModel, iter *gtk.TreeIter) bool {
+		val, err := model.GetValue(iter, TITLE_ID_COLUMN)
+		if err != nil {
+			return true
+		}
+		tidStr, _ := val.GetString()
+		tid, _ := strconv.ParseUint(tidStr, 16, 64)
+
+		nameVal, _ := model.GetValue(iter, NAME_COLUMN)
+		nameStr, _ := nameVal.GetString()
+
+		// 1. Category Filter
+		if mw.currentCategory != wiiudownloader.TITLE_CATEGORY_ALL {
+			kindVal, _ := model.GetValue(iter, KIND_COLUMN)
+			kindStr, _ := kindVal.GetString()
+			if kindStr != wiiudownloader.GetFormattedKind(tid) {
+				// This shouldn't happen if data is consistent, but let's be safe
+				return false
+			}
+			// Map category
+			cat := wiiudownloader.GetCategoryFromFormattedCategory(kindStr)
+			if cat != mw.currentCategory {
+				return false
+			}
+		}
+
+		// 2. Region Filter
+		// We need the original region bits. Since we only have strings in the model,
+		// we'll find the title in the original list for accurate region matching.
+		// Performance check: this is called frequently, but mw.titles is already filtered by category usually.
+		// Actually, we'll use mw.titles which contains all entries for the current category or all.
+		// To be bulletproof, let's just find it in the master list.
+		// Optimization: If performance is an issue, we could add a HIDDEN column for raw region bits.
+		for _, t := range allTitles {
+			if t.TitleID == tid {
+				if (mw.currentRegion & t.Region) == 0 {
+					return false
+				}
+				break
+			}
+		}
+
+		// 3. Search Filter
+		if mw.lastSearchText != "" {
+			search := strings.ToLower(mw.lastSearchText)
+			if !strings.Contains(strings.ToLower(nameStr), search) &&
+				!strings.Contains(strings.ToLower(tidStr), search) {
+				return false
+			}
+		}
+
+		return true
+	})
+
+	mw.treeView, err = gtk.TreeViewNewWithModel(mw.filterModel)
 	if err != nil {
 		log.Fatalln("Unable to create tree view:", err)
 	}
 	mw.treeView.SetHeadersClickable(true)
-
-	selection, err := mw.treeView.GetSelection()
-	if err != nil {
-		log.Fatalln("Unable to get selection:", err)
-	}
-	selection.SetMode(gtk.SELECTION_MULTIPLE)
-
-	mw.treeView.SetModel(store)
 
 	toggleRenderer, err := gtk.CellRendererToggleNew()
 	if err != nil {
@@ -181,19 +213,24 @@ func (mw *MainWindow) BuildUI() {
 	}
 	// on click, add or remove from queue
 	toggleRenderer.Connect("toggled", func(renderer *gtk.CellRendererToggle, path string) {
-		store, err := mw.treeView.GetModel()
-		if err != nil {
-			log.Fatalln("Unable to get model:", err)
-		}
 		pathObj, err := gtk.TreePathNewFromString(path)
 		if err != nil {
 			log.Fatalln("Unable to create tree path:", err)
 		}
-		iter, err := store.ToTreeModel().GetIter(pathObj)
-		if err != nil {
-			log.Fatalln("Unable to get iter:", err)
+
+		// Convert filter path to child path
+		childPath := mw.filterModel.ConvertPathToChildPath(pathObj)
+		if childPath == nil {
+			return
 		}
-		inQueueVal, err := store.ToTreeModel().GetValue(iter, IN_QUEUE_COLUMN)
+
+		// Get iter from child store
+		iter, err := mw.childStore.ToTreeModel().GetIter(childPath)
+		if err != nil {
+			return
+		}
+
+		inQueueVal, err := mw.childStore.ToTreeModel().GetValue(iter, IN_QUEUE_COLUMN)
 		if err != nil {
 			log.Fatalln("Unable to get value:", err)
 		}
@@ -201,7 +238,7 @@ func (mw *MainWindow) BuildUI() {
 		if err != nil {
 			log.Fatalln("Unable to get value:", err)
 		}
-		tid, err := store.ToTreeModel().GetValue(iter, TITLE_ID_COLUMN)
+		tid, err := mw.childStore.ToTreeModel().GetValue(iter, TITLE_ID_COLUMN)
 		if err != nil {
 			log.Fatalln("Unable to get value:", err)
 		}
@@ -417,18 +454,31 @@ func (mw *MainWindow) BuildUI() {
 		log.Fatalln("Unable to create box:", err)
 	}
 
+	var firstRadio *gtk.RadioButton
 	mw.categoryButtons = make([]*gtk.ToggleButton, 0)
 	for _, cat := range []string{"Game", "Update", "DLC", "Demo", "All"} {
-		button, err := gtk.ToggleButtonNewWithLabel(cat)
-		if err != nil {
-			log.Fatalln("Unable to create toggle button:", err)
+		var (
+			button *gtk.RadioButton
+			err    error
+		)
+		if firstRadio == nil {
+			button, err = gtk.RadioButtonNewWithLabel(nil, cat)
+			firstRadio = button
+		} else {
+			button, err = gtk.RadioButtonNewWithLabelFromWidget(firstRadio, cat)
 		}
+		if err != nil {
+			log.Fatalln("Unable to create radio button:", err)
+		}
+		button.SetMode(false) // Make it look like a regular button
 		buttonStyle, _ := button.GetStyleContext()
 		if buttonStyle != nil {
 			buttonStyle.AddClass("category-toggle")
 		}
 		tophBox.PackStart(button, false, false, 0)
-		button.Connect("pressed", mw.onCategoryToggled)
+		button.Connect("toggled", func() {
+			mw.onCategoryToggled(&button.ToggleButton)
+		})
 		buttonLabel, err := button.GetLabel()
 		if err != nil {
 			log.Fatalln("Unable to get label:", err)
@@ -436,7 +486,7 @@ func (mw *MainWindow) BuildUI() {
 		if buttonLabel == "Game" {
 			button.SetActive(true)
 		}
-		mw.categoryButtons = append(mw.categoryButtons, button)
+		mw.categoryButtons = append(mw.categoryButtons, &button.ToggleButton)
 	}
 	tophBox.PackEnd(mw.searchEntry, true, true, 0)
 
@@ -638,8 +688,7 @@ func (mw *MainWindow) onRegionChange(button *gtk.CheckButton, region uint8) {
 	} else {
 		mw.currentRegion = region ^ mw.currentRegion
 	}
-	mw.updateTitles(mw.titles)
-	mw.filterTitles(mw.lastSearchText)
+	mw.filterModel.Refilter()
 	config, err := loadConfig()
 	if err != nil {
 		return
@@ -663,59 +712,24 @@ func (mw *MainWindow) onSearchEntryChanged() {
 				return
 			}
 			mw.lastSearchText = text
-			mw.filterTitles(text)
+			mw.filterModel.Refilter()
 		})
 	})
 }
 
-func (mw *MainWindow) filterTitles(filterText string) {
-	store, err := mw.treeView.GetModel()
-	if err != nil {
-		log.Println("Unable to get tree view model:", err)
-		return
-	}
-	// If store is somehow nil, we can't do anything.
-	if store == nil {
-		return
-	}
-
-	// Detach model to speed up bulk inserts
-	mw.treeView.SetModel(nil)
-	defer mw.treeView.SetModel(store)
-
-	storeRef := store.(*gtk.ListStore)
-	storeRef.Clear()
-
-	for _, entry := range mw.titles {
-		if strings.Contains(strings.ToLower(entry.Name), strings.ToLower(filterText)) ||
-			strings.Contains(strings.ToLower(fmt.Sprintf("%016x", entry.TitleID)), strings.ToLower(filterText)) {
-			if (mw.currentRegion & entry.Region) == 0 {
-				continue
-			}
-			iter := storeRef.Append()
-			if err := storeRef.Set(iter,
-				[]int{IN_QUEUE_COLUMN, KIND_COLUMN, TITLE_ID_COLUMN, REGION_COLUMN, NAME_COLUMN},
-				[]interface{}{mw.queuePane.IsTitleInQueue(entry), wiiudownloader.GetFormattedKind(entry.TitleID), fmt.Sprintf("%016x", entry.TitleID), wiiudownloader.GetFormattedRegion(entry.Region), entry.Name},
-			); err != nil {
-				log.Println("Unable to set values:", err)
-			}
-		}
-	}
-}
-
 func (mw *MainWindow) onCategoryToggled(button *gtk.ToggleButton) {
+	if !button.GetActive() {
+		return
+	}
 	category, err := button.GetLabel()
 	if err != nil {
 		log.Println("Unable to get label:", err)
 		return
 	}
-	mw.titles = wiiudownloader.GetTitleEntries(wiiudownloader.GetCategoryFromFormattedCategory(category))
-	mw.updateTitles(mw.titles)
-	mw.filterTitles(mw.lastSearchText)
-	for _, catButton := range mw.categoryButtons {
-		catButton.SetActive(false)
-	}
-	button.SetActive(true)
+	mw.currentCategory = wiiudownloader.GetCategoryFromFormattedCategory(category)
+	glib.IdleAdd(func() {
+		mw.filterModel.Refilter()
+	})
 }
 
 func (mw *MainWindow) onDecryptContentsMenuItemClicked(selectedPath string) error {

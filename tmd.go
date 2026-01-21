@@ -72,7 +72,7 @@ func ParseTMD(data []byte) (*TMD, error) {
 				return nil, err
 			}
 
-			tmd.Contents[i].Hash = make([]byte, 0x20)
+			tmd.Contents[i].Hash = make([]byte, 0x14)
 			if err := binary.Read(reader, binary.BigEndian, &tmd.Contents[i].Hash); err != nil {
 				return nil, err
 			}

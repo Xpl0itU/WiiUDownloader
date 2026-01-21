@@ -763,16 +763,15 @@ func (mw *MainWindow) getDeleteEncryptedContents() bool {
 }
 
 func (mw *MainWindow) updateTitlesInQueue() {
-	store, err := mw.treeView.GetModel()
-	if err != nil {
-		log.Fatalln("Unable to get tree view model:", err)
+	if mw.childStore == nil {
+		return
 	}
-
-	storeRef := store.(*gtk.ListStore)
+	storeRef := mw.childStore
 
 	iter, ok := storeRef.GetIterFirst()
 	if !ok {
-		log.Fatalln("Unable to get first iter:", err)
+		log.Println("Unable to get first iter")
+		return
 	}
 	for iter != nil {
 		tid, err := storeRef.GetValue(iter, TITLE_ID_COLUMN)

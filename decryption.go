@@ -88,7 +88,26 @@ func extractFileHash(src *os.File, partDataOffset uint64, fileOffset uint64, siz
 			writeSize = int(size)
 		}
 
-		if _, err := io.ReadFull(src, encryptedHashedContentBuffer); err != nil {
+		// Calculate available bytes in the file
+		stat, err := src.Stat()
+		if err != nil {
+			return err
+		}
+		fileSize := stat.Size()
+		currentPos := int64(partDataOffset + roffset)
+		remainingFile := fileSize - currentPos
+
+		readLen := BLOCK_SIZE_HASHED
+		if int64(readLen) > remainingFile {
+			readLen = int(remainingFile)
+		}
+
+		// Ensure readLen is a multiple of AES block size (16)
+		if readLen%aes.BlockSize != 0 {
+			return fmt.Errorf("read length %d is not a multiple of AES block size", readLen)
+		}
+
+		if _, err := io.ReadFull(src, encryptedHashedContentBuffer[:readLen]); err != nil {
 			return fmt.Errorf("failed to read encrypted content block at offset %d (read %d of %d bytes): %w",
 				partDataOffset+roffset, 0, BLOCK_SIZE_HASHED, err)
 		}
@@ -108,7 +127,9 @@ func extractFileHash(src *os.File, partDataOffset uint64, fileOffset uint64, siz
 			return errors.New("h0 hash mismatch")
 		}
 
-		n, err := bw.Write(decryptedHashedContentBuffer[soffset : soffset+uint64(writeSize)])
+		dataToWrite := decryptedHashedContentBuffer
+
+		n, err := bw.Write(dataToWrite[soffset : soffset+uint64(writeSize)])
 		if err != nil {
 			return err
 		}
@@ -124,6 +145,8 @@ func extractFileHash(src *os.File, partDataOffset uint64, fileOffset uint64, siz
 			writeSize = HASH_BLOCK_SIZE
 			soffset = 0
 		}
+
+		roffset += uint64(BLOCK_SIZE_HASHED)
 	}
 
 	return nil
@@ -164,12 +187,31 @@ func extractFile(src *os.File, partDataOffset uint64, fileOffset uint64, size ui
 			writeSize = int(size)
 		}
 
-		if _, err := io.ReadFull(src, encryptedContentBuffer); err != nil {
-			return fmt.Errorf("failed to read encrypted content block at offset %d (expected %d bytes): %w",
-				partDataOffset+roffset, BLOCK_SIZE, err)
+		// Calculate available bytes in the file
+		stat, err := src.Stat()
+		if err != nil {
+			return err
+		}
+		fileSize := stat.Size()
+		currentPos := int64(partDataOffset + roffset)
+		remainingFile := fileSize - currentPos
+
+		readLen := BLOCK_SIZE
+		if int64(readLen) > remainingFile {
+			readLen = int(remainingFile)
 		}
 
-		aesCipher.CryptBlocks(decryptedContentBuffer, encryptedContentBuffer)
+		// Ensure readLen is a multiple of AES block size (16)
+		if readLen%aes.BlockSize != 0 {
+			return fmt.Errorf("read length %d is not a multiple of AES block size", readLen)
+		}
+
+		if _, err := io.ReadFull(src, encryptedContentBuffer[:readLen]); err != nil {
+			return fmt.Errorf("failed to read encrypted content block at offset %d (expected %d bytes): %w",
+				partDataOffset+roffset, readLen, err)
+		}
+
+		aesCipher.CryptBlocks(decryptedContentBuffer[:readLen], encryptedContentBuffer[:readLen])
 
 		n, err := bw.Write(decryptedContentBuffer[soffset : soffset+uint64(writeSize)])
 		if err != nil {
@@ -182,6 +224,9 @@ func extractFile(src *os.File, partDataOffset uint64, fileOffset uint64, size ui
 			writeSize = BLOCK_SIZE
 			soffset = 0
 		}
+
+		// Update offsets for next iteration
+		roffset += uint64(BLOCK_SIZE)
 	}
 
 	return nil
@@ -623,9 +668,9 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 			}
 			outputPath = filepath.Clean(filepath.Join(outputPath, fileName))
 			contentOffset := uint64(fst.FSTEntries[i].Offset)
-			if fst.FSTEntries[i].Flags&4 == 0 {
-				contentOffset <<= 5
-			}
+			// if fst.FSTEntries[i].Flags&4 == 0 {
+			// 	contentOffset <<= 5
+			// }
 			if fst.FSTEntries[i].Type&0x80 == 0 {
 				matchingContent := tmd.Contents[fst.FSTEntries[i].ContentID]
 				tmdFlags := matchingContent.Type

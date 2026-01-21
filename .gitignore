@@ -15,3 +15,8 @@ WiiUDownloader.icns
 *.syso
 *.ico
 *.rc
+*.app
+*.h3
+*.tik
+*.cert
+*.tmd

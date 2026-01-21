@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	wiiudownloader "github.com/Xpl0itU/WiiUDownloader"
@@ -74,7 +76,7 @@ func main() {
 
 	gtk.Init(nil)
 
-// Theme will be applied after loading config
+	// Theme will be applied after loading config
 
 	app, err := gtk.ApplicationNew("io.github.xpl0itu.wiiudownloader", glib.APPLICATION_FLAGS_NONE)
 	if err != nil {
@@ -83,10 +85,51 @@ func main() {
 
 	client := &http.Client{
 		Transport: &http.Transport{
-			Dial: (&net.Dialer{
-				Timeout:   30 * time.Second,
-				KeepAlive: 30 * time.Second,
-			}).Dial,
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				dialer := &net.Dialer{
+					Timeout:   30 * time.Second,
+					KeepAlive: 30 * time.Second,
+				}
+
+				conn, err := dialer.DialContext(ctx, network, addr)
+				if err != nil {
+					// Check if it's a DNS lookup failure
+					if strings.Contains(err.Error(), "no such host") || strings.Contains(err.Error(), "lookup") {
+						log.Printf("DNS lookup failed for %s, retrying with 1.1.1.1...", addr)
+
+						// Create a resolver that uses 1.1.1.1
+						resolver := &net.Resolver{
+							PreferGo: true,
+							Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+								d := net.Dialer{
+									Timeout: 10 * time.Second,
+								}
+								return d.DialContext(ctx, "udp", "1.1.1.1:53")
+							},
+						}
+
+						// Extract host from addr
+						host, port, splitErr := net.SplitHostPort(addr)
+						if splitErr != nil {
+							return nil, err // Return original error if addr is weird
+						}
+
+						ips, lookupErr := resolver.LookupIPAddr(ctx, host)
+						if lookupErr != nil {
+							log.Printf("Fallback DNS lookup also failed: %v", lookupErr)
+							return nil, err // Return original error
+						}
+
+						if len(ips) > 0 {
+							// Try to dial the first IP we found
+							targetAddr := net.JoinHostPort(ips[0].String(), port)
+							return dialer.DialContext(ctx, network, targetAddr)
+						}
+					}
+					return nil, err
+				}
+				return conn, nil
+			},
 			MaxIdleConns:          100,
 			MaxIdleConnsPerHost:   100,
 			MaxConnsPerHost:       100,
@@ -105,10 +148,10 @@ func main() {
 		errorDialog.Destroy()
 	}
 
-// Apply theme preference from settings (fallback to OS if unset)
-settings, _ := gtk.SettingsGetDefault()
-settings.SetProperty("gtk-theme-name", "Adwaita")
-settings.SetProperty("gtk-application-prefer-dark-theme", config.DarkMode)
+	// Apply theme preference from settings (fallback to OS if unset)
+	settings, _ := gtk.SettingsGetDefault()
+	settings.SetProperty("gtk-theme-name", "Adwaita")
+	settings.SetProperty("gtk-application-prefer-dark-theme", config.DarkMode)
 
 	win := NewMainWindow(wiiudownloader.GetTitleEntries(wiiudownloader.TITLE_CATEGORY_GAME), client, config)
 	config.saveConfigCallback = func() {

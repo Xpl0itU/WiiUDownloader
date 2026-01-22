@@ -136,6 +136,7 @@ func (pw *ProgressWindow) SetDownloadSize(size int64) {
 
 func (pw *ProgressWindow) ResetTotals() {
 	glib.IdleAdd(func() {
+		pw.cancelButton.SetSensitive(true)
 		pw.bar.SetFraction(0)
 		pw.bar.SetText("Preparing...")
 	})

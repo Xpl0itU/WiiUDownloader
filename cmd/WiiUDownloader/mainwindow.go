@@ -242,6 +242,13 @@ func (mw *MainWindow) BuildUI() {
 	}
 	mw.treeView.SetHeadersClickable(true)
 
+	// Enable multiple selection
+	selection, err := mw.treeView.GetSelection()
+	if err != nil {
+		log.Fatalln("Unable to get selection:", err)
+	}
+	selection.SetMode(gtk.SELECTION_MULTIPLE)
+
 	toggleRenderer, err := gtk.CellRendererToggleNew()
 	if err != nil {
 		log.Fatalln("Unable to create cell renderer toggle:", err)
@@ -273,23 +280,78 @@ func (mw *MainWindow) BuildUI() {
 		if err != nil {
 			log.Fatalln("Unable to get value:", err)
 		}
-		tid, err := mw.childStore.ToTreeModel().GetValue(iter, TITLE_ID_COLUMN)
+
+		// Get all selected rows
+		sel, err := mw.treeView.GetSelection()
 		if err != nil {
-			log.Fatalln("Unable to get value:", err)
+			return
 		}
-		tidStr, err := tid.GetString()
-		if err != nil {
-			log.Fatalln("Unable to get value:", err)
-		}
-		parsedTid, err := strconv.ParseUint(tidStr, 16, 64)
-		if err != nil {
-			log.Fatalln("Unable to parse title ID:", err)
-		}
-		if isInQueue.(bool) {
-			mw.queuePane.RemoveTitle(wiiudownloader.TitleEntry{TitleID: parsedTid})
+
+		// Get count of selected rows
+		selectedCount := sel.CountSelectedRows()
+
+		// If only one row is selected, toggle just that one
+		// If multiple rows are selected, add/remove all of them together
+		if selectedCount <= 1 {
+			tid, err := mw.childStore.ToTreeModel().GetValue(iter, TITLE_ID_COLUMN)
+			if err != nil {
+				log.Fatalln("Unable to get value:", err)
+			}
+			tidStr, err := tid.GetString()
+			if err != nil {
+				log.Fatalln("Unable to get value:", err)
+			}
+			parsedTid, err := strconv.ParseUint(tidStr, 16, 64)
+			if err != nil {
+				log.Fatalln("Unable to parse title ID:", err)
+			}
+			if isInQueue.(bool) {
+				mw.queuePane.RemoveTitle(wiiudownloader.TitleEntry{TitleID: parsedTid})
+			} else {
+				mw.queuePane.AddTitle(wiiudownloader.GetTitleEntryFromTid(parsedTid))
+			}
 		} else {
-			mw.queuePane.AddTitle(wiiudownloader.GetTitleEntryFromTid(parsedTid))
+			// Multiple rows selected - toggle all of them
+			paths := sel.GetSelectedRows(mw.filterModel)
+			for l := paths; l != nil; l = l.Next() {
+				data := l.Data()
+				filterPath, ok := data.(*gtk.TreePath)
+				if !ok || filterPath == nil {
+					continue
+				}
+
+				childPathMulti := mw.filterModel.ConvertPathToChildPath(filterPath)
+				if childPathMulti == nil {
+					continue
+				}
+
+				iterMulti, err := mw.childStore.ToTreeModel().GetIter(childPathMulti)
+				if err != nil {
+					continue
+				}
+
+				tidMulti, err := mw.childStore.ToTreeModel().GetValue(iterMulti, TITLE_ID_COLUMN)
+				if err != nil {
+					continue
+				}
+				tidStrMulti, err := tidMulti.GetString()
+				if err != nil {
+					continue
+				}
+				parsedTidMulti, err := strconv.ParseUint(tidStrMulti, 16, 64)
+				if err != nil {
+					continue
+				}
+
+				// Use the same state as the clicked row for all selected rows
+				if isInQueue.(bool) {
+					mw.queuePane.RemoveTitle(wiiudownloader.TitleEntry{TitleID: parsedTidMulti})
+				} else {
+					mw.queuePane.AddTitle(wiiudownloader.GetTitleEntryFromTid(parsedTidMulti))
+				}
+			}
 		}
+
 		mw.updateTitlesInQueue()
 	})
 	column, err := gtk.TreeViewColumnNewWithAttribute("Queue", toggleRenderer, "active", IN_QUEUE_COLUMN)

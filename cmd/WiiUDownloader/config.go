@@ -18,6 +18,7 @@ type Config struct {
 	DarkMode                bool   `koanf:"darkMode"`
 	DecryptContents         bool   `koanf:"decryptContents"`
 	DeleteEncryptedContents bool   `koanf:"deleteEncryptedContents"`
+	ContinueOnError         bool   `koanf:"continueOnError"`
 	SelectedRegion          uint8  `koanf:"selectedRegion"`
 	DidInitialSetup         bool   `koanf:"didInitialSetup"`
 	LastSelectedPath        string `koanf:"lastSelectedPath"`
@@ -44,6 +45,7 @@ func getDefaultConfig() *Config {
 		DarkMode:                isDarkMode(),
 		DecryptContents:         false,
 		DeleteEncryptedContents: false,
+		ContinueOnError:         true,
 		SelectedRegion:          wiiudownloader.MCP_REGION_EUROPE | wiiudownloader.MCP_REGION_USA | wiiudownloader.MCP_REGION_JAPAN,
 		DidInitialSetup:         false,
 		LastSelectedPath:        "",

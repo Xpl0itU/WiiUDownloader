@@ -18,6 +18,41 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// detectErrorType identifies the type of error that occurred during download
+func detectErrorType(errorMsg string) string {
+	errorLower := strings.ToLower(errorMsg)
+
+	// Check for specific error patterns
+	if strings.Contains(errorLower, "tmd") || strings.Contains(errorLower, "title.tmd") {
+		return "TMD Download"
+	}
+	if strings.Contains(errorLower, "tik") || strings.Contains(errorLower, "cetk") || strings.Contains(errorLower, "title.tik") {
+		return "Ticket Download"
+	}
+	if strings.Contains(errorLower, "cert") || strings.Contains(errorLower, "certificate") {
+		return "Certificate Download"
+	}
+	if strings.Contains(errorLower, "decrypt") {
+		return "Decryption"
+	}
+	if strings.Contains(errorLower, ".app") || strings.Contains(errorLower, ".h3") {
+		return "Content Download"
+	}
+	if strings.Contains(errorLower, "content not found") {
+		return "Decryption"
+	}
+	if strings.Contains(errorLower, "status code") || strings.Contains(errorLower, "connection") ||
+		strings.Contains(errorLower, "timeout") || strings.Contains(errorLower, "network") {
+		return "Network Error"
+	}
+	if strings.Contains(errorLower, "permission") || strings.Contains(errorLower, "no such file") {
+		return "File I/O Error"
+	}
+
+	// Default to generic download error
+	return "Download Error"
+}
+
 const (
 	IN_QUEUE_COLUMN = iota
 	KIND_COLUMN
@@ -614,9 +649,18 @@ func (mw *MainWindow) BuildUI() {
 				mw.queuePane.removeFromQueueButton.SetSensitive(true)
 			})
 
-			if err := mw.onDownloadQueueClicked(selectedPath, decryptContents, deleteEncryptedContents); err != nil {
+			if err := mw.onDownloadQueueClicked(selectedPath, decryptContents, deleteEncryptedContents, config); err != nil {
 				glib.IdleAdd(func() {
 					mw.showError(err)
+				})
+				return
+			}
+
+			// Show errors dialog if there were any errors
+			errors := mw.progressWindow.GetErrors()
+			if len(errors) > 0 {
+				glib.IdleAdd(func() {
+					mw.showErrorsDialog(errors)
 				})
 			}
 		}()
@@ -737,6 +781,16 @@ func (mw *MainWindow) onDecryptContentsMenuItemClicked(selectedPath string) erro
 
 	glib.IdleAdd(func() {
 		mw.progressWindow.Window.Hide()
+		// Show decryption errors if ContinueOnError is enabled
+		config, loadErr := loadConfig()
+		if loadErr != nil {
+			return
+		}
+
+		errors := mw.progressWindow.GetErrors()
+		if len(errors) > 0 && config.ContinueOnError {
+			mw.showErrorsDialog(errors)
+		}
 	})
 	return err
 }
@@ -805,7 +859,118 @@ func (mw *MainWindow) showError(err error) {
 	errorDialog.Destroy()
 }
 
-func (mw *MainWindow) onDownloadQueueClicked(selectedPath string, decryptContents, deleteEncryptedContents bool) error {
+func (mw *MainWindow) showErrorsDialog(errors []DownloadError) {
+	dialog, err := gtk.DialogNew()
+	if err != nil {
+		log.Printf("Error creating dialog: %v", err)
+		return
+	}
+	defer dialog.Destroy()
+
+	dialog.SetTitle("Download Errors")
+	dialog.SetModal(true)
+	dialog.SetTransientFor(mw.window)
+	dialog.SetPosition(gtk.WIN_POS_CENTER_ON_PARENT)
+	dialog.SetDefaultSize(600, 400)
+
+	contentArea, err := dialog.GetContentArea()
+	if err != nil {
+		return
+	}
+
+	// Create a label for the header
+	headerLabel, err := gtk.LabelNew(fmt.Sprintf("The following %d title(s) failed to download:", len(errors)))
+	if err != nil {
+		return
+	}
+	headerLabel.SetMarginTop(10)
+	headerLabel.SetMarginStart(10)
+	contentArea.PackStart(headerLabel, false, false, 0)
+
+	// Create a scrolled window
+	scrolledWindow, err := gtk.ScrolledWindowNew(nil, nil)
+	if err != nil {
+		return
+	}
+	scrolledWindow.SetPolicy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
+	scrolledWindow.SetMarginStart(10)
+	scrolledWindow.SetMarginEnd(10)
+	contentArea.PackStart(scrolledWindow, true, true, 0)
+
+	// Create a ListBox to display errors
+	listBox, err := gtk.ListBoxNew()
+	if err != nil {
+		return
+	}
+	listBox.SetSelectionMode(gtk.SELECTION_NONE)
+	scrolledWindow.Add(listBox)
+
+	// Add each error to the list
+	for _, dlErr := range errors {
+		row, err := gtk.ListBoxRowNew()
+		if err != nil {
+			continue
+		}
+
+		box, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 5)
+		if err != nil {
+			continue
+		}
+		box.SetMarginTop(5)
+		box.SetMarginBottom(5)
+		box.SetMarginStart(5)
+		box.SetMarginEnd(5)
+
+		// Title
+		titleLabel, err := gtk.LabelNew("")
+		if err != nil {
+			continue
+		}
+		titleLabel.SetMarkup(fmt.Sprintf("<b>%s</b> [%s]", escapeMarkup(dlErr.Title), dlErr.TidStr))
+		titleLabel.SetXAlign(0)
+		box.PackStart(titleLabel, false, false, 0)
+
+		// Error Type
+		if dlErr.ErrorType != "" {
+			errorTypeLabel, err := gtk.LabelNew("")
+			if err != nil {
+				continue
+			}
+			errorTypeLabel.SetMarkup(fmt.Sprintf("<i>Error Type: %s</i>", escapeMarkup(dlErr.ErrorType)))
+			errorTypeLabel.SetXAlign(0)
+			box.PackStart(errorTypeLabel, false, false, 0)
+		}
+
+		// Error message
+		errorLabel, err := gtk.LabelNew(dlErr.Error)
+		if err != nil {
+			continue
+		}
+		errorLabel.SetXAlign(0)
+		errorLabel.SetLineWrap(true)
+		errorLabel.SetLineWrapMode(3) // PANGO_WRAP_WORD
+		errorLabel.SetMaxWidthChars(80)
+		box.PackStart(errorLabel, false, false, 0)
+
+		// Separator
+		separator, err := gtk.SeparatorNew(gtk.ORIENTATION_HORIZONTAL)
+		if err != nil {
+			continue
+		}
+		box.PackStart(separator, false, false, 0)
+
+		row.Add(box)
+		listBox.Add(row)
+	}
+
+	// Add close button
+	dialog.AddButton("Close", gtk.RESPONSE_OK)
+
+	contentArea.ShowAll()
+	dialog.Run()
+}
+
+func (mw *MainWindow) onDownloadQueueClicked(selectedPath string, decryptContents, deleteEncryptedContents bool, config *Config) error {
 	if mw.queuePane.IsQueueEmpty() {
 		return nil
 	}
@@ -815,6 +980,9 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string, decryptContent
 	queueStatusChan := make(chan bool, 1)
 	defer close(queueStatusChan)
 	errGroup := errgroup.Group{}
+
+	// Clear errors and reset at the start of the queue
+	mw.progressWindow.ResetTotalsAndErrors()
 
 	mw.queuePane.ForEachRemoving(func(title wiiudownloader.TitleEntry) bool {
 		// Check for cancellation before starting next download
@@ -829,8 +997,20 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string, decryptContent
 			}
 			tidStr := fmt.Sprintf("%016x", title.TitleID)
 			titlePath := filepath.Join(selectedPath, fmt.Sprintf("%s [%s] [%s]", normalizeFilename(title.Name), wiiudownloader.GetFormattedKind(title.TitleID), tidStr))
-			if err := wiiudownloader.DownloadTitle(tidStr, titlePath, decryptContents, mw.progressWindow, deleteEncryptedContents, mw.client); err != nil && err != context.Canceled {
-				return err
+			downloadErr := wiiudownloader.DownloadTitle(tidStr, titlePath, decryptContents, mw.progressWindow, deleteEncryptedContents, mw.client)
+
+			if downloadErr != nil && downloadErr != context.Canceled {
+				errorType := detectErrorType(downloadErr.Error())
+				mw.progressWindow.AddErrorWithType(title.Name, downloadErr.Error(), tidStr, errorType)
+
+				if config.ContinueOnError {
+					// Record error but continue with next download
+					queueStatusChan <- true
+					return nil
+				}
+				// If not continuing on error, signal to remove from queue and stop processing
+				queueStatusChan <- false
+				return downloadErr
 			}
 
 			queueStatusChan <- true
@@ -841,12 +1021,15 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string, decryptContent
 			if mw.progressWindow.Cancelled() {
 				err = nil               // Suppress error so it doesn't show popup
 				queueStatusChan <- true // Processed (cancelled), so remove this one
+				return <-queueStatusChan
 			} else {
-				queueStatusChan <- false // Failed, keep in queue
+				// Error occurred and ContinueOnError is false, stop processing
+				return <-queueStatusChan
 			}
+		} else {
+			// No error from goroutine, read the status from channel
+			return <-queueStatusChan
 		}
-
-		return <-queueStatusChan
 	})
 
 	glib.IdleAdd(func() {

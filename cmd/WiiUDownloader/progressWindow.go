@@ -11,6 +11,13 @@ import (
 	"github.com/gotk3/gotk3/gtk"
 )
 
+type DownloadError struct {
+	Title     string
+	Error     string
+	TidStr    string
+	ErrorType string // tmd, tik, cert, download, decryption, etc.
+}
+
 const (
 	MAX_SPEEDS       = 32
 	SMOOTHING_FACTOR = 0.2
@@ -70,6 +77,8 @@ type ProgressWindow struct {
 	progressMutex   sync.Mutex
 	speedAverager   *SpeedAverager
 	startTime       time.Time
+	errors          []DownloadError
+	errorsMutex     sync.Mutex
 }
 
 func (pw *ProgressWindow) SetGameTitle(title string) {
@@ -145,6 +154,21 @@ func (pw *ProgressWindow) ResetTotals() {
 	pw.progressPerFile = make(map[string]int64)
 	pw.totalDownloaded = 0
 	pw.totalToDownload = 0
+	// Note: Do NOT clear errors here - errors should accumulate across all titles in queue
+}
+
+func (pw *ProgressWindow) ResetTotalsAndErrors() {
+	glib.IdleAdd(func() {
+		pw.cancelButton.SetSensitive(true)
+		pw.bar.SetFraction(0)
+		pw.bar.SetText("Preparing...")
+	})
+	pw.progressMutex.Lock()
+	defer pw.progressMutex.Unlock()
+	pw.progressPerFile = make(map[string]int64)
+	pw.totalDownloaded = 0
+	pw.totalToDownload = 0
+	pw.ClearErrors()
 }
 
 func (pw *ProgressWindow) MarkFileAsDone(filename string) {
@@ -164,6 +188,39 @@ func (pw *ProgressWindow) SetStartTime(startTime time.Time) {
 	pw.progressMutex.Lock()
 	defer pw.progressMutex.Unlock()
 	pw.startTime = startTime
+}
+
+func (pw *ProgressWindow) AddError(title, errorMsg, tidStr string) {
+	pw.errorsMutex.Lock()
+	defer pw.errorsMutex.Unlock()
+	pw.errors = append(pw.errors, DownloadError{
+		Title:  title,
+		Error:  errorMsg,
+		TidStr: tidStr,
+	})
+}
+
+func (pw *ProgressWindow) AddErrorWithType(title, errorMsg, tidStr, errorType string) {
+	pw.errorsMutex.Lock()
+	defer pw.errorsMutex.Unlock()
+	pw.errors = append(pw.errors, DownloadError{
+		Title:     title,
+		Error:     errorMsg,
+		TidStr:    tidStr,
+		ErrorType: errorType,
+	})
+}
+
+func (pw *ProgressWindow) GetErrors() []DownloadError {
+	pw.errorsMutex.Lock()
+	defer pw.errorsMutex.Unlock()
+	return pw.errors
+}
+
+func (pw *ProgressWindow) ClearErrors() {
+	pw.errorsMutex.Lock()
+	defer pw.errorsMutex.Unlock()
+	pw.errors = nil
 }
 
 func createProgressWindow(parent *gtk.Window) (*ProgressWindow, error) {
@@ -226,6 +283,7 @@ func createProgressWindow(parent *gtk.Window) (*ProgressWindow, error) {
 		cancelButton:  cancelButton,
 		cancelled:     false,
 		speedAverager: newSpeedAverager(),
+		errors:        make([]DownloadError, 0),
 	}
 
 	progressWindow.cancelButton.Connect("clicked", func() {

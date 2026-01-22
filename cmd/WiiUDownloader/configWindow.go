@@ -82,13 +82,21 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 	rememberPathCheck.SetMarginTop(10)
 	grid.AttachNextTo(rememberPathCheck, downloadPathEntry, gtk.POS_BOTTOM, 1, 1)
 
+	continueOnErrorCheck, err := gtk.CheckButtonNewWithLabel("Continue downloading on errors (show summary at end)")
+	if err != nil {
+		return nil, err
+	}
+	continueOnErrorCheck.SetActive(config.ContinueOnError)
+	continueOnErrorCheck.SetMarginTop(10)
+	grid.AttachNextTo(continueOnErrorCheck, rememberPathCheck, gtk.POS_BOTTOM, 1, 1)
+
 	saveButton, err := gtk.ButtonNewWithLabel("Save and Apply")
 	if err != nil {
 		return nil, err
 	}
 	saveButton.SetMarginTop(10)
 	saveButton.SetHAlign(gtk.ALIGN_END)
-	grid.AttachNextTo(saveButton, rememberPathCheck, gtk.POS_BOTTOM, 1, 1)
+	grid.AttachNextTo(saveButton, continueOnErrorCheck, gtk.POS_BOTTOM, 1, 1)
 	closeButton, err := gtk.ButtonNewWithLabel("Close")
 	if err != nil {
 		return nil, err
@@ -100,6 +108,7 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 	dirty := false
 	darkModeCheck.Connect("toggled", func() { dirty = true })
 	rememberPathCheck.Connect("toggled", func() { dirty = true })
+	continueOnErrorCheck.Connect("toggled", func() { dirty = true })
 	downloadPathEntry.Connect("changed", func() { dirty = true })
 
 	saveButton.Connect("clicked", func() {
@@ -114,6 +123,7 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 
 		config.LastSelectedPath = newPath
 		config.RememberLastPath = rememberPathCheck.GetActive()
+		config.ContinueOnError = continueOnErrorCheck.GetActive()
 
 		if err := config.Save(); err != nil {
 			ShowErrorDialog(win, err)

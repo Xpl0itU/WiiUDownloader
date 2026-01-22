@@ -812,6 +812,9 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 				}
 				outputPath = filepath.Clean(filepath.Join(outputPath, fileName))
 				contentOffset := uint64(fst.FSTEntries[i].Offset)
+				if fst.FSTEntries[i].Flags&4 == 0 {
+					contentOffset <<= 5
+				}
 				if fst.FSTEntries[i].Type&0x80 == 0 {
 					matchingContent := tmd.Contents[fst.FSTEntries[i].ContentID]
 					tmdFlags := matchingContent.Type

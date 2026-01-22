@@ -58,7 +58,7 @@ func GenerateKey(tid string) ([]byte, error) {
 	}
 	copy(iv[8:], make([]byte, 8))
 
-	encrypted, err := encryptAES(key, commonKey, iv)
+	encrypted, err := encryptAES(key, wiiUCommonKey, iv)
 	if err != nil {
 		return []byte{}, err
 	}

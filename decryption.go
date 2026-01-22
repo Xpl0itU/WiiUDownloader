@@ -14,7 +14,12 @@ import (
 	"path/filepath"
 )
 
-var commonKey = []byte{0xD7, 0xB0, 0x04, 0x02, 0x65, 0x9B, 0xA2, 0xAB, 0xD2, 0xCB, 0x0D, 0xB2, 0x7F, 0xA2, 0xB6, 0x56}
+var wiiUCommonKey = []byte{0xD7, 0xB0, 0x04, 0x02, 0x65, 0x9B, 0xA2, 0xAB, 0xD2, 0xCB, 0x0D, 0xB2, 0x7F, 0xA2, 0xB6, 0x56}
+var wiiCommonKeys = map[byte][]byte{
+	0: {0xEB, 0xE4, 0x2A, 0x22, 0x5E, 0x85, 0x93, 0xE4, 0x48, 0xD9, 0xC5, 0x45, 0x73, 0x81, 0xAA, 0xF7},
+	1: {0x63, 0xB8, 0x2B, 0xB4, 0xF4, 0x61, 0x4E, 0x2E, 0x13, 0xF2, 0xFE, 0xFB, 0xBA, 0x4C, 0x9B, 0x7E},
+	2: {0x30, 0xBF, 0xC7, 0x6E, 0x7C, 0x19, 0xAF, 0xBB, 0x23, 0x16, 0x33, 0x30, 0xCE, 0xD7, 0xC2, 0x8D},
+}
 
 const (
 	BLOCK_SIZE        = 0x8000
@@ -501,6 +506,25 @@ func decryptContentToBuffer(encryptedFile *os.File, decryptedBuffer *bytes.Buffe
 			}
 		}
 	} else {
+		// First, check if the content is already plain (hash matches)
+		f, err := os.Open(encryptedFile.Name())
+		if err == nil {
+			h := sha1.New()
+			if _, err := io.Copy(h, f); err == nil {
+				if bytes.Equal(content.Hash[:sha1.Size], h.Sum(nil)) {
+					_, _ = f.Seek(0, 0)
+					decryptedBuffer.Reset()
+					_, _ = io.Copy(decryptedBuffer, f)
+					_ = f.Close()
+					return nil
+				}
+			}
+			_ = f.Close()
+		}
+
+		// Reset file for decryption if hash didn't match
+		_, _ = encryptedFile.Seek(0, io.SeekStart)
+
 		var ivContent [aes.BlockSize]byte
 		copy(ivContent[:], content.Index)
 		cipherContent := cipher.NewCBCDecrypter(cipherHashTree, ivContent[:])
@@ -515,11 +539,14 @@ func decryptContentToBuffer(encryptedFile *os.File, decryptedBuffer *bytes.Buffe
 			toRead := min(READ_SIZE, left)
 			toReadHash := min(READ_SIZE, leftHash)
 
-			if _, err = io.ReadFull(encryptedFile, readSizedBuffer[:toRead]); err != nil {
+			// Round up to nearest 16 for AES
+			toReadAligned := (toRead + 15) &^ 15
+
+			if _, err = io.ReadFull(encryptedFile, readSizedBuffer[:toReadAligned]); err != nil {
 				return err
 			}
 
-			cipherContent.CryptBlocks(decBuf[:toRead], readSizedBuffer[:toRead])
+			cipherContent.CryptBlocks(decBuf[:toReadAligned], readSizedBuffer[:toReadAligned])
 			contentHash.Write(decBuf[:toReadHash])
 			if _, err = decryptedBuffer.Write(decBuf[:toRead]); err != nil {
 				return err
@@ -536,6 +563,107 @@ func decryptContentToBuffer(encryptedFile *os.File, decryptedBuffer *bytes.Buffe
 			return errors.New("content hash mismatch")
 		}
 	}
+	return nil
+}
+
+func extractU8(data []byte, outputPath string) error {
+	reader := bytes.NewReader(data)
+	var magic uint32
+	if err := binary.Read(reader, binary.BigEndian, &magic); err != nil {
+		return err
+	}
+	if magic != 0x55AA382D {
+		return errors.New("invalid U8 magic")
+	}
+
+	var rootNodeOffset, headerSize, dataOffset uint32
+	_ = binary.Read(reader, binary.BigEndian, &rootNodeOffset)
+	_ = binary.Read(reader, binary.BigEndian, &headerSize)
+	_ = binary.Read(reader, binary.BigEndian, &dataOffset)
+
+	if _, err := reader.Seek(int64(rootNodeOffset), io.SeekStart); err != nil {
+		return err
+	}
+
+	// Read root node to get total number of nodes
+	var rootType uint16
+	var rootNameOffset uint16
+	var rootDataOffset uint32
+	var totalNodes uint32
+	_ = binary.Read(reader, binary.BigEndian, &rootType)
+	_ = binary.Read(reader, binary.BigEndian, &rootNameOffset)
+	_ = binary.Read(reader, binary.BigEndian, &rootDataOffset)
+	_ = binary.Read(reader, binary.BigEndian, &totalNodes)
+
+	// Sanity check: prevent huge allocations from invalid data
+	if totalNodes == 0 || totalNodes > 100000 {
+		return fmt.Errorf("invalid U8: totalNodes=%d", totalNodes)
+	}
+
+	_ = os.MkdirAll(outputPath, 0755)
+
+	nodes := make([]struct {
+		Type       uint16
+		NameOffset uint16
+		DataOffset uint32
+		Size       uint32
+	}, totalNodes)
+
+	nodes[0].Type = rootType
+	nodes[0].NameOffset = rootNameOffset
+	nodes[0].DataOffset = rootDataOffset
+	nodes[0].Size = totalNodes
+
+	for i := uint32(1); i < totalNodes; i++ {
+		_ = binary.Read(reader, binary.BigEndian, &nodes[i].Type)
+		_ = binary.Read(reader, binary.BigEndian, &nodes[i].NameOffset)
+		_ = binary.Read(reader, binary.BigEndian, &nodes[i].DataOffset)
+		_ = binary.Read(reader, binary.BigEndian, &nodes[i].Size)
+	}
+
+	stringTableOffset := rootNodeOffset + (totalNodes * 12)
+	stringTableSize := dataOffset - stringTableOffset
+	stringTable := make([]byte, stringTableSize)
+	_, _ = reader.Seek(int64(stringTableOffset), io.SeekStart)
+	_, _ = io.ReadFull(reader, stringTable)
+
+	currentDir := outputPath
+	dirStack := []string{outputPath}
+	breakNodes := make([]uint32, 128)
+	stackIdx := 0
+	breakNodes[0] = totalNodes
+
+	for i := uint32(1); i < totalNodes; i++ {
+		name := ""
+		for j := nodes[i].NameOffset; j < uint16(len(stringTable)) && stringTable[j] != 0; j++ {
+			name += string(stringTable[j])
+		}
+
+		if nodes[i].Type == 0x0100 { // Directory
+			currentDir = filepath.Join(currentDir, name)
+			_ = os.MkdirAll(currentDir, 0755)
+			stackIdx++
+			dirStack = append(dirStack, currentDir)
+			breakNodes[stackIdx] = nodes[i].Size
+		} else { // File
+			// Sanity check: don't allocate more than 100MB for a single file
+			if nodes[i].Size > 100*1024*1024 {
+				continue
+			}
+			filePath := filepath.Join(currentDir, name)
+			fileData := make([]byte, nodes[i].Size)
+			_, _ = reader.Seek(int64(nodes[i].DataOffset), io.SeekStart)
+			_, _ = io.ReadFull(reader, fileData)
+			_ = os.WriteFile(filePath, fileData, 0644)
+		}
+
+		for stackIdx > 0 && breakNodes[stackIdx] == i+1 {
+			dirStack = dirStack[:len(dirStack)-1]
+			currentDir = dirStack[len(dirStack)-1]
+			stackIdx--
+		}
+	}
+
 	return nil
 }
 
@@ -571,6 +699,7 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 	var encryptedTitleKey []byte
 
 	ticketPath := filepath.Join(path, "title.tik")
+	var ticketKeyIndex byte = 0xFF // 0xFF means not found or Wii U default
 
 	if _, err := os.Stat(ticketPath); err == nil {
 		cetk, err := os.Open(ticketPath)
@@ -581,12 +710,26 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 				_ = cetk.Close()
 				return err
 			}
+			_, _ = cetk.Seek(0x1F1, 0)
+			_ = binary.Read(cetk, binary.BigEndian, &ticketKeyIndex)
 			if err := cetk.Close(); err != nil {
 				return err
 			}
 		}
 	}
-	c, err := aes.NewCipher(commonKey)
+
+	var selectedCommonKey []byte
+	if tmd.Version == 0 { // Wii
+		if key, ok := wiiCommonKeys[ticketKeyIndex]; ok {
+			selectedCommonKey = key
+		} else {
+			selectedCommonKey = wiiCommonKeys[0]
+		}
+	} else { // Wii U
+		selectedCommonKey = wiiUCommonKey
+	}
+
+	c, err := aes.NewCipher(selectedCommonKey)
 	if err != nil {
 		return err
 	}
@@ -605,88 +748,152 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 		return fmt.Errorf("failed to create AES cipher: %w", err)
 	}
 
-	fstEncFile, err := os.Open(filepath.Join(path, tmd.Contents[0].CIDStr+".app"))
-	if err != nil {
-		return err
-	}
+	if tmd.Version == TMD_VERSION_WIIU {
+		fstEncFile, err := os.Open(filepath.Join(path, tmd.Contents[0].CIDStr+".app"))
+		if err != nil {
+			return err
+		}
 
-	decryptedBuffer := bytes.Buffer{}
-	if err := decryptContentToBuffer(fstEncFile, &decryptedBuffer, cipherHashTree, tmd.Contents[0]); err != nil {
+		decryptedBuffer := bytes.Buffer{}
+		if err := decryptContentToBuffer(fstEncFile, &decryptedBuffer, cipherHashTree, tmd.Contents[0]); err != nil {
+			if err := fstEncFile.Close(); err != nil {
+				return err
+			}
+			return err
+		}
 		if err := fstEncFile.Close(); err != nil {
 			return err
 		}
-		return err
-	}
-	if err := fstEncFile.Close(); err != nil {
-		return err
-	}
-	fst := FSTData{FSTReader: bytes.NewReader(decryptedBuffer.Bytes()), FSTEntries: make([]FEntry, 0), EntryCount: 0, Entries: 0, NamesOffset: 0}
-	if err := fst.Parse(); err != nil {
-		return err
-	}
-
-	outputPath := path
-	entry := make([]uint32, 0x10)
-	lEntry := make([]uint32, 0x10)
-	level := uint32(0)
-
-	for i := uint32(0); i < fst.Entries-1; i++ {
-		progressReporter.UpdateDecryptionProgress(float64(i) / float64(fst.Entries-1))
-		if level > 0 {
-			for (level >= 1) && (lEntry[level-1] == i+1) {
-				level--
-			}
+		fst := FSTData{FSTReader: bytes.NewReader(decryptedBuffer.Bytes()), FSTEntries: make([]FEntry, 0), EntryCount: 0, Entries: 0, NamesOffset: 0}
+		if err := fst.Parse(); err != nil {
+			return err
 		}
 
-		if fst.FSTEntries[i].Type&1 != 0 {
-			entry[level] = i
-			lEntry[level] = fst.FSTEntries[i].Length
-			level++
-			if level >= MAX_LEVELS {
-				return errors.New("level >= MAX_LEVELS")
+		outputPath := path
+		entry := make([]uint32, 0x10)
+		lEntry := make([]uint32, 0x10)
+		level := uint32(0)
+
+		for i := uint32(0); i < fst.Entries-1; i++ {
+			progressReporter.UpdateDecryptionProgress(float64(i) / float64(fst.Entries-1))
+			if level > 0 {
+				for (level >= 1) && (lEntry[level-1] == i+1) {
+					level--
+				}
 			}
-		} else {
-			pathOffset := uint32(0)
-			outputPath = path
-			for j := uint32(0); j < level; j++ {
-				pathOffset = fst.FSTEntries[entry[j]].NameOffset & 0x00FFFFFF
+
+			if fst.FSTEntries[i].Type&1 != 0 {
+				entry[level] = i
+				lEntry[level] = fst.FSTEntries[i].Length
+				level++
+				if level >= MAX_LEVELS {
+					return errors.New("level >= MAX_LEVELS")
+				}
+			} else {
+				pathOffset := uint32(0)
+				outputPath = path
+				for j := uint32(0); j < level; j++ {
+					pathOffset = fst.FSTEntries[entry[j]].NameOffset & 0x00FFFFFF
+					fst.FSTReader.Seek(int64(fst.NamesOffset+pathOffset), io.SeekStart)
+					directory, err := readString(fst.FSTReader)
+					if err != nil {
+						return fmt.Errorf("failed to read directory name: %w", err)
+					}
+					outputPath = filepath.Join(outputPath, directory)
+					if err := os.MkdirAll(outputPath, 0755); err != nil {
+						return fmt.Errorf("failed to create directory: %w", err)
+					}
+				}
+				pathOffset = fst.FSTEntries[i].NameOffset & 0x00FFFFFF
 				fst.FSTReader.Seek(int64(fst.NamesOffset+pathOffset), io.SeekStart)
-				directory, err := readString(fst.FSTReader)
+				fileName, err := readString(fst.FSTReader)
 				if err != nil {
-					return fmt.Errorf("failed to read directory name: %w", err)
+					return fmt.Errorf("failed to read file name: %w", err)
 				}
-				outputPath = filepath.Join(outputPath, directory)
-				if err := os.MkdirAll(outputPath, 0755); err != nil {
-					return fmt.Errorf("failed to create directory: %w", err)
+				outputPath = filepath.Clean(filepath.Join(outputPath, fileName))
+				contentOffset := uint64(fst.FSTEntries[i].Offset)
+				if fst.FSTEntries[i].Type&0x80 == 0 {
+					matchingContent := tmd.Contents[fst.FSTEntries[i].ContentID]
+					tmdFlags := matchingContent.Type
+					srcFile, err := os.Open(filepath.Join(path, matchingContent.CIDStr+".app"))
+					if err != nil {
+						return err
+					}
+					if tmdFlags&0x02 != 0 {
+						err = extractFileHash(srcFile, 0, contentOffset, uint64(fst.FSTEntries[i].Length), outputPath, cipherHashTree)
+					} else {
+						err = extractFile(srcFile, 0, contentOffset, uint64(fst.FSTEntries[i].Length), outputPath, fst.FSTEntries[i].ContentID, cipherHashTree)
+					}
+					srcFile.Close()
+					if err != nil {
+						return err
+					}
 				}
 			}
-			pathOffset = fst.FSTEntries[i].NameOffset & 0x00FFFFFF
-			fst.FSTReader.Seek(int64(fst.NamesOffset+pathOffset), io.SeekStart)
-			fileName, err := readString(fst.FSTReader)
+		}
+	} else { // Wii / vWii
+		for i, content := range tmd.Contents {
+			progressReporter.UpdateDecryptionProgress(float64(i) / float64(len(tmd.Contents)))
+			srcFile, err := os.Open(filepath.Join(path, content.CIDStr+".app"))
 			if err != nil {
-				return fmt.Errorf("failed to read file name: %w", err)
+				return err
 			}
-			outputPath = filepath.Clean(filepath.Join(outputPath, fileName))
-			contentOffset := uint64(fst.FSTEntries[i].Offset)
-			// if fst.FSTEntries[i].Flags&4 == 0 {
-			// 	contentOffset <<= 5
-			// }
-			if fst.FSTEntries[i].Type&0x80 == 0 {
-				matchingContent := tmd.Contents[fst.FSTEntries[i].ContentID]
-				tmdFlags := matchingContent.Type
-				srcFile, err := os.Open(filepath.Join(path, matchingContent.CIDStr+".app"))
-				if err != nil {
-					return err
-				}
-				if tmdFlags&0x02 != 0 {
-					err = extractFileHash(srcFile, 0, contentOffset, uint64(fst.FSTEntries[i].Length), outputPath, cipherHashTree)
-				} else {
-					err = extractFile(srcFile, 0, contentOffset, uint64(fst.FSTEntries[i].Length), outputPath, fst.FSTEntries[i].ContentID, cipherHashTree)
-				}
+
+			decryptedBuffer := bytes.Buffer{}
+			if err := decryptContentToBuffer(srcFile, &decryptedBuffer, cipherHashTree, content); err != nil {
 				srcFile.Close()
-				if err != nil {
-					return err
+				return err
+			}
+			srcFile.Close()
+
+			decData := decryptedBuffer.Bytes()
+
+			// Scan for U8 archives at any offset (check 16-byte aligned positions)
+			foundU8 := false
+			extractCount := 0
+			for pos := 0; pos < len(decData)-32; pos += 16 {
+				if binary.BigEndian.Uint32(decData[pos:pos+4]) == 0x55AA382D {
+					// Validate it's actually a U8 archive by checking header structure
+					if pos+32 > len(decData) {
+						continue
+					}
+					rootNodeOffset := binary.BigEndian.Uint32(decData[pos+4 : pos+8])
+					dataOffset := binary.BigEndian.Uint32(decData[pos+12 : pos+16])
+
+					// Basic sanity checks for U8 header
+					if rootNodeOffset < 32 || rootNodeOffset > uint32(len(decData)) {
+						continue
+					}
+					if dataOffset < rootNodeOffset || dataOffset > uint32(len(decData)) {
+						continue
+					}
+					if dataOffset-rootNodeOffset > 1000000 { // Node table shouldn't be > 1MB
+						continue
+					}
+
+					foundU8 = true
+					var outPath string
+					if extractCount == 0 && i == 0 {
+						// First U8 in first content extracts to root
+						outPath = path
+					} else if extractCount == 0 {
+						// First U8 in other contents extracts to CID folder
+						outPath = filepath.Join(path, content.CIDStr)
+					} else {
+						// Additional U8s go into subdirectories
+						outPath = filepath.Join(path, content.CIDStr, fmt.Sprintf("u8_%X", pos))
+					}
+
+					// Try to extract - if it fails, it was a false positive
+					if err := extractU8(decData[pos:], outPath); err == nil {
+						extractCount++
+					}
 				}
+			}
+
+			if !foundU8 {
+				// No U8 archives found, save as .app (decrypted)
+				_ = os.WriteFile(filepath.Join(path, content.CIDStr+".app"), decData, 0644)
 			}
 		}
 	}

@@ -15,6 +15,7 @@ import (
 	"github.com/Xpl0itU/dialog"
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
+	"github.com/gotk3/gotk3/pango"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -954,7 +955,7 @@ func (mw *MainWindow) showErrorsDialog(errors []DownloadError) {
 	if err != nil {
 		return
 	}
-	scrolledWindow.SetPolicy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
+	scrolledWindow.SetPolicy(gtk.POLICY_NEVER, gtk.POLICY_AUTOMATIC)
 	scrolledWindow.SetMarginStart(10)
 	scrolledWindow.SetMarginEnd(10)
 	contentArea.PackStart(scrolledWindow, true, true, 0)
@@ -1010,8 +1011,7 @@ func (mw *MainWindow) showErrorsDialog(errors []DownloadError) {
 		}
 		errorLabel.SetXAlign(0)
 		errorLabel.SetLineWrap(true)
-		errorLabel.SetLineWrapMode(3) // PANGO_WRAP_WORD
-		errorLabel.SetMaxWidthChars(80)
+		errorLabel.SetLineWrapMode(pango.WRAP_WORD)
 		box.PackStart(errorLabel, false, false, 0)
 
 		// Separator

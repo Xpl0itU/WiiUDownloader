@@ -45,6 +45,9 @@ func NewQueuePane() (*QueuePane, error) {
 		log.Println("Unable to get selection:", err)
 	}
 	selection.SetMode(gtk.SELECTION_MULTIPLE)
+	// Accessibility: Set up tree view for keyboard navigation
+	SetupTreeViewAccessibility(titleTreeView)
+	titleTreeView.ToWidget().SetProperty("tooltip-text", "Download queue - Shows games queued for download. Use arrow keys to navigate, space to select/deselect, or click Remove from Queue button to remove selected titles")
 
 	titleTreeView.SetModel(store)
 
@@ -78,6 +81,8 @@ func NewQueuePane() (*QueuePane, error) {
 		return nil, err
 	}
 	removeFromQueueButton.SetSizeRequest(-1, 42)
+	// Accessibility: Set button description
+	SetupButtonAccessibility(removeFromQueueButton, "Remove selected titles from the download queue")
 
 	queuePane := QueuePane{
 		container:             queueVBox,

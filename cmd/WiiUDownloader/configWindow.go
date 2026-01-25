@@ -44,6 +44,8 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 		return nil, err
 	}
 	darkModeCheck.SetActive(config.DarkMode)
+	// Accessibility: Set checkbox description
+	SetupCheckButtonAccessibility(darkModeCheck, "Enable dark theme for the application interface")
 	grid.Attach(darkModeCheck, 0, 0, 1, 1)
 	downloadPathLabel, err := gtk.LabelNew("Download Path:")
 	if err != nil {
@@ -59,11 +61,15 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 	downloadPathEntry.SetText(config.LastSelectedPath)
 	downloadPathEntry.SetWidthChars(40)
 	downloadPathEntry.SetMarginEnd(10)
+	// Accessibility: Set entry description
+	SetupEntryAccessibility(downloadPathEntry, "Download path", "Location where downloaded games will be saved. Click Browse to select a different directory")
 	grid.AttachNextTo(downloadPathEntry, downloadPathLabel, gtk.POS_BOTTOM, 1, 1)
 	downloadPathButton, err := gtk.ButtonNewWithLabel("Browse")
 	if err != nil {
 		return nil, err
 	}
+	// Accessibility: Set button description
+	SetupButtonAccessibility(downloadPathButton, "Open file browser to select download directory")
 	downloadPathButton.Connect("clicked", func() {
 		selectedPath, err := dialog.Directory().Title("Select Download Path").Browse()
 		if err != nil {
@@ -80,6 +86,8 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 	}
 	rememberPathCheck.SetActive(config.RememberLastPath)
 	rememberPathCheck.SetMarginTop(10)
+	// Accessibility: Set checkbox description
+	SetupCheckButtonAccessibility(rememberPathCheck, "When checked, the application will remember and automatically use the last download location")
 	grid.AttachNextTo(rememberPathCheck, downloadPathEntry, gtk.POS_BOTTOM, 1, 1)
 
 	continueOnErrorCheck, err := gtk.CheckButtonNewWithLabel("Continue downloading on errors (show summary at end)")
@@ -88,6 +96,8 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 	}
 	continueOnErrorCheck.SetActive(config.ContinueOnError)
 	continueOnErrorCheck.SetMarginTop(10)
+	// Accessibility: Set checkbox description
+	SetupCheckButtonAccessibility(continueOnErrorCheck, "When checked, the downloader will continue with remaining titles even if some fail, showing a summary of errors at the end")
 	grid.AttachNextTo(continueOnErrorCheck, rememberPathCheck, gtk.POS_BOTTOM, 1, 1)
 
 	saveButton, err := gtk.ButtonNewWithLabel("Save and Apply")
@@ -96,6 +106,8 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 	}
 	saveButton.SetMarginTop(10)
 	saveButton.SetHAlign(gtk.ALIGN_END)
+	// Accessibility: Set button description
+	SetupButtonAccessibility(saveButton, "Save all configuration changes and apply them immediately")
 	grid.AttachNextTo(saveButton, continueOnErrorCheck, gtk.POS_BOTTOM, 1, 1)
 	closeButton, err := gtk.ButtonNewWithLabel("Close")
 	if err != nil {
@@ -103,6 +115,8 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 	}
 	closeButton.SetMarginTop(10)
 	closeButton.SetHAlign(gtk.ALIGN_END)
+	// Accessibility: Set button description
+	SetupButtonAccessibility(closeButton, "Close settings window without saving changes")
 	grid.AttachNextTo(closeButton, saveButton, gtk.POS_RIGHT, 1, 1)
 
 	dirty := false

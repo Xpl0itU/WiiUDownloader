@@ -237,7 +237,8 @@ func createProgressWindow(parent *gtk.Window) (*ProgressWindow, error) {
 	} else {
 		win.SetPosition(gtk.WIN_POS_CENTER)
 	}
-
+	// Accessibility: Set window description for screen readers
+	SetupWindowAccessibility(win, "Download Progress")
 	win.SetDeletable(false)
 
 	box, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 5)
@@ -250,6 +251,8 @@ func createProgressWindow(parent *gtk.Window) (*ProgressWindow, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Accessibility: Set label for screen readers
+	SetupLabelAccessibility(gameLabel, "Game title label")
 	box.PackStart(gameLabel, false, false, 0)
 
 	progressBar, err := gtk.ProgressBarNew()
@@ -257,12 +260,16 @@ func createProgressWindow(parent *gtk.Window) (*ProgressWindow, error) {
 		return nil, err
 	}
 	progressBar.SetShowText(true)
+	// Accessibility: Set progress bar description for screen readers
+	progressBar.ToWidget().SetProperty("tooltip-text", "Download progress bar - Shows current download status, speed, and bytes downloaded")
 	box.PackStart(progressBar, false, false, 0)
 
 	cancelButton, err := gtk.ButtonNewWithLabel("Cancel")
 	if err != nil {
 		return nil, err
 	}
+	// Accessibility: Set button description for screen readers
+	SetupButtonAccessibility(cancelButton, "Stop the current download operation")
 
 	bottomhBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 5)
 	if err != nil {

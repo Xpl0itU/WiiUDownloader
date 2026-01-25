@@ -99,6 +99,8 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 		return nil, err
 	}
 	assistant.AddActionWidget(skipButton)
+	// Accessibility: Set button description for screen readers
+	SetupButtonAccessibility(skipButton, "Skip the initial setup wizard and start using the application with default settings")
 	skipButton.Connect("clicked", func() {
 		config.DidInitialSetup = true
 		if err := config.Save(); err != nil {
@@ -169,6 +171,8 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	europeCheck.SetActive(true)
 	selectedRegionCheckboxes++
 	europeCheck.SetVAlign(gtk.ALIGN_CENTER)
+	// Accessibility: Set checkbox description
+	SetupCheckButtonAccessibility(europeCheck, "Include games from the European region")
 	europeCheck.Connect("toggled", func() {
 		if europeCheck.GetActive() {
 			selectedRegionCheckboxes++
@@ -213,6 +217,8 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	usaCheck.SetActive(true)
 	selectedRegionCheckboxes++
 	usaCheck.SetVAlign(gtk.ALIGN_CENTER)
+	// Accessibility: Set checkbox description
+	SetupCheckButtonAccessibility(usaCheck, "Include games from the USA region")
 	usaCheck.Connect("toggled", func() {
 		if usaCheck.GetActive() {
 			selectedRegionCheckboxes++
@@ -257,6 +263,8 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	japanCheck.SetActive(true)
 	selectedRegionCheckboxes++
 	japanCheck.SetVAlign(gtk.ALIGN_CENTER)
+	// Accessibility: Set checkbox description
+	SetupCheckButtonAccessibility(japanCheck, "Include games from the Japan region")
 	japanCheck.Connect("toggled", func() {
 		if japanCheck.GetActive() {
 			selectedRegionCheckboxes++
@@ -333,6 +341,8 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	}
 	cemuCheck.SetActive(true)
 	cemuCheck.SetVAlign(gtk.ALIGN_START)
+	// Accessibility: Set checkbox description
+	SetupCheckButtonAccessibility(cemuCheck, "Enable downloads for CEMU emulator with decryption")
 	cemuOuterContainer.PackStart(cemuCheck, false, false, 0)
 
 	cemuTextBox, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
@@ -384,6 +394,8 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	}
 	wiiUCheck.SetActive(true)
 	wiiUCheck.SetVAlign(gtk.ALIGN_START)
+	// Accessibility: Set checkbox description
+	SetupCheckButtonAccessibility(wiiUCheck, "Enable downloads for Wii U console with encrypted files")
 	wiiUOuterContainer.PackStart(wiiUCheck, false, false, 0)
 
 	wiiUTextBox, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)

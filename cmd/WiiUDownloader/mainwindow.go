@@ -73,6 +73,8 @@ func NewMainWindow(entries []wiiudownloader.TitleEntry, client *http.Client, con
 	searchEntry.SetPlaceholderText("Search...")
 	searchEntry.SetHExpand(true)
 	searchEntry.SetWidthChars(24)
+	// Accessibility: Set search field label for screen readers
+	SetupEntryAccessibility(searchEntry, "Search titles", "Enter a game title or title ID to search. You can use the category buttons above to filter by type.")
 
 	queuePane, err := NewQueuePane()
 	if err != nil {
@@ -382,6 +384,11 @@ func (mw *MainWindow) BuildUI() {
 	column.SetSortColumnID(NAME_COLUMN)
 	mw.treeView.AppendColumn(column)
 
+	// Accessibility: Set up tree view for keyboard navigation
+	SetupTreeViewAccessibility(mw.treeView)
+	// Set tree view tooltip
+	mw.treeView.ToWidget().SetProperty("tooltip-text", "Game titles list. Use arrow keys to navigate, space or enter to toggle queue status for selected titles, or click checkboxes to add/remove titles.")
+
 	mainvBox, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 6)
 	if err != nil {
 		log.Fatalln("Unable to create box:", err)
@@ -407,6 +414,7 @@ func (mw *MainWindow) BuildUI() {
 	if err != nil {
 		log.Fatalln("Unable to create menu item:", err)
 	}
+	decryptContentsMenuItem.ToWidget().SetProperty("tooltip-text", "Decrypt contents - Select a game directory to decrypt its contents")
 	decryptContentsMenuItem.Connect("activate", func() {
 		mw.progressWindow, err = createProgressWindow(mw.window)
 		if err != nil {
@@ -435,6 +443,7 @@ func (mw *MainWindow) BuildUI() {
 	if err != nil {
 		log.Fatalln("Unable to create menu item:", err)
 	}
+	generateFakeTicketCert.ToWidget().SetProperty("tooltip-text", "Generate fake ticket and cert - Create ticket and certificate files for a game")
 	generateFakeTicketCert.Connect("activate", func() {
 		tmdPath, err := dialog.File().Title("Select the game's tmd file").Filter("tmd", "tmd").Load()
 		if err != nil {
@@ -518,6 +527,7 @@ func (mw *MainWindow) BuildUI() {
 	if err != nil {
 		log.Fatalln("Unable to create menu item:", err)
 	}
+	configOption.ToWidget().SetProperty("tooltip-text", "Settings - Configure download path and other preferences")
 	configOption.Connect("activate", func() {
 		config, err := loadConfig()
 		if err != nil {
@@ -573,6 +583,8 @@ func (mw *MainWindow) BuildUI() {
 		if buttonLabel == "Game" {
 			button.SetActive(true)
 		}
+		// Accessibility: Set category button description for screen readers
+		SetupToggleButtonAccessibility(&button.ToggleButton, "Filter titles by category: "+cat)
 		mw.categoryButtons = append(mw.categoryButtons, &button.ToggleButton)
 	}
 	tophBox.PackEnd(mw.searchEntry, true, true, 0)
@@ -599,12 +611,16 @@ func (mw *MainWindow) BuildUI() {
 	}
 	mw.downloadQueueButton.SetCanDefault(true)
 	mw.downloadQueueButton.GrabDefault()
+	// Accessibility: Set button description for screen readers
+	SetupButtonAccessibility(mw.downloadQueueButton, "Start downloading all titles in your queue. You can select multiple titles by clicking checkboxes and they will be added to your download queue.")
 
 	mw.decryptContentsCheckbox, err = gtk.CheckButtonNewWithLabel("Decrypt contents")
 	if err != nil {
 		log.Fatalln("Unable to create button:", err)
 	}
 	mw.decryptContentsCheckbox.SetActive(mw.decryptContents)
+	// Accessibility: Set checkbox description for screen readers
+	SetupCheckButtonAccessibility(mw.decryptContentsCheckbox, "When checked, downloaded game contents will be decrypted after download completes")
 
 	mw.deleteEncryptedContentsCheckbox, err = gtk.CheckButtonNewWithLabel("Delete encrypted contents after decryption")
 	if err != nil {
@@ -612,6 +628,8 @@ func (mw *MainWindow) BuildUI() {
 	}
 	mw.deleteEncryptedContentsCheckbox.SetSensitive(mw.decryptContents)
 	mw.deleteEncryptedContentsCheckbox.SetActive(mw.deleteEncryptedContents)
+	// Accessibility: Set checkbox description for screen readers
+	SetupCheckButtonAccessibility(mw.deleteEncryptedContentsCheckbox, "When checked and decrypt contents is enabled, encrypted files will be deleted after successful decryption")
 	mw.deleteEncryptedContentsCheckbox.Connect("clicked", func() {
 		config, err := loadConfig()
 		if err != nil {

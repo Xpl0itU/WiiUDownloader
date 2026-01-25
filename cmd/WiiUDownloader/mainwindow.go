@@ -19,41 +19,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// detectErrorType identifies the type of error that occurred during download
-func detectErrorType(errorMsg string) string {
-	errorLower := strings.ToLower(errorMsg)
-
-	// Check for specific error patterns
-	if strings.Contains(errorLower, "tmd") || strings.Contains(errorLower, "title.tmd") {
-		return "TMD Download"
-	}
-	if strings.Contains(errorLower, "tik") || strings.Contains(errorLower, "cetk") || strings.Contains(errorLower, "title.tik") {
-		return "Ticket Download"
-	}
-	if strings.Contains(errorLower, "cert") || strings.Contains(errorLower, "certificate") {
-		return "Certificate Download"
-	}
-	if strings.Contains(errorLower, "decrypt") {
-		return "Decryption"
-	}
-	if strings.Contains(errorLower, ".app") || strings.Contains(errorLower, ".h3") {
-		return "Content Download"
-	}
-	if strings.Contains(errorLower, "content not found") {
-		return "Decryption"
-	}
-	if strings.Contains(errorLower, "status code") || strings.Contains(errorLower, "connection") ||
-		strings.Contains(errorLower, "timeout") || strings.Contains(errorLower, "network") {
-		return "Network Error"
-	}
-	if strings.Contains(errorLower, "permission") || strings.Contains(errorLower, "no such file") {
-		return "File I/O Error"
-	}
-
-	// Default to generic download error
-	return "Download Error"
-}
-
 const (
 	IN_QUEUE_COLUMN = iota
 	KIND_COLUMN
@@ -83,6 +48,7 @@ type MainWindow struct {
 	uiBuilt                         bool
 	searchTimer                     *time.Timer
 	filterModel                     *gtk.TreeModelFilter
+	sortModel                       *gtk.TreeModelSort
 	childStore                      *gtk.ListStore
 }
 
@@ -210,12 +176,6 @@ func (mw *MainWindow) BuildUI() {
 		}
 
 		// 2. Region Filter
-		// We need the original region bits. Since we only have strings in the model,
-		// we'll find the title in the original list for accurate region matching.
-		// Performance check: this is called frequently, but mw.titles is already filtered by category usually.
-		// Actually, we'll use mw.titles which contains all entries for the current category or all.
-		// To be bulletproof, let's just find it in the master list.
-		// Optimization: If performance is an issue, we could add a HIDDEN column for raw region bits.
 		for _, t := range allTitles {
 			if t.TitleID == tid {
 				if (mw.currentRegion & t.Region) == 0 {
@@ -237,7 +197,20 @@ func (mw *MainWindow) BuildUI() {
 		return true
 	})
 
-	mw.treeView, err = gtk.TreeViewNewWithModel(mw.filterModel)
+	// Create a sort model that wraps the filter model
+	sortModel, err := gtk.TreeModelSortNew(mw.filterModel.ToTreeModel())
+	if err != nil {
+		log.Fatalln("Unable to create sort model:", err)
+	}
+	mw.sortModel = sortModel
+
+	// Set sort column IDs for each column
+	sortModel.SetSortColumnId(KIND_COLUMN, gtk.SORT_ASCENDING)
+	sortModel.SetSortColumnId(TITLE_ID_COLUMN, gtk.SORT_ASCENDING)
+	sortModel.SetSortColumnId(REGION_COLUMN, gtk.SORT_ASCENDING)
+	sortModel.SetSortColumnId(NAME_COLUMN, gtk.SORT_ASCENDING)
+
+	mw.treeView, err = gtk.TreeViewNewWithModel(sortModel)
 	if err != nil {
 		log.Fatalln("Unable to create tree view:", err)
 	}
@@ -261,8 +234,14 @@ func (mw *MainWindow) BuildUI() {
 			log.Fatalln("Unable to create tree path:", err)
 		}
 
+		// Convert sort path to filter path
+		filterPath := mw.sortModel.ConvertPathToChildPath(pathObj)
+		if filterPath == nil {
+			return
+		}
+
 		// Convert filter path to child path
-		childPath := mw.filterModel.ConvertPathToChildPath(pathObj)
+		childPath := mw.filterModel.ConvertPathToChildPath(filterPath)
 		if childPath == nil {
 			return
 		}
@@ -313,15 +292,20 @@ func (mw *MainWindow) BuildUI() {
 			}
 		} else {
 			// Multiple rows selected - toggle all of them
-			paths := sel.GetSelectedRows(mw.filterModel)
+			paths := sel.GetSelectedRows(mw.sortModel)
 			for l := paths; l != nil; l = l.Next() {
 				data := l.Data()
-				filterPath, ok := data.(*gtk.TreePath)
-				if !ok || filterPath == nil {
+				sortPath, ok := data.(*gtk.TreePath)
+				if !ok || sortPath == nil {
 					continue
 				}
 
-				childPathMulti := mw.filterModel.ConvertPathToChildPath(filterPath)
+				filterPathMulti := mw.sortModel.ConvertPathToChildPath(sortPath)
+				if filterPathMulti == nil {
+					continue
+				}
+
+				childPathMulti := mw.filterModel.ConvertPathToChildPath(filterPathMulti)
 				if childPathMulti == nil {
 					continue
 				}
@@ -365,11 +349,13 @@ func (mw *MainWindow) BuildUI() {
 	if err != nil {
 		log.Fatalln("Unable to create cell renderer:", err)
 	}
+
 	column, err = gtk.TreeViewColumnNewWithAttribute("Kind", renderer, "text", KIND_COLUMN)
 	if err != nil {
 		log.Fatalln("Unable to create tree view column:", err)
 	}
 	column.SetResizable(true)
+	column.SetSortColumnID(KIND_COLUMN)
 	mw.treeView.AppendColumn(column)
 
 	column, err = gtk.TreeViewColumnNewWithAttribute("Title ID", renderer, "text", TITLE_ID_COLUMN)
@@ -377,6 +363,7 @@ func (mw *MainWindow) BuildUI() {
 		log.Fatalln("Unable to create tree view column:", err)
 	}
 	column.SetResizable(true)
+	column.SetSortColumnID(TITLE_ID_COLUMN)
 	mw.treeView.AppendColumn(column)
 
 	column, err = gtk.TreeViewColumnNewWithAttribute("Region", renderer, "text", REGION_COLUMN)
@@ -384,6 +371,7 @@ func (mw *MainWindow) BuildUI() {
 		log.Fatalln("Unable to create tree view column:", err)
 	}
 	column.SetResizable(true)
+	column.SetSortColumnID(REGION_COLUMN)
 	mw.treeView.AppendColumn(column)
 
 	column, err = gtk.TreeViewColumnNewWithAttribute("Name", renderer, "text", NAME_COLUMN)
@@ -391,6 +379,7 @@ func (mw *MainWindow) BuildUI() {
 		log.Fatalln("Unable to create tree view column:", err)
 	}
 	column.SetResizable(true)
+	column.SetSortColumnID(NAME_COLUMN)
 	mw.treeView.AppendColumn(column)
 
 	mainvBox, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 6)

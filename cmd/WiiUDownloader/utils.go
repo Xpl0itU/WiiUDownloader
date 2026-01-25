@@ -125,3 +125,38 @@ func escapeMarkup(text string) string {
 	text = strings.ReplaceAll(text, "\"", "&quot;")
 	return text
 }
+
+// detectErrorType identifies the type of error that occurred during download
+func detectErrorType(errorMsg string) string {
+	errorLower := strings.ToLower(errorMsg)
+
+	// Check for specific error patterns
+	if strings.Contains(errorLower, "tmd") || strings.Contains(errorLower, "title.tmd") {
+		return "TMD Download"
+	}
+	if strings.Contains(errorLower, "tik") || strings.Contains(errorLower, "cetk") || strings.Contains(errorLower, "title.tik") {
+		return "Ticket Download"
+	}
+	if strings.Contains(errorLower, "cert") || strings.Contains(errorLower, "certificate") {
+		return "Certificate Download"
+	}
+	if strings.Contains(errorLower, "decrypt") {
+		return "Decryption"
+	}
+	if strings.Contains(errorLower, ".app") || strings.Contains(errorLower, ".h3") {
+		return "Content Download"
+	}
+	if strings.Contains(errorLower, "content not found") {
+		return "Decryption"
+	}
+	if strings.Contains(errorLower, "status code") || strings.Contains(errorLower, "connection") ||
+		strings.Contains(errorLower, "timeout") || strings.Contains(errorLower, "network") {
+		return "Network Error"
+	}
+	if strings.Contains(errorLower, "permission") || strings.Contains(errorLower, "no such file") {
+		return "File I/O Error"
+	}
+
+	// Default to generic download error
+	return "Download Error"
+}

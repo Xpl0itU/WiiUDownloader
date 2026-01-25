@@ -291,5 +291,14 @@ func createProgressWindow(parent *gtk.Window) (*ProgressWindow, error) {
 		progressWindow.SetCancelled()
 	})
 
+	// Prevent Enter key from triggering the cancel button
+	progressWindow.cancelButton.Connect("key-press-event", func(button *gtk.Button, event *gdk.Event) bool {
+		keyEvent := gdk.EventKeyNewFromEvent(event)
+		if keyEvent.KeyVal() == gdk.KEY_Return || keyEvent.KeyVal() == gdk.KEY_KP_Enter {
+			return true // Consume the event to prevent activation
+		}
+		return false
+	})
+
 	return &progressWindow, nil
 }

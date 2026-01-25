@@ -779,6 +779,8 @@ func (mw *MainWindow) BuildUI() {
 
 	mainvBox.PackEnd(bottomhBox, false, false, 0)
 
+	bottomhBox.SetSizeRequest(400, -1)
+
 	splitPane, err := gtk.PanedNew(gtk.ORIENTATION_HORIZONTAL)
 	if err != nil {
 		log.Fatalln("Unable to create paned:", err)

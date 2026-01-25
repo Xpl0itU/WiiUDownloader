@@ -275,6 +275,7 @@ func createProgressWindow(parent *gtk.Window) (*ProgressWindow, error) {
 	if err != nil {
 		return nil, err
 	}
+	bottomhBox.SetSizeRequest(350, -1)
 	bottomhBox.PackEnd(cancelButton, false, false, 0)
 	box.SetMarginBottom(5)
 	box.SetMarginEnd(5)

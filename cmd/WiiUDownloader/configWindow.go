@@ -31,13 +31,14 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 	grid.SetMarginTop(12)
 	grid.SetMarginBottom(12)
 	grid.SetMarginStart(12)
+	grid.SetMarginEnd(12)
+	grid.SetSizeRequest(450, -1)
 	if sc, _ := win.GetStyleContext(); sc != nil {
 		sc.AddClass("settings-window")
 	}
 	if gsc, _ := grid.GetStyleContext(); gsc != nil {
 		gsc.AddClass("settings-grid")
 	}
-	grid.SetMarginEnd(12)
 	win.Add(grid)
 	darkModeCheck, err := gtk.CheckButtonNewWithLabel("Dark Mode")
 	if err != nil {

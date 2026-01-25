@@ -46,9 +46,15 @@ jobs:
             cp $(cygpath -u "$ff") dist/
           done
           cp -r /ucrt64/lib/gdk-pixbuf-2.0 ./dist/lib/gdk-pixbuf-2.0
+          for loader in dist/lib/gdk-pixbuf-2.0/2.10.0/loaders/*.dll; do
+            for dep in $(${MSYSTEM_PREFIX}/bin/ntldd -R "$(cygpath -m "$loader")" | tr '\\' '/' | grep -io "$(cygpath -m ${MSYSTEM_PREFIX}).\+\.dll" | sort -u); do
+              cp $(cygpath -u "$dep") dist/ || true
+            done
+          done
           cp -r /ucrt64/share/icons/* ./dist/share/icons/
           cp /ucrt64/share/glib-2.0/schemas/* dist/share/glib-2.0/schemas/
           glib-compile-schemas.exe dist/share/glib-2.0/schemas/
+          gdk-pixbuf-query-loaders > dist/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache
           cp main.exe dist/WiiUDownloader.exe
           cd dist && zip -9 -r ../WiiUDownloader-Windows.zip .
       - name: Upload Windows Artifact

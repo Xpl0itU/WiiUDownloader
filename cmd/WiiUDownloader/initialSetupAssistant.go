@@ -13,6 +13,9 @@ type InitialSetupAssistantWindow struct {
 	assistantWindow *gtk.Assistant
 	config          *Config
 	skipButton      *gtk.Button
+	nextButton      *gtk.Button
+	backButton      *gtk.Button
+	finishButton    *gtk.Button
 }
 
 func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindow, error) {
@@ -27,6 +30,46 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	assistant.SetDefaultSize(600, 500)
 	assistant.SetPosition(gtk.WIN_POS_CENTER)
 	assistant.SetKeepAbove(true)
+
+	// Custom Navigation Buttons
+	actionBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 6)
+	if err != nil {
+		return nil, err
+	}
+
+	skipButton, err := gtk.ButtonNewWithLabel("Skip")
+	if err != nil {
+		return nil, err
+	}
+	SetupButtonAccessibility(skipButton, "Skip the initial setup wizard and start using the application with default settings")
+
+	backButton, err := gtk.ButtonNewWithLabel("Back")
+	if err != nil {
+		return nil, err
+	}
+	SetupButtonAccessibility(backButton, "Go back to the previous step")
+
+	nextButton, err := gtk.ButtonNewWithLabel("Next")
+	if err != nil {
+		return nil, err
+	}
+	SetupButtonAccessibility(nextButton, "Proceed to the next step")
+
+	finishButton, err := gtk.ButtonNewWithLabel("Finish")
+	if err != nil {
+		return nil, err
+	}
+	SetupButtonAccessibility(finishButton, "Complete the initial setup")
+	finishContext, _ := finishButton.GetStyleContext()
+	finishContext.AddClass("suggested-action")
+
+	// Layout: Skip [Spring] Back Next/Finish
+	actionBox.PackStart(skipButton, false, false, 0)
+	actionBox.PackEnd(finishButton, false, false, 0)
+	actionBox.PackEnd(nextButton, false, false, 0)
+	actionBox.PackEnd(backButton, false, false, 0)
+
+	assistant.AddActionWidget(actionBox)
 
 	page1, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
 	if err != nil {
@@ -93,25 +136,6 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 
 	page1.PackStart(infoBox, false, false, 8)
 
-	// Skip button
-	skipButton, err := gtk.ButtonNewWithLabel("Skip")
-	if err != nil {
-		return nil, err
-	}
-	assistant.AddActionWidget(skipButton)
-	// Accessibility: Set button description for screen readers
-	SetupButtonAccessibility(skipButton, "Skip the initial setup wizard and start using the application with default settings")
-	skipButton.Connect("clicked", func() {
-		config.DidInitialSetup = true
-		if err := config.Save(); err != nil {
-			ShowErrorDialog(nil, fmt.Errorf("Failed to save config: %w", err))
-			return
-		}
-		assistant.Hide()
-		assistant.Emit("close", glib.TYPE_BOOLEAN, nil)
-		assistant.SetDestroyWithParent(true)
-	})
-
 	page2, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
 	if err != nil {
 		return nil, err
@@ -173,14 +197,6 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	europeCheck.SetVAlign(gtk.ALIGN_CENTER)
 	// Accessibility: Set checkbox description
 	SetupCheckButtonAccessibility(europeCheck, "Include games from the European region")
-	europeCheck.Connect("toggled", func() {
-		if europeCheck.GetActive() {
-			selectedRegionCheckboxes++
-		} else {
-			selectedRegionCheckboxes--
-		}
-		assistant.SetPageComplete(page2, selectedRegionCheckboxes > 0)
-	})
 	europeContainer.PackStart(europeCheck, false, false, 0)
 
 	europeLabel, err := gtk.LabelNew("")
@@ -219,14 +235,6 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	usaCheck.SetVAlign(gtk.ALIGN_CENTER)
 	// Accessibility: Set checkbox description
 	SetupCheckButtonAccessibility(usaCheck, "Include games from the USA region")
-	usaCheck.Connect("toggled", func() {
-		if usaCheck.GetActive() {
-			selectedRegionCheckboxes++
-		} else {
-			selectedRegionCheckboxes--
-		}
-		assistant.SetPageComplete(page2, selectedRegionCheckboxes > 0)
-	})
 	usaContainer.PackStart(usaCheck, false, false, 0)
 
 	usaLabel, err := gtk.LabelNew("")
@@ -265,14 +273,6 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	japanCheck.SetVAlign(gtk.ALIGN_CENTER)
 	// Accessibility: Set checkbox description
 	SetupCheckButtonAccessibility(japanCheck, "Include games from the Japan region")
-	japanCheck.Connect("toggled", func() {
-		if japanCheck.GetActive() {
-			selectedRegionCheckboxes++
-		} else {
-			selectedRegionCheckboxes--
-		}
-		assistant.SetPageComplete(page2, selectedRegionCheckboxes > 0)
-	})
 	japanContainer.PackStart(japanCheck, false, false, 0)
 
 	japanLabel, err := gtk.LabelNew("")
@@ -284,6 +284,26 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	japanLabel.SetVAlign(gtk.ALIGN_CENTER)
 	japanContainer.PackStart(japanLabel, true, true, 0)
 	regionList.Add(japanRow)
+
+	// Checkbox handlers
+	updateNextButton := func() {
+		count := 0
+		if europeCheck.GetActive() {
+			count++
+		}
+		if usaCheck.GetActive() {
+			count++
+		}
+		if japanCheck.GetActive() {
+			count++
+		}
+		nextButton.SetSensitive(count > 0)
+		assistant.SetPageComplete(page2, count > 0)
+	}
+
+	europeCheck.Connect("toggled", updateNextButton)
+	usaCheck.Connect("toggled", updateNextButton)
+	japanCheck.Connect("toggled", updateNextButton)
 
 	page3, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
 	if err != nil {
@@ -495,10 +515,11 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	assistant.SetPageComplete(page3, true)
 	assistant.SetPageComplete(page4, true)
 
-	assistant.SetPageType(page1, gtk.ASSISTANT_PAGE_INTRO)
-	assistant.SetPageType(page2, gtk.ASSISTANT_PAGE_CONTENT)
-	assistant.SetPageType(page3, gtk.ASSISTANT_PAGE_CONTENT)
-	assistant.SetPageType(page4, gtk.ASSISTANT_PAGE_CONFIRM)
+	// Set all pages to CUSTOM to hide default buttons
+	assistant.SetPageType(page1, gtk.ASSISTANT_PAGE_CUSTOM)
+	assistant.SetPageType(page2, gtk.ASSISTANT_PAGE_CUSTOM)
+	assistant.SetPageType(page3, gtk.ASSISTANT_PAGE_CUSTOM)
+	assistant.SetPageType(page4, gtk.ASSISTANT_PAGE_CUSTOM)
 
 	assistant.SetPageTitle(page1, "Welcome")
 	assistant.SetPageTitle(page2, "Regions")
@@ -529,10 +550,109 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 		assistant.SetDestroyWithParent(true)
 	})
 
+	// Button Logic
+
+	// Skip
+	skipButton.Connect("clicked", func() {
+		config.DidInitialSetup = true
+		if err := config.Save(); err != nil {
+			ShowErrorDialog(nil, fmt.Errorf("Failed to save config: %w", err))
+			return
+		}
+		assistant.Hide()
+		assistant.Emit("close", glib.TYPE_BOOLEAN, nil)
+		assistant.SetDestroyWithParent(true)
+	})
+
+	// Back
+	backButton.Connect("clicked", func() {
+		assistant.PreviousPage()
+	})
+
+	// Next
+	nextButton.Connect("clicked", func() {
+		assistant.NextPage()
+	})
+
+	// Finish
+	finishButton.Connect("clicked", func() {
+		assistant.Commit()
+	})
+
+	// Manage Visibility
+	assistant.Connect("prepare", func(assistant *gtk.Assistant, page *gtk.Widget) {
+		pageNum := assistant.GetCurrentPage()
+
+		// Default
+		skipButton.SetVisible(false)
+		backButton.SetVisible(false)
+		nextButton.SetVisible(false)
+		finishButton.SetVisible(false)
+
+		switch pageNum {
+		case 0: // Welcome
+			skipButton.SetVisible(true)
+			nextButton.SetVisible(true)
+		case 1: // Regions
+			backButton.SetVisible(true)
+			nextButton.SetVisible(true)
+			// Update Next sensitivity
+			count := 0
+			if europeCheck.GetActive() {
+				count++
+			}
+			if usaCheck.GetActive() {
+				count++
+			}
+			if japanCheck.GetActive() {
+				count++
+			}
+			nextButton.SetSensitive(count > 0)
+		case 2: // Platforms
+			backButton.SetVisible(true)
+			nextButton.SetVisible(true)
+			nextButton.SetSensitive(true)
+		case 3: // Summary
+			backButton.SetVisible(true)
+			finishButton.SetVisible(true)
+
+			// Update summary text
+			regionsStr := ""
+			if europeCheck.GetActive() {
+				regionsStr += "Europe, "
+			}
+			if usaCheck.GetActive() {
+				regionsStr += "USA, "
+			}
+			if japanCheck.GetActive() {
+				regionsStr += "Japan, "
+			}
+			if len(regionsStr) > 2 {
+				regionsStr = regionsStr[:len(regionsStr)-2]
+			}
+			summaryRegions.SetMarkup("<span font='10' alpha='85%'>✓ Regions: " + regionsStr + "</span>")
+
+			platformsStr := ""
+			if cemuCheck.GetActive() {
+				platformsStr += "CEMU"
+			}
+			if wiiUCheck.GetActive() {
+				if platformsStr != "" {
+					platformsStr += " + "
+				}
+				platformsStr += "Wii U"
+			}
+			summaryPlatforms.SetMarkup("<span font='10' alpha='85%'>✓ Platforms: " + platformsStr + "</span>")
+		}
+	})
+
 	initialSetupAssistantWindow := InitialSetupAssistantWindow{
 		assistantWindow: assistant,
 		config:          config,
 		skipButton:      skipButton,
+		nextButton:      nextButton,
+		backButton:      backButton,
+		finishButton:    finishButton,
 	}
 
 	return &initialSetupAssistantWindow, nil

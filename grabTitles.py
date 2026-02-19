@@ -22,5 +22,6 @@ opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=ssl_con
 opener.addheaders = [("User-agent", "NUSspliBuilder/2.1")]
 urllib.request.install_opener(opener)
 
+checkAndDeleteFile("dummydb.go")
 checkAndDeleteFile("db.go")
 urllib.request.urlretrieve("https://napi.v10lator.de/db?t=go", "db.go")

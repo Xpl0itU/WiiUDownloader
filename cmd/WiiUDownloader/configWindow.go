@@ -1,8 +1,6 @@
 package main
 
 import (
-	"log"
-
 	"github.com/Xpl0itU/dialog"
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"

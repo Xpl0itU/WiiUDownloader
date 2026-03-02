@@ -1,0 +1,38 @@
+{
+    "FixedFileInfo": {
+        "FileVersion": {
+            "Major": 2,
+            "Minor": 76,
+            "Patch": 0,
+            "Build": 0
+        },
+        "ProductVersion": {
+            "Major": 2,
+            "Minor": 76,
+            "Patch": 0,
+            "Build": 0
+        },
+        "FileFlagsMask": "3f",
+        "FileFlags ": "00",
+        "FileOS": "040004",
+        "FileType": "01",
+        "FileSubType": "00"
+    },
+    "StringFileInfo": {
+        "CompanyName": "Xpl0itU",
+        "FileDescription": "WiiUDownloader",
+        "FileVersion": "2.76",
+        "InternalName": "WiiUDownloader",
+        "LegalCopyright": "Copyright 2022-2026 Xpl0itU",
+        "OriginalFilename": "WiiUDownloader.exe",
+        "ProductName": "WiiUDownloader",
+        "ProductVersion": "2.76"
+    },
+    "IconPath": "WiiUDownloader.ico",
+    "VarFileInfo": {
+        "Translation": {
+            "LangID": "0409",
+            "CharsetID": "04B0"
+        }
+    }
+}

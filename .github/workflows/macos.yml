@@ -2,7 +2,7 @@ name: macOS
 on:
   push:
     tags:
-      - '*'
+      - "*"
 
 permissions:
   contents: write
@@ -16,29 +16,29 @@ jobs:
         os: [macos-15-intel, macos-latest]
     steps:
       - name: Check out repository code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
-          submodules: 'recursive'
+          submodules: "recursive"
       - name: Install Homebrew Dependencies
         uses: tecolicom/actions-use-homebrew-tools@v1
         with:
           tools: create-dmg dylibbundler gtk+3
       - name: Install Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
-          go-version: '1.25.5'
+          go-version: "1.26.0"
           check-latest: true
           cache-dependency-path: |
             go.sum
       - name: Build
         run: |
-          python3 grabTitles.py
-          cd cmd/WiiUDownloader && go build -ldflags="-s -w" -o ../main .
+          curl -Lo db.go -H "User-Agent: NUSspliBuilder/2.1" "https://napi.v10lator.de/db?t=go"
+          cd cmd/WiiUDownloader && go build -o ../main .
       - name: Package
         run: |
           python3 data/create_bundle.py
       - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: WiiUDownloader-App-${{ matrix.os }}
           path: out/WiiUDownloader.app
@@ -49,18 +49,18 @@ jobs:
     needs: build
     steps:
       - name: Check out repository code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Install Homebrew Dependencies
         uses: tecolicom/actions-use-homebrew-tools@v1
         with:
           tools: create-dmg
       - name: Download Intel Artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: WiiUDownloader-App-macos-15-intel
           path: intel_dist
       - name: Download ARM Artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: WiiUDownloader-App-macos-latest
           path: arm_dist
@@ -69,17 +69,17 @@ jobs:
           python3 data/merge_universal_app.py "intel_dist" "arm_dist" "out/WiiUDownloader.app"
       - name: Sign and DMG
         run: |
-           codesign --force --deep --sign - out/WiiUDownloader.app
-           create-dmg \
-            --volname "WiiUDownloader" \
-            --window-pos 200 120 \
-            --window-size 800 400 \
-            --icon-size 100 \
-            --icon "WiiUDownloader.app" 200 190 \
-            --hide-extension "WiiUDownloader.app" \
-            --app-drop-link 600 185 \
-            "WiiUDownloader-macOS-Universal.dmg" \
-            "out/"
+          codesign --force --deep --sign - out/WiiUDownloader.app
+          create-dmg \
+           --volname "WiiUDownloader" \
+           --window-pos 200 120 \
+           --window-size 800 400 \
+           --icon-size 100 \
+           --icon "WiiUDownloader.app" 200 190 \
+           --hide-extension "WiiUDownloader.app" \
+           --app-drop-link 600 185 \
+           "WiiUDownloader-macOS-Universal.dmg" \
+           "out/"
       - name: Upload macOS Artifact
         uses: ncipollo/release-action@v1
         with:

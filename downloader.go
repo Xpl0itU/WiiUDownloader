@@ -17,9 +17,9 @@ import (
 )
 
 const (
-	maxRetries             = 5
-	retryDelay             = 5 * time.Second
-	maxConcurrentDownloads = 4
+	MAX_RETRIES              = 5
+	RETRY_DELAY              = 5 * time.Second
+	MAX_CONCURRENT_DOWNLOADS = 4
 )
 
 var (
@@ -34,8 +34,6 @@ type WatchdogReader struct {
 
 func (r *WatchdogReader) Read(p []byte) (int, error) {
 	if !r.timer.Stop() {
-		// If the timer already fired, we might be too late, but we entered Read, so we are alive.
-		// However, the context might be cancelling. We rely on the timer reset.
 		select {
 		case <-r.timer.C:
 		default:
@@ -58,6 +56,33 @@ type ProgressReporter interface {
 	SetStartTime(startTime time.Time)
 }
 
+type pauseAwareReporter interface {
+	WaitIfPaused() bool
+}
+
+func waitUntilResumed(progressReporter ProgressReporter) bool {
+	if waiter, ok := progressReporter.(pauseAwareReporter); ok {
+		return waiter.WaitIfPaused()
+	}
+	return !progressReporter.Cancelled()
+}
+
+func shouldRetry(progressReporter ProgressReporter, doRetries bool, attempt int) bool {
+	return doRetries && attempt < MAX_RETRIES && waitUntilResumed(progressReporter)
+}
+
+func closeResources(file *os.File, body io.ReadCloser, writer *WriterProgress) {
+	if file != nil {
+		file.Close()
+	}
+	if body != nil {
+		body.Close()
+	}
+	if writer != nil {
+		writer.Close()
+	}
+}
+
 func downloadFileWithSemaphore(ctx context.Context, progressReporter ProgressReporter, client *http.Client, downloadURL, dstPath string, doRetries bool, sem *semaphore.Weighted) error {
 	if err := sem.Acquire(ctx, 1); err != nil {
 		return err
@@ -66,37 +91,44 @@ func downloadFileWithSemaphore(ctx context.Context, progressReporter ProgressRep
 
 	basePath := filepath.Base(dstPath)
 
-	for attempt := 1; attempt <= maxRetries; attempt++ {
-		// specific retry context
-		ctx, cancel := context.WithCancel(ctx)
-		defer cancel()
+	for attempt := 1; attempt <= MAX_RETRIES; attempt++ {
+		if !waitUntilResumed(progressReporter) {
+			return errCancel
+		}
+		attemptCtx, cancel := context.WithCancel(ctx)
 
-		req, err := http.NewRequestWithContext(ctx, "GET", downloadURL, nil)
+		req, err := http.NewRequestWithContext(attemptCtx, "GET", downloadURL, nil)
 		if err != nil {
+			cancel()
 			return err
 		}
 
 		resp, err := client.Do(req)
 		if err != nil {
-			if doRetries && attempt < maxRetries && !progressReporter.Cancelled() {
-				time.Sleep(retryDelay)
+			if shouldRetry(progressReporter, doRetries, attempt) {
+				cancel()
+				time.Sleep(RETRY_DELAY)
 				continue
 			}
+			cancel()
 			return err
 		}
 
 		if resp.StatusCode != http.StatusOK {
 			resp.Body.Close()
-			if doRetries && attempt < maxRetries && !progressReporter.Cancelled() {
-				time.Sleep(retryDelay)
+			if shouldRetry(progressReporter, doRetries, attempt) {
+				cancel()
+				time.Sleep(RETRY_DELAY)
 				continue
 			}
+			cancel()
 			return fmt.Errorf("download error after %d attempts, status code: %d", attempt, resp.StatusCode)
 		}
 
 		file, err := os.Create(dstPath)
 		if err != nil {
 			resp.Body.Close()
+			cancel()
 			return err
 		}
 
@@ -106,7 +138,7 @@ func downloadFileWithSemaphore(ctx context.Context, progressReporter ProgressRep
 
 		progressReporter.SetTotalDownloadedForFile(basePath, 0)
 		writerProgress := newWriterProgress(file, progressReporter, basePath)
-		writerProgressWithContext := ctxio.NewWriter(ctx, writerProgress)
+		writerProgressWithContext := ctxio.NewWriter(attemptCtx, writerProgress)
 
 		watchdog := &WatchdogReader{
 			Reader: resp.Body,
@@ -117,19 +149,18 @@ func downloadFileWithSemaphore(ctx context.Context, progressReporter ProgressRep
 		timer.Stop()
 
 		if err != nil {
-			file.Close()
-			resp.Body.Close()
-			writerProgress.Close()
-			if doRetries && attempt < maxRetries && !progressReporter.Cancelled() {
-				time.Sleep(retryDelay)
+			closeResources(file, resp.Body, writerProgress)
+			if shouldRetry(progressReporter, doRetries, attempt) {
+				cancel()
+				time.Sleep(RETRY_DELAY)
 				continue
 			}
+			cancel()
 			return err
 		}
-		file.Close()
-		resp.Body.Close()
-		writerProgress.Close()
+		closeResources(file, resp.Body, writerProgress)
 		progressReporter.MarkFileAsDone(basePath)
+		cancel()
 		break
 	}
 
@@ -137,12 +168,15 @@ func downloadFileWithSemaphore(ctx context.Context, progressReporter ProgressRep
 }
 
 func downloadFile(progressReporter ProgressReporter, client *http.Client, downloadURL, dstPath string, doRetries bool) error {
-	for attempt := 1; attempt <= maxRetries; attempt++ {
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+	for attempt := 1; attempt <= MAX_RETRIES; attempt++ {
+		if !waitUntilResumed(progressReporter) {
+			return errCancel
+		}
+		attemptCtx, cancel := context.WithCancel(context.Background())
 
-		req, err := http.NewRequestWithContext(ctx, "GET", downloadURL, nil)
+		req, err := http.NewRequestWithContext(attemptCtx, "GET", downloadURL, nil)
 		if err != nil {
+			cancel()
 			return err
 		}
 
@@ -150,25 +184,30 @@ func downloadFile(progressReporter ProgressReporter, client *http.Client, downlo
 
 		resp, err := client.Do(req)
 		if err != nil {
-			if doRetries && attempt < maxRetries && !progressReporter.Cancelled() {
-				time.Sleep(retryDelay)
+			if shouldRetry(progressReporter, doRetries, attempt) {
+				cancel()
+				time.Sleep(RETRY_DELAY)
 				continue
 			}
+			cancel()
 			return err
 		}
 
 		if resp.StatusCode != http.StatusOK {
 			resp.Body.Close()
-			if doRetries && attempt < maxRetries && !progressReporter.Cancelled() {
-				time.Sleep(retryDelay)
+			if shouldRetry(progressReporter, doRetries, attempt) {
+				cancel()
+				time.Sleep(RETRY_DELAY)
 				continue
 			}
+			cancel()
 			return fmt.Errorf("download error after %d attempts, status code: %d", attempt, resp.StatusCode)
 		}
 
 		file, err := os.Create(dstPath)
 		if err != nil {
 			resp.Body.Close()
+			cancel()
 			return err
 		}
 
@@ -185,20 +224,20 @@ func downloadFile(progressReporter ProgressReporter, client *http.Client, downlo
 
 		_, err = io.Copy(writerProgress, watchdog)
 		timer.Stop()
-		writerProgress.Close()
 
 		if err != nil {
-			file.Close()
-			resp.Body.Close()
-			if doRetries && attempt < maxRetries && !progressReporter.Cancelled() {
-				time.Sleep(retryDelay)
+			closeResources(file, resp.Body, writerProgress)
+			if shouldRetry(progressReporter, doRetries, attempt) {
+				cancel()
+				time.Sleep(RETRY_DELAY)
 				continue
 			}
+			cancel()
 			return err
 		}
-		file.Close()
-		resp.Body.Close()
+		closeResources(file, resp.Body, writerProgress)
 		progressReporter.MarkFileAsDone(filepath.Base(dstPath))
+		cancel()
 		break
 	}
 
@@ -214,6 +253,9 @@ func DownloadTitle(titleID, outputDirectory string, doDecryption bool, progressR
 
 	progressReporter.ResetTotals()
 	progressReporter.SetGameTitle(tEntry.Name)
+	if !waitUntilResumed(progressReporter) {
+		return nil
+	}
 
 	outputDir := strings.TrimRight(outputDirectory, "/\\")
 	baseURL := fmt.Sprintf("http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/%s", titleID)
@@ -224,7 +266,7 @@ func DownloadTitle(titleID, outputDirectory string, doDecryption bool, progressR
 
 	tmdPath := filepath.Join(outputDir, "title.tmd")
 	if err := downloadFile(progressReporter, client, fmt.Sprintf("%s/%s", baseURL, "tmd"), tmdPath, true); err != nil {
-		if progressReporter.Cancelled() {
+		if progressReporter.Cancelled() || err == errCancel {
 			return nil
 		}
 		return err
@@ -242,7 +284,7 @@ func DownloadTitle(titleID, outputDirectory string, doDecryption bool, progressR
 
 	tikPath := filepath.Join(outputDir, "title.tik")
 	if err := downloadFile(progressReporter, client, fmt.Sprintf("%s/%s", baseURL, "cetk"), tikPath, false); err != nil {
-		if progressReporter.Cancelled() {
+		if progressReporter.Cancelled() || err == errCancel {
 			return nil
 		}
 		titleKey, err := GenerateKey(titleID)
@@ -263,20 +305,23 @@ func DownloadTitle(titleID, outputDirectory string, doDecryption bool, progressR
 	progressReporter.SetDownloadSize(int64(titleSize))
 
 	if err := GenerateCert(tmd, filepath.Join(outputDir, "title.cert"), progressReporter, client); err != nil {
-		if progressReporter.Cancelled() {
+		if progressReporter.Cancelled() || err == errCancel {
 			return nil
 		}
 		return err
 	}
 
 	g, ctx := errgroup.WithContext(context.Background())
-	g.SetLimit(maxConcurrentDownloads)
-	sem := semaphore.NewWeighted(maxConcurrentDownloads)
+	g.SetLimit(MAX_CONCURRENT_DOWNLOADS)
+	sem := semaphore.NewWeighted(MAX_CONCURRENT_DOWNLOADS)
 	progressReporter.SetStartTime(time.Now())
 
 	for i := 0; i < int(tmd.ContentCount); i++ {
 		i := i
 		g.Go(func() error {
+			if !waitUntilResumed(progressReporter) {
+				return errCancel
+			}
 			filePath := filepath.Join(outputDir, fmt.Sprintf("%08X.app", tmd.Contents[i].ID))
 			if err := downloadFileWithSemaphore(ctx, progressReporter, client, fmt.Sprintf("%s/%08X", baseURL, tmd.Contents[i].ID), filePath, true, sem); err != nil {
 				if progressReporter.Cancelled() {
@@ -285,7 +330,7 @@ func DownloadTitle(titleID, outputDirectory string, doDecryption bool, progressR
 				return err
 			}
 
-			if tmd.Contents[i].Type&0x2 == 2 { // has a hash
+			if tmd.Contents[i].Type&CONTENT_TYPE_HASHED == CONTENT_TYPE_HASHED {
 				filePath = filepath.Join(outputDir, fmt.Sprintf("%08X.h3", tmd.Contents[i].ID))
 				if err := downloadFileWithSemaphore(ctx, progressReporter, client, fmt.Sprintf("%s/%08X.h3", baseURL, tmd.Contents[i].ID), filePath, true, sem); err != nil {
 					if progressReporter.Cancelled() {

@@ -6,6 +6,8 @@ import (
 	"strings"
 )
 
+var removableEncryptedExtensions = []string{".app", ".h3"}
+
 func min(a, b uint64) uint64 {
 	if a < b {
 		return a
@@ -25,8 +27,7 @@ func doDeleteEncryptedContents(path string) error {
 		}
 
 		name := entry.Name()
-		if strings.HasSuffix(name, ".app") ||
-			strings.HasSuffix(name, ".h3") ||
+		if hasRemovableEncryptedExtension(name) ||
 			name == "title.tmd" ||
 			name == "title.tik" ||
 			name == "title.cert" {
@@ -36,4 +37,13 @@ func doDeleteEncryptedContents(path string) error {
 		}
 	}
 	return nil
+}
+
+func hasRemovableEncryptedExtension(name string) bool {
+	for _, ext := range removableEncryptedExtensions {
+		if strings.HasSuffix(name, ext) {
+			return true
+		}
+	}
+	return false
 }

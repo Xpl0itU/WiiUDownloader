@@ -15,12 +15,14 @@ type DownloadError struct {
 	Title     string
 	Error     string
 	TidStr    string
-	ErrorType string // tmd, tik, cert, download, decryption, etc.
+	ErrorType string
 }
 
 const (
-	MAX_SPEEDS       = 32
-	SMOOTHING_FACTOR = 0.2
+	MAX_SPEEDS         = 32
+	SMOOTHING_FACTOR   = 0.2
+	PERCENT_SCALE      = 100
+	PROGRESS_MIN_WIDTH = 350
 )
 
 type SpeedAverager struct {
@@ -30,7 +32,7 @@ type SpeedAverager struct {
 
 func newSpeedAverager() *SpeedAverager {
 	return &SpeedAverager{
-		speeds:       make([]int64, MAX_SPEEDS),
+		speeds:       make([]int64, 0, MAX_SPEEDS),
 		averageSpeed: 0,
 	}
 }
@@ -52,6 +54,10 @@ func calculateDownloadSpeed(downloaded int64, startTime, endTime time.Time) int6
 }
 
 func (sa *SpeedAverager) calculateAverageOfSpeeds() {
+	if len(sa.speeds) == 0 {
+		sa.averageSpeed = 0
+		return
+	}
 	var total int64
 	for _, speed := range sa.speeds {
 		total += speed
@@ -61,6 +67,9 @@ func (sa *SpeedAverager) calculateAverageOfSpeeds() {
 
 func (sa *SpeedAverager) GetAverageSpeed() float64 {
 	sa.calculateAverageOfSpeeds()
+	if len(sa.speeds) == 0 {
+		return 0
+	}
 	return SMOOTHING_FACTOR*float64(sa.speeds[len(sa.speeds)-1]) + (1-SMOOTHING_FACTOR)*float64(sa.averageSpeed)
 }
 
@@ -69,12 +78,16 @@ type ProgressWindow struct {
 	box             *gtk.Box
 	gameLabel       *gtk.Label
 	bar             *gtk.ProgressBar
+	pauseButton     *gtk.Button
 	cancelButton    *gtk.Button
 	cancelled       bool
+	paused          bool
 	totalToDownload int64
 	totalDownloaded int64
-	progressPerFile map[string]int64 // map of filename to downloaded bytes
+	progressPerFile map[string]int64
 	progressMutex   sync.Mutex
+	controlMutex    sync.Mutex
+	controlCond     *sync.Cond
 	speedAverager   *SpeedAverager
 	startTime       time.Time
 	errors          []DownloadError
@@ -92,10 +105,9 @@ func (pw *ProgressWindow) UpdateDownloadProgress(downloaded int64, filename stri
 		return
 	}
 	glib.IdleAdd(func() bool {
-		pw.cancelButton.SetSensitive(true)
+		pw.setTransferControlsSensitive(true)
 		pw.progressMutex.Lock()
 		if _, ok := pw.progressPerFile[filename]; !ok {
-			// This file was already marked as done, don't re-add it
 			pw.progressMutex.Unlock()
 			return false
 		}
@@ -114,9 +126,9 @@ func (pw *ProgressWindow) UpdateDownloadProgress(downloaded int64, filename stri
 
 func (pw *ProgressWindow) UpdateDecryptionProgress(progress float64) {
 	glib.IdleAdd(func() bool {
-		pw.cancelButton.SetSensitive(false)
+		pw.setTransferControlsSensitive(false)
 		pw.bar.SetFraction(progress)
-		pw.bar.SetText(fmt.Sprintf("Decrypting (%.2f%%)", progress*100))
+		pw.bar.SetText(fmt.Sprintf("Decrypting (%.2f%%)", progress*PERCENT_SCALE))
 		return false
 	})
 }
@@ -125,14 +137,64 @@ func (pw *ProgressWindow) Cancelled() bool {
 	if pw == nil {
 		return false
 	}
+	pw.controlMutex.Lock()
+	defer pw.controlMutex.Unlock()
 	return pw.cancelled
 }
 
 func (pw *ProgressWindow) SetCancelled() {
+	pw.controlMutex.Lock()
+	pw.cancelled = true
+	pw.paused = false
+	if pw.controlCond != nil {
+		pw.controlCond.Broadcast()
+	}
+	pw.controlMutex.Unlock()
+
 	glib.IdleAdd(func() bool {
-		pw.cancelled = true
-		pw.cancelButton.SetSensitive(false)
+		pw.setTransferControlsSensitive(false)
+		if pw.pauseButton != nil {
+			pw.pauseButton.SetLabel("Pause")
+		}
 		pw.gameLabel.SetText("Cancelling...")
+		return false
+	})
+}
+
+func (pw *ProgressWindow) WaitIfPaused() bool {
+	pw.controlMutex.Lock()
+	defer pw.controlMutex.Unlock()
+
+	for pw.paused && !pw.cancelled {
+		if pw.controlCond == nil {
+			break
+		}
+		pw.controlCond.Wait()
+	}
+	return !pw.cancelled
+}
+
+func (pw *ProgressWindow) TogglePaused() {
+	pw.controlMutex.Lock()
+	if pw.cancelled {
+		pw.controlMutex.Unlock()
+		return
+	}
+	pw.paused = !pw.paused
+	paused := pw.paused
+	if !paused && pw.controlCond != nil {
+		pw.controlCond.Broadcast()
+	}
+	pw.controlMutex.Unlock()
+
+	glib.IdleAdd(func() bool {
+		if pw.pauseButton != nil {
+			if paused {
+				pw.pauseButton.SetLabel("Resume")
+			} else {
+				pw.pauseButton.SetLabel("Pause")
+			}
+		}
 		return false
 	})
 }
@@ -143,26 +205,49 @@ func (pw *ProgressWindow) SetDownloadSize(size int64) {
 	pw.totalToDownload = size
 }
 
+func (pw *ProgressWindow) setTransferControlsSensitive(sensitive bool) {
+	if pw.cancelButton != nil {
+		pw.cancelButton.SetSensitive(sensitive)
+	}
+	if pw.pauseButton != nil {
+		pw.pauseButton.SetSensitive(sensitive)
+	}
+}
+
+func (pw *ProgressWindow) resetTransferState() {
+	pw.controlMutex.Lock()
+	pw.cancelled = false
+	pw.paused = false
+	pw.controlMutex.Unlock()
+}
+
 func (pw *ProgressWindow) ResetTotals() {
 	glib.IdleAdd(func() {
-		pw.cancelButton.SetSensitive(true)
+		pw.setTransferControlsSensitive(true)
+		if pw.pauseButton != nil {
+			pw.pauseButton.SetLabel("Pause")
+		}
 		pw.bar.SetFraction(0)
 		pw.bar.SetText("Preparing...")
 	})
+	pw.resetTransferState()
 	pw.progressMutex.Lock()
 	defer pw.progressMutex.Unlock()
 	pw.progressPerFile = make(map[string]int64)
 	pw.totalDownloaded = 0
 	pw.totalToDownload = 0
-	// Note: Do NOT clear errors here - errors should accumulate across all titles in queue
 }
 
 func (pw *ProgressWindow) ResetTotalsAndErrors() {
 	glib.IdleAdd(func() {
-		pw.cancelButton.SetSensitive(true)
+		pw.setTransferControlsSensitive(true)
+		if pw.pauseButton != nil {
+			pw.pauseButton.SetLabel("Pause")
+		}
 		pw.bar.SetFraction(0)
 		pw.bar.SetText("Preparing...")
 	})
+	pw.resetTransferState()
 	pw.progressMutex.Lock()
 	defer pw.progressMutex.Unlock()
 	pw.progressPerFile = make(map[string]int64)
@@ -214,7 +299,9 @@ func (pw *ProgressWindow) AddErrorWithType(title, errorMsg, tidStr, errorType st
 func (pw *ProgressWindow) GetErrors() []DownloadError {
 	pw.errorsMutex.Lock()
 	defer pw.errorsMutex.Unlock()
-	return pw.errors
+	errors := make([]DownloadError, len(pw.errors))
+	copy(errors, pw.errors)
+	return errors
 }
 
 func (pw *ProgressWindow) ClearErrors() {
@@ -237,7 +324,6 @@ func createProgressWindow(parent *gtk.Window) (*ProgressWindow, error) {
 	} else {
 		win.SetPosition(gtk.WIN_POS_CENTER)
 	}
-	// Accessibility: Set window description for screen readers
 	SetupWindowAccessibility(win, "Download Progress")
 	win.SetDeletable(false)
 
@@ -251,7 +337,6 @@ func createProgressWindow(parent *gtk.Window) (*ProgressWindow, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Accessibility: Set label for screen readers
 	SetupLabelAccessibility(gameLabel, "Game title label")
 	box.PackStart(gameLabel, false, false, 0)
 
@@ -260,7 +345,6 @@ func createProgressWindow(parent *gtk.Window) (*ProgressWindow, error) {
 		return nil, err
 	}
 	progressBar.SetShowText(true)
-	// Accessibility: Set progress bar description for screen readers
 	progressBar.ToWidget().SetProperty("tooltip-text", "Download progress bar - Shows current download status, speed, and bytes downloaded")
 	box.PackStart(progressBar, false, false, 0)
 
@@ -268,15 +352,20 @@ func createProgressWindow(parent *gtk.Window) (*ProgressWindow, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Accessibility: Set button description for screen readers
 	SetupButtonAccessibility(cancelButton, "Stop the current download operation")
+	pauseButton, err := gtk.ButtonNewWithLabel("Pause")
+	if err != nil {
+		return nil, err
+	}
+	SetupButtonAccessibility(pauseButton, "Temporarily pause or resume downloads")
 
 	bottomhBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 5)
 	if err != nil {
 		return nil, err
 	}
-	bottomhBox.SetSizeRequest(350, -1)
+	bottomhBox.SetSizeRequest(PROGRESS_MIN_WIDTH, -1)
 	bottomhBox.PackEnd(cancelButton, false, false, 0)
+	bottomhBox.PackEnd(pauseButton, false, false, 0)
 	box.SetMarginBottom(5)
 	box.SetMarginEnd(5)
 	box.SetMarginStart(5)
@@ -288,22 +377,27 @@ func createProgressWindow(parent *gtk.Window) (*ProgressWindow, error) {
 		box:           box,
 		gameLabel:     gameLabel,
 		bar:           progressBar,
+		pauseButton:   pauseButton,
 		cancelButton:  cancelButton,
 		cancelled:     false,
+		paused:        false,
 		speedAverager: newSpeedAverager(),
 		errors:        make([]DownloadError, 0),
 	}
+	progressWindow.controlCond = sync.NewCond(&progressWindow.controlMutex)
+
+	progressWindow.pauseButton.Connect("clicked", func() {
+		progressWindow.TogglePaused()
+	})
 
 	progressWindow.cancelButton.Connect("clicked", func() {
-		progressWindow.cancelled = true
 		progressWindow.SetCancelled()
 	})
 
-	// Prevent Enter key from triggering the cancel button
 	progressWindow.cancelButton.Connect("key-press-event", func(button *gtk.Button, event *gdk.Event) bool {
 		keyEvent := gdk.EventKeyNewFromEvent(event)
 		if keyEvent.KeyVal() == gdk.KEY_Return || keyEvent.KeyVal() == gdk.KEY_KP_Enter {
-			return true // Consume the event to prevent activation
+			return true
 		}
 		return false
 	})

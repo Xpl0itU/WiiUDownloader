@@ -19,6 +19,7 @@ type Config struct {
 	DecryptContents         bool   `koanf:"decryptContents"`
 	DeleteEncryptedContents bool   `koanf:"deleteEncryptedContents"`
 	ContinueOnError         bool   `koanf:"continueOnError"`
+	SuggestRelatedContent   bool   `koanf:"suggestRelatedContent"`
 	SelectedRegion          uint8  `koanf:"selectedRegion"`
 	DidInitialSetup         bool   `koanf:"didInitialSetup"`
 	LastSelectedPath        string `koanf:"lastSelectedPath"`
@@ -28,8 +29,10 @@ type Config struct {
 }
 
 const (
-	wiiudownloaderConfigDir = "WiiUDownloader"
-	configFilename          = "config.json"
+	WIIUDOWNLOADER_CONFIG_DIR = "WiiUDownloader"
+	CONFIG_FILENAME           = "config.json"
+	CONFIG_DIR_PERM           = 0o755
+	CONFIG_FILE_PERM          = 0o644
 )
 
 var (
@@ -46,6 +49,7 @@ func getDefaultConfig() *Config {
 		DecryptContents:         false,
 		DeleteEncryptedContents: false,
 		ContinueOnError:         true,
+		SuggestRelatedContent:   true,
 		SelectedRegion:          wiiudownloader.MCP_REGION_EUROPE | wiiudownloader.MCP_REGION_USA | wiiudownloader.MCP_REGION_JAPAN,
 		DidInitialSetup:         false,
 		LastSelectedPath:        "",
@@ -61,11 +65,11 @@ func createDefaultConfigFile() error {
 		return err
 	}
 
-	if err := os.MkdirAll(filepath.Join(userConfigDir, wiiudownloaderConfigDir), 0755); err != nil {
+	if err := os.MkdirAll(configDirPath(userConfigDir), CONFIG_DIR_PERM); err != nil {
 		return err
 	}
 
-	configFile, err := os.Create(filepath.Join(userConfigDir, wiiudownloaderConfigDir, configFilename))
+	configFile, err := os.Create(configFilePath(userConfigDir))
 	if err != nil {
 		return err
 	}
@@ -90,13 +94,14 @@ func loadConfig() (*Config, error) {
 			return
 		}
 
-		if errConf := k.Load(file.Provider(filepath.Join(userConfigDir, wiiudownloaderConfigDir, configFilename)), json.Parser()); errConf != nil {
+		configPath := configFilePath(userConfigDir)
+		if errConf := k.Load(file.Provider(configPath), json.Parser()); errConf != nil {
 			log.Printf("error loading config file: %v, writing defaults...\n", errConf)
 			if errConf := createDefaultConfigFile(); errConf != nil {
 				err = fmt.Errorf("error creating default config file: %w", errConf)
 				return
 			}
-			if errConf := k.Load(file.Provider(filepath.Join(userConfigDir, wiiudownloaderConfigDir, configFilename)), json.Parser()); errConf != nil {
+			if errConf := k.Load(file.Provider(configPath), json.Parser()); errConf != nil {
 				err = fmt.Errorf("error loading config file: %w", errConf)
 				return
 			}
@@ -122,7 +127,6 @@ func (c *Config) Save() error {
 		return err
 	}
 
-	// write the config to the file
 	userConfigDir, err := os.UserConfigDir()
 	if err != nil {
 		return err
@@ -131,7 +135,7 @@ func (c *Config) Save() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(userConfigDir, wiiudownloaderConfigDir, configFilename), confBytes, 0644)
+	return os.WriteFile(configFilePath(userConfigDir), confBytes, CONFIG_FILE_PERM)
 }
 
 func (c *Config) SetValuesFromConfig(newK *koanf.Koanf) error {
@@ -140,5 +144,16 @@ func (c *Config) SetValuesFromConfig(newK *koanf.Koanf) error {
 	if err := newK.Unmarshal("", c); err != nil {
 		return err
 	}
+	if !newK.Exists("suggestRelatedContent") {
+		c.SuggestRelatedContent = true
+	}
 	return nil
+}
+
+func configDirPath(userConfigDir string) string {
+	return filepath.Join(userConfigDir, WIIUDOWNLOADER_CONFIG_DIR)
+}
+
+func configFilePath(userConfigDir string) string {
+	return filepath.Join(configDirPath(userConfigDir), CONFIG_FILENAME)
 }

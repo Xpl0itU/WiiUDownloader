@@ -2,7 +2,6 @@
 *.d
 *.o
 *.so
-*.dll
 gtitles.c
 output/
 main
@@ -20,3 +19,5 @@ WiiUDownloader.icns
 *.tik
 *.cert
 *.tmd
+
+# DELETE BEFORE SHIPPING

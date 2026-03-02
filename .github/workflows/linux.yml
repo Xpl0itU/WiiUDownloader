@@ -2,7 +2,7 @@ name: Linux
 on:
   push:
     tags:
-      - '*'
+      - "*"
 
 permissions:
   contents: write
@@ -12,9 +12,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
-          submodules: 'recursive'
+          submodules: "recursive"
       - name: Docker caching
         uses: ScribeMD/docker-cache@0.5.0
         id: cache
@@ -27,8 +27,7 @@ jobs:
           docker build . --file Dockerfile.linux --tag builder
       - name: Build artifacts
         run: |
-          docker run --rm -v ${PWD}:/project builder python3 grabTitles.py
-          docker run --rm -v ${PWD}:/project builder bash -lc "go build -C cmd/WiiUDownloader -ldflags='-s -w' -o ../../WiiUDownloader ."
+          docker run --rm -v ${PWD}:/project builder bash -lc "curl -Lo db.go -H 'User-Agent: NUSspliBuilder/2.1' 'https://napi.v10lator.de/db?t=go' && go build -C cmd/WiiUDownloader -o ../../WiiUDownloader ."
       - name: Deploy WiiUDownloader
         run: |
           docker run --privileged --rm -e DEPLOY_GTK_VERSION=3 -e OUTPUT="WiiUDownloader-Linux-x86_64.AppImage" -e UPDATE_INFORMATION="gh-releases-zsync|Xpl0itU|WiiUDownloader|latest|WiiUDownloader-*.AppImage.zsync" -v ${PWD}:/project builder linuxdeploy.AppImage --plugin gtk --plugin checkrt --output=appimage --create-desktop-file --executable=WiiUDownloader --appdir dist --icon-file data/WiiUDownloader.png

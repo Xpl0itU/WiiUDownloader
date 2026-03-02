@@ -5,6 +5,9 @@ import (
 	"crypto/cipher"
 	"crypto/md5"
 	"crypto/sha1"
+	"encoding/hex"
+	"errors"
+	"fmt"
 
 	"golang.org/x/crypto/pbkdf2"
 )
@@ -33,10 +36,10 @@ func encryptAES(data, key, iv []byte) ([]byte, error) {
 }
 
 func GenerateKey(tid string) ([]byte, error) {
-	tmp := []byte(tid)
-	for tmp[0] == '0' && tmp[1] == '0' {
-		tmp = tmp[2:]
+	if err := validateTitleIDHex(tid); err != nil {
+		return nil, err
 	}
+	tmp := trimLeadingZeroPairs([]byte(tid))
 
 	h := []byte(KEYGEN_SECRET + string(tmp))
 
@@ -60,10 +63,31 @@ func GenerateKey(tid string) ([]byte, error) {
 
 	encrypted, err := encryptAES(key, wiiUCommonKey, iv)
 	if err != nil {
-		return []byte{}, err
+		return nil, err
 	}
 
 	return encrypted, nil
+}
+
+func validateTitleIDHex(tid string) error {
+	if len(tid) != 16 {
+		return fmt.Errorf("invalid title ID length: got %d, want 16", len(tid))
+	}
+	decoded := make([]byte, 8)
+	if _, err := hex.Decode(decoded, []byte(tid)); err != nil {
+		return fmt.Errorf("invalid title ID hex: %w", err)
+	}
+	if len(decoded) != 8 {
+		return errors.New("invalid title ID bytes")
+	}
+	return nil
+}
+
+func trimLeadingZeroPairs(data []byte) []byte {
+	for len(data) >= 2 && data[0] == '0' && data[1] == '0' {
+		data = data[2:]
+	}
+	return data
 }
 
 func pbkdf2WithSHA1(password, salt []byte, iterations, keyLength int) []byte {

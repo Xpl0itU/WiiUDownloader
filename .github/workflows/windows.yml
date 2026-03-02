@@ -17,7 +17,7 @@ jobs:
       run:
         shell: msys2 {0}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           submodules: "recursive"
       - uses: msys2/setup-msys2@v2
@@ -26,37 +26,34 @@ jobs:
           release: true
           update: true
           cache: true
-          install: zip git mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-python mingw-w64-ucrt-x86_64-gtk3 mingw-w64-ucrt-x86_64-pkg-config mingw-w64-ucrt-x86_64-go mingw-w64-ucrt-x86_64-ntldd-git mingw-w64-ucrt-x86_64-imagemagick
+          install: zip git mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-gtk3 mingw-w64-ucrt-x86_64-pkg-config mingw-w64-ucrt-x86_64-go mingw-w64-ucrt-x86_64-ntldd-git mingw-w64-ucrt-x86_64-imagemagick curl
       - name: Build
         run: |
-          python3 grabTitles.py
+          go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest
+          export PATH=$PATH:$(cygpath -u $(go env GOPATH)/bin)
+          curl -Lo db.go -H "User-Agent: NUSspliBuilder/2.1" "https://napi.v10lator.de/db?t=go"
           magick data/WiiUDownloader.png -define icon:auto-resize=256,128,64,48,32,16 cmd/WiiUDownloader/WiiUDownloader.ico
-          echo "id ICON \"WiiUDownloader.ico\"" > cmd/WiiUDownloader/WiiUDownloader.rc
-          windres cmd/WiiUDownloader/WiiUDownloader.rc -O coff -o cmd/WiiUDownloader/resource.syso
-          cd cmd/WiiUDownloader && go build -ldflags="-s -w -H=windowsgui" -o ../../main.exe .
+          (cd cmd/WiiUDownloader && go generate && go build -ldflags="-H=windowsgui" -o ../../main.exe .) &
+          wait
       - name: Deploy WiiUDownloader
         run: |
-          mkdir dist
-          mkdir dist/lib
-          mkdir dist/share
-          mkdir dist/share/icons
-          mkdir dist/share/glib-2.0
-          mkdir dist/share/glib-2.0/schemas/
-          for ff in $(${MSYSTEM_PREFIX}/bin/ntldd -R main.exe  | tr '\\' '/' | grep -io "$(cygpath -m ${MSYSTEM_PREFIX}).\+\.dll" | sort -u); do
-            cp $(cygpath -u "$ff") dist/
-          done
+
+          ${MSYSTEM_PREFIX}/bin/ntldd -R main.exe | tr '\\' '/' | grep -io "$(cygpath -m ${MSYSTEM_PREFIX}).\+\.dll" | sort -u | cygpath -f - -u | xargs -I {} cp "{}" dist/
+
           cp -r /ucrt64/lib/gdk-pixbuf-2.0 ./dist/lib/gdk-pixbuf-2.0
-          for loader in dist/lib/gdk-pixbuf-2.0/2.10.0/loaders/*.dll; do
-            for dep in $(${MSYSTEM_PREFIX}/bin/ntldd -R "$(cygpath -m "$loader")" | tr '\\' '/' | grep -io "$(cygpath -m ${MSYSTEM_PREFIX}).\+\.dll" | sort -u); do
-              cp $(cygpath -u "$dep") dist/ || true
-            done
-          done
+
+          find dist/lib/gdk-pixbuf-2.0/2.10.0/loaders/ -name "*.dll" -print0 | xargs -0 -I {} ${MSYSTEM_PREFIX}/bin/ntldd -R "{}" | tr '\\' '/' | grep -io "$(cygpath -m ${MSYSTEM_PREFIX}).\+\.dll" | sort -u | cygpath -f - -u | xargs -I {} cp -n "{}" dist/ || true
+
           cp -r /ucrt64/share/icons/* ./dist/share/icons/
-          cp /ucrt64/share/glib-2.0/schemas/* dist/share/glib-2.0/schemas/
+          cp -r /ucrt64/share/glib-2.0/schemas/* dist/share/glib-2.0/schemas/
+
           glib-compile-schemas.exe dist/share/glib-2.0/schemas/
           gdk-pixbuf-query-loaders > dist/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache
           cp main.exe dist/WiiUDownloader.exe
-          cd dist && zip -9 -r ../WiiUDownloader-Windows.zip .
+
+          cd dist
+          rm -f "libx265-215.dll"
+          zip -9 -r ../WiiUDownloader-Windows.zip .
       - name: Upload Windows Artifact
         uses: ncipollo/release-action@v1
         with:

@@ -46,12 +46,20 @@ func setDarkTheme(darkMode bool) {
 	gSettings, err := gtk.SettingsGetDefault()
 	if err != nil {
 		log.Println(err.Error())
+		return
+	}
+	if gSettings == nil {
+		return
 	}
 	gSettings.SetProperty("gtk-application-prefer-dark-theme", darkMode)
 }
 
 func applyStyling() {
-	provider, _ := gtk.CssProviderNew()
+	provider, err := gtk.CssProviderNew()
+	if err != nil {
+		log.Printf("failed to create CSS provider: %v", err)
+		return
+	}
 	css := `
 	headerbar {
 		padding: 6px;
@@ -93,8 +101,14 @@ func applyStyling() {
 		padding: 6px 10px;
 	}
 	`
-	_ = provider.LoadFromData(css)
-	screen, _ := gdk.ScreenGetDefault()
+	if err := provider.LoadFromData(css); err != nil {
+		log.Printf("failed to load CSS styling: %v", err)
+	}
+	screen, err := gdk.ScreenGetDefault()
+	if err != nil {
+		log.Printf("failed to get default screen: %v", err)
+		return
+	}
 	gtk.AddProviderForScreen(screen, provider, gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 }
 
@@ -126,11 +140,9 @@ func escapeMarkup(text string) string {
 	return text
 }
 
-// detectErrorType identifies the type of error that occurred during download
 func detectErrorType(errorMsg string) string {
 	errorLower := strings.ToLower(errorMsg)
 
-	// Check for specific error patterns
 	if strings.Contains(errorLower, "tmd") || strings.Contains(errorLower, "title.tmd") {
 		return "TMD Download"
 	}
@@ -157,6 +169,5 @@ func detectErrorType(errorMsg string) string {
 		return "File I/O Error"
 	}
 
-	// Default to generic download error
 	return "Download Error"
 }

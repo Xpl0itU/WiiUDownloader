@@ -10,6 +10,15 @@ import (
 	"github.com/gotk3/gotk3/gtk"
 )
 
+const (
+	QUEUE_NAME_COLUMN_MAX_WIDTH   = 200
+	QUEUE_REGION_COLUMN_MAX_WIDTH = 70
+	QUEUE_KIND_COLUMN_MAX_WIDTH   = 90
+	QUEUE_BUTTON_HEIGHT           = 42
+	TID_BASE_16                   = 16
+	TID_BITS_64                   = 64
+)
+
 type QueuePane struct {
 	container             *gtk.Box
 	titleTreeView         *gtk.TreeView
@@ -19,9 +28,8 @@ type QueuePane struct {
 	updateFunc            func()
 }
 
-func createColumn(renderer *gtk.CellRendererText, title string, id int) *gtk.TreeViewColumn {
-	column, _ := gtk.TreeViewColumnNewWithAttribute(title, renderer, "text", id)
-	return column
+func createColumn(renderer *gtk.CellRendererText, title string, id int) (*gtk.TreeViewColumn, error) {
+	return gtk.TreeViewColumnNewWithAttribute(title, renderer, "text", id)
 }
 
 func NewQueuePane() (*QueuePane, error) {
@@ -31,7 +39,7 @@ func NewQueuePane() (*QueuePane, error) {
 	}
 	scrolledWindow.SetPolicy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
 
-	store, err := gtk.ListStoreNew(glib.TYPE_STRING, glib.TYPE_STRING, glib.TYPE_STRING)
+	store, err := gtk.ListStoreNew(glib.TYPE_STRING, glib.TYPE_STRING, glib.TYPE_STRING, glib.TYPE_STRING)
 	if err != nil {
 		return nil, err
 	}
@@ -42,10 +50,9 @@ func NewQueuePane() (*QueuePane, error) {
 	}
 	selection, err := titleTreeView.GetSelection()
 	if err != nil {
-		log.Println("Unable to get selection:", err)
+		return nil, err
 	}
 	selection.SetMode(gtk.SELECTION_MULTIPLE)
-	// Accessibility: Set up tree view for keyboard navigation
 	SetupTreeViewAccessibility(titleTreeView)
 	titleTreeView.ToWidget().SetProperty("tooltip-text", "Download queue - Shows games queued for download. Use arrow keys to navigate, space to select/deselect, or click Remove from Queue button to remove selected titles")
 
@@ -56,16 +63,25 @@ func NewQueuePane() (*QueuePane, error) {
 		return nil, err
 	}
 
-	nameColumn := createColumn(renderer, "Name", 0)
-	nameColumn.SetMaxWidth(200)
+	nameColumn, err := createColumn(renderer, "Name", 0)
+	if err != nil {
+		return nil, err
+	}
+	nameColumn.SetMaxWidth(QUEUE_NAME_COLUMN_MAX_WIDTH)
 	nameColumn.SetResizable(true)
 	titleTreeView.AppendColumn(nameColumn)
-	regionColumn := createColumn(renderer, "Region", 1)
-	regionColumn.SetMaxWidth(70)
+	regionColumn, err := createColumn(renderer, "Region", 1)
+	if err != nil {
+		return nil, err
+	}
+	regionColumn.SetMaxWidth(QUEUE_REGION_COLUMN_MAX_WIDTH)
 	titleTreeView.AppendColumn(regionColumn)
-	titleIDColumn := createColumn(renderer, "Title ID", 2)
-	titleIDColumn.SetMaxWidth(125)
-	titleTreeView.AppendColumn(titleIDColumn)
+	kindColumn, err := createColumn(renderer, "Kind", 2)
+	if err != nil {
+		return nil, err
+	}
+	kindColumn.SetMaxWidth(QUEUE_KIND_COLUMN_MAX_WIDTH)
+	titleTreeView.AppendColumn(kindColumn)
 	titleTreeView.SetExpanderColumn(nameColumn)
 
 	scrolledWindow.Add(titleTreeView)
@@ -76,12 +92,11 @@ func NewQueuePane() (*QueuePane, error) {
 	}
 	queueVBox.PackStart(scrolledWindow, true, true, 0)
 
-	removeFromQueueButton, err := gtk.ButtonNewWithLabel("Remove from Queue")
+	removeFromQueueButton, err := gtk.ButtonNewWithLabel("Remove Selected from Queue")
 	if err != nil {
 		return nil, err
 	}
-	removeFromQueueButton.SetSizeRequest(-1, 42)
-	// Accessibility: Set button description
+	removeFromQueueButton.SetSizeRequest(-1, QUEUE_BUTTON_HEIGHT)
 	SetupButtonAccessibility(removeFromQueueButton, "Remove selected titles from the download queue")
 
 	queuePane := QueuePane{
@@ -122,11 +137,14 @@ func NewQueuePane() (*QueuePane, error) {
 
 		titlesToRemove := make([]uint64, 0)
 
-		iter, _ := treeModel.GetIterFirst()
+		iter, ok := treeModel.GetIterFirst()
+		if !ok {
+			return
+		}
 		for iter != nil {
 			isSelected := selection.IterIsSelected(iter)
 			if isSelected {
-				tid, err := treeModel.GetValue(iter, 2)
+				tid, err := treeModel.GetValue(iter, 3)
 				if err != nil {
 					continue
 				}
@@ -134,7 +152,7 @@ func NewQueuePane() (*QueuePane, error) {
 				if err != nil {
 					continue
 				}
-				tidParsed, err := strconv.ParseUint(tidStr, 16, 64)
+				tidParsed, err := strconv.ParseUint(tidStr, TID_BASE_16, TID_BITS_64)
 				if err != nil {
 					continue
 				}
@@ -148,7 +166,6 @@ func NewQueuePane() (*QueuePane, error) {
 			}
 		}
 
-		// Perform removal in bulk or one by one, using the lock
 		queuePane.titleQueue.WithLock(func(queue *[]wiiudownloader.TitleEntry) {
 			for _, tidToRemove := range titlesToRemove {
 				for i, t := range *queue {
@@ -241,7 +258,6 @@ func (qp *QueuePane) IsTitleInQueue(title wiiudownloader.TitleEntry) bool {
 }
 
 func (qp *QueuePane) ForEachRemoving(f func(wiiudownloader.TitleEntry) bool) {
-	// Create a copy first to iterate safely without holding the lock during the callback (which might take time or call back)
 	var titleQueueCopy []wiiudownloader.TitleEntry
 	qp.titleQueue.WithRLock(func(queue []wiiudownloader.TitleEntry) {
 		titleQueueCopy = make([]wiiudownloader.TitleEntry, len(queue))
@@ -269,7 +285,6 @@ func (qp *QueuePane) SetTitleTreeView(titleTreeView *gtk.TreeView) {
 func (qp *QueuePane) Update(doUpdateFunc bool) {
 	qp.store.Clear()
 
-	// Snapshot for UI update
 	var queueSnapshot []wiiudownloader.TitleEntry
 	qp.titleQueue.WithRLock(func(queue []wiiudownloader.TitleEntry) {
 		queueSnapshot = make([]wiiudownloader.TitleEntry, len(queue))
@@ -279,7 +294,11 @@ func (qp *QueuePane) Update(doUpdateFunc bool) {
 	for _, title := range queueSnapshot {
 		iter := qp.store.Append()
 
-		qp.store.Set(iter, []int{0, 1, 2}, []interface{}{title.Name, wiiudownloader.GetFormattedRegion(title.Region), fmt.Sprintf("%016x", title.TitleID)})
+		qp.store.Set(
+			iter,
+			[]int{0, 1, 2, 3},
+			[]interface{}{title.Name, wiiudownloader.GetFormattedRegion(title.Region), wiiudownloader.GetFormattedKind(title.TitleID), fmt.Sprintf("%016x", title.TitleID)},
+		)
 	}
 
 	if qp.updateFunc != nil && doUpdateFunc {

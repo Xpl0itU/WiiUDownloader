@@ -45,12 +45,12 @@ const (
 )
 
 func GetTitleEntries(category uint8) []TitleEntry {
-	titleEntries := make([]TitleEntry, 0)
+	titleEntries := make([]TitleEntry, 0, len(titleEntry))
 	for _, entry := range titleEntry {
+		if entry.Category == TITLE_CATEGORY_DISC {
+			continue
+		}
 		if category == TITLE_CATEGORY_ALL || category == entry.Category {
-			if entry.Category == TITLE_CATEGORY_DISC {
-				continue
-			}
 			titleEntries = append(titleEntries, entry)
 		}
 	}
@@ -126,8 +126,72 @@ func GetCategoryFromFormattedCategory(formattedCategory string) uint8 {
 	}
 }
 
+func GetTitleIDHigh(tid uint64) uint32 {
+	return uint32(tid >> 32)
+}
+
+func GetTitleIDLow(tid uint64) uint32 {
+	return uint32(tid & 0xFFFFFFFF)
+}
+
+func GetRelatedTypeTargets(high uint32) []uint32 {
+	switch high {
+	case TID_HIGH_GAME:
+		return []uint32{TID_HIGH_DLC, TID_HIGH_UPDATE}
+	case TID_HIGH_DLC:
+		return []uint32{TID_HIGH_GAME, TID_HIGH_UPDATE}
+	case TID_HIGH_UPDATE:
+		return []uint32{TID_HIGH_GAME, TID_HIGH_DLC}
+	default:
+		return nil
+	}
+}
+
+func FindRelatedTitleByHighAndLow(source TitleEntry, targetHigh uint32, exclude map[uint64]struct{}) (TitleEntry, bool) {
+	sourceLow := GetTitleIDLow(source.TitleID)
+
+	var best TitleEntry
+	bestScore := 3
+	found := false
+
+	for _, entry := range titleEntry {
+		if entry.Category == TITLE_CATEGORY_DISC {
+			continue
+		}
+		if GetTitleIDHigh(entry.TitleID) != targetHigh {
+			continue
+		}
+		if GetTitleIDLow(entry.TitleID) != sourceLow {
+			continue
+		}
+		if exclude != nil {
+			if _, skip := exclude[entry.TitleID]; skip {
+				continue
+			}
+		}
+
+		score := 2
+		if entry.Region == source.Region {
+			score = 0
+		} else if entry.Region&source.Region != 0 {
+			score = 1
+		}
+
+		if !found || score < bestScore || (score == bestScore && entry.TitleID < best.TitleID) {
+			best = entry
+			bestScore = score
+			found = true
+		}
+	}
+
+	return best, found
+}
+
 func GetTitleEntryFromTid(tid uint64) TitleEntry {
-	for _, entry := range GetTitleEntries(TITLE_CATEGORY_ALL) {
+	for _, entry := range titleEntry {
+		if entry.Category == TITLE_CATEGORY_DISC {
+			continue
+		}
 		if entry.TitleID == tid {
 			return entry
 		}

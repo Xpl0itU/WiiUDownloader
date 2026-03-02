@@ -27,6 +27,27 @@ const (
 	NAME_COLUMN
 )
 
+const (
+	MAIN_WINDOW_WIDTH             = 870
+	MAIN_WINDOW_HEIGHT            = 400
+	SEARCH_ENTRY_WIDTH_CHARS      = 24
+	UI_MARGIN_SMALL               = 6
+	SPLIT_PANE_MARGIN             = 2
+	DOWNLOAD_PANE_MIN_WIDTH       = 400
+	SEARCH_DEBOUNCE_DELAY         = 200 * time.Millisecond
+	PARSE_UINT_BASE_16            = 16
+	PARSE_UINT_BITS_64            = 64
+	RELATED_DIALOG_WIDTH          = 620
+	RELATED_DIALOG_HEIGHT         = 420
+	ERROR_DIALOG_WIDTH            = 600
+	ERROR_DIALOG_HEIGHT           = 400
+	DIALOG_MARGIN                 = 10
+	RELATED_ROW_HORIZONTAL_MARGIN = 16
+	RELATED_ROW_VERTICAL_MARGIN   = 12
+	RELATED_ROW_SPACING           = 12
+	ERROR_ROW_MARGIN              = 5
+)
+
 type MainWindow struct {
 	window                          *gtk.Window
 	queuePane                       *QueuePane
@@ -42,6 +63,7 @@ type MainWindow struct {
 	categoryButtons                 []*gtk.ToggleButton
 	titles                          []wiiudownloader.TitleEntry
 	decryptContents                 bool
+	suggestRelatedContent           bool
 	currentRegion                   uint8
 	currentCategory                 uint8
 	client                          *http.Client
@@ -59,11 +81,11 @@ func NewMainWindow(entries []wiiudownloader.TitleEntry, client *http.Client, con
 	}
 
 	win.SetTitle("WiiUDownloader")
-	win.SetDefaultSize(870, 400)
+	win.SetDefaultSize(MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT)
 	win.SetDecorated(true)
 	win.SetPosition(gtk.WIN_POS_CENTER)
 	win.Connect("destroy", func() {
-		os.Exit(0) // Hacky way to close the program
+		os.Exit(0)
 	})
 
 	searchEntry, err := gtk.EntryNew()
@@ -72,8 +94,7 @@ func NewMainWindow(entries []wiiudownloader.TitleEntry, client *http.Client, con
 	}
 	searchEntry.SetPlaceholderText("Search...")
 	searchEntry.SetHExpand(true)
-	searchEntry.SetWidthChars(24)
-	// Accessibility: Set search field label for screen readers
+	searchEntry.SetWidthChars(SEARCH_ENTRY_WIDTH_CHARS)
 	SetupEntryAccessibility(searchEntry, "Search titles", "Enter a game title or title ID to search. You can use the category buttons above to filter by type.")
 
 	queuePane, err := NewQueuePane()
@@ -118,6 +139,7 @@ func (mw *MainWindow) applyConfig(config *Config) {
 	setDarkTheme(config.DarkMode)
 	mw.decryptContents = config.DecryptContents
 	mw.deleteEncryptedContents = config.DeleteEncryptedContents
+	mw.suggestRelatedContent = config.SuggestRelatedContent
 	mw.currentRegion = config.SelectedRegion
 }
 
@@ -126,7 +148,6 @@ func (mw *MainWindow) BuildUI() {
 		return
 	}
 	mw.uiBuilt = true
-	// Use OS-provided window decorations
 
 	var err error
 	mw.childStore, err = gtk.ListStoreNew(glib.TYPE_BOOLEAN, glib.TYPE_STRING, glib.TYPE_STRING, glib.TYPE_STRING, glib.TYPE_STRING)
@@ -156,28 +177,42 @@ func (mw *MainWindow) BuildUI() {
 		if err != nil {
 			return true
 		}
-		tidStr, _ := val.GetString()
-		tid, _ := strconv.ParseUint(tidStr, 16, 64)
+		tidStr, err := val.GetString()
+		if err != nil {
+			return true
+		}
+		tid, err := strconv.ParseUint(tidStr, PARSE_UINT_BASE_16, PARSE_UINT_BITS_64)
+		if err != nil {
+			return true
+		}
 
-		nameVal, _ := model.GetValue(iter, NAME_COLUMN)
-		nameStr, _ := nameVal.GetString()
+		nameVal, err := model.GetValue(iter, NAME_COLUMN)
+		if err != nil {
+			return true
+		}
+		nameStr, err := nameVal.GetString()
+		if err != nil {
+			return true
+		}
 
-		// 1. Category Filter
 		if mw.currentCategory != wiiudownloader.TITLE_CATEGORY_ALL {
-			kindVal, _ := model.GetValue(iter, KIND_COLUMN)
-			kindStr, _ := kindVal.GetString()
+			kindVal, err := model.GetValue(iter, KIND_COLUMN)
+			if err != nil {
+				return true
+			}
+			kindStr, err := kindVal.GetString()
+			if err != nil {
+				return true
+			}
 			if kindStr != wiiudownloader.GetFormattedKind(tid) {
-				// This shouldn't happen if data is consistent, but let's be safe
 				return false
 			}
-			// Map category
 			cat := wiiudownloader.GetCategoryFromFormattedCategory(kindStr)
 			if cat != mw.currentCategory {
 				return false
 			}
 		}
 
-		// 2. Region Filter
 		for _, t := range allTitles {
 			if t.TitleID == tid {
 				if (mw.currentRegion & t.Region) == 0 {
@@ -187,7 +222,6 @@ func (mw *MainWindow) BuildUI() {
 			}
 		}
 
-		// 3. Search Filter
 		if mw.lastSearchText != "" {
 			search := strings.ToLower(mw.lastSearchText)
 			if !strings.Contains(strings.ToLower(nameStr), search) &&
@@ -199,14 +233,12 @@ func (mw *MainWindow) BuildUI() {
 		return true
 	})
 
-	// Create a sort model that wraps the filter model
 	sortModel, err := gtk.TreeModelSortNew(mw.filterModel.ToTreeModel())
 	if err != nil {
 		log.Fatalln("Unable to create sort model:", err)
 	}
 	mw.sortModel = sortModel
 
-	// Set sort column IDs for each column
 	sortModel.SetSortColumnId(KIND_COLUMN, gtk.SORT_ASCENDING)
 	sortModel.SetSortColumnId(TITLE_ID_COLUMN, gtk.SORT_ASCENDING)
 	sortModel.SetSortColumnId(REGION_COLUMN, gtk.SORT_ASCENDING)
@@ -218,7 +250,6 @@ func (mw *MainWindow) BuildUI() {
 	}
 	mw.treeView.SetHeadersClickable(true)
 
-	// Enable multiple selection
 	selection, err := mw.treeView.GetSelection()
 	if err != nil {
 		log.Fatalln("Unable to get selection:", err)
@@ -229,26 +260,22 @@ func (mw *MainWindow) BuildUI() {
 	if err != nil {
 		log.Fatalln("Unable to create cell renderer toggle:", err)
 	}
-	// on click, add or remove from queue
 	toggleRenderer.Connect("toggled", func(renderer *gtk.CellRendererToggle, path string) {
 		pathObj, err := gtk.TreePathNewFromString(path)
 		if err != nil {
 			log.Fatalln("Unable to create tree path:", err)
 		}
 
-		// Convert sort path to filter path
 		filterPath := mw.sortModel.ConvertPathToChildPath(pathObj)
 		if filterPath == nil {
 			return
 		}
 
-		// Convert filter path to child path
 		childPath := mw.filterModel.ConvertPathToChildPath(filterPath)
 		if childPath == nil {
 			return
 		}
 
-		// Get iter from child store
 		iter, err := mw.childStore.ToTreeModel().GetIter(childPath)
 		if err != nil {
 			return
@@ -263,78 +290,36 @@ func (mw *MainWindow) BuildUI() {
 			log.Fatalln("Unable to get value:", err)
 		}
 
-		// Get all selected rows
 		sel, err := mw.treeView.GetSelection()
 		if err != nil {
 			return
 		}
 
-		// Get count of selected rows
 		selectedCount := sel.CountSelectedRows()
+		selectedEntries := mw.collectSelectedEntriesForToggle(iter, selectedCount)
 
-		// If only one row is selected, toggle just that one
-		// If multiple rows are selected, add/remove all of them together
-		if selectedCount <= 1 {
-			tid, err := mw.childStore.ToTreeModel().GetValue(iter, TITLE_ID_COLUMN)
-			if err != nil {
-				log.Fatalln("Unable to get value:", err)
-			}
-			tidStr, err := tid.GetString()
-			if err != nil {
-				log.Fatalln("Unable to get value:", err)
-			}
-			parsedTid, err := strconv.ParseUint(tidStr, 16, 64)
-			if err != nil {
-				log.Fatalln("Unable to parse title ID:", err)
-			}
-			if isInQueue.(bool) {
-				mw.queuePane.RemoveTitle(wiiudownloader.TitleEntry{TitleID: parsedTid})
-			} else {
-				mw.queuePane.AddTitle(wiiudownloader.GetTitleEntryFromTid(parsedTid))
+		if isInQueue.(bool) {
+			for _, entry := range selectedEntries {
+				mw.queuePane.RemoveTitle(entry)
 			}
 		} else {
-			// Multiple rows selected - toggle all of them
-			paths := sel.GetSelectedRows(mw.sortModel)
-			for l := paths; l != nil; l = l.Next() {
-				data := l.Data()
-				sortPath, ok := data.(*gtk.TreePath)
-				if !ok || sortPath == nil {
-					continue
+			for _, entry := range selectedEntries {
+				if !mw.queuePane.IsTitleInQueue(entry) {
+					mw.queuePane.AddTitle(entry)
 				}
+			}
 
-				filterPathMulti := mw.sortModel.ConvertPathToChildPath(sortPath)
-				if filterPathMulti == nil {
-					continue
-				}
-
-				childPathMulti := mw.filterModel.ConvertPathToChildPath(filterPathMulti)
-				if childPathMulti == nil {
-					continue
-				}
-
-				iterMulti, err := mw.childStore.ToTreeModel().GetIter(childPathMulti)
-				if err != nil {
-					continue
-				}
-
-				tidMulti, err := mw.childStore.ToTreeModel().GetValue(iterMulti, TITLE_ID_COLUMN)
-				if err != nil {
-					continue
-				}
-				tidStrMulti, err := tidMulti.GetString()
-				if err != nil {
-					continue
-				}
-				parsedTidMulti, err := strconv.ParseUint(tidStrMulti, 16, 64)
-				if err != nil {
-					continue
-				}
-
-				// Use the same state as the clicked row for all selected rows
-				if isInQueue.(bool) {
-					mw.queuePane.RemoveTitle(wiiudownloader.TitleEntry{TitleID: parsedTidMulti})
-				} else {
-					mw.queuePane.AddTitle(wiiudownloader.GetTitleEntryFromTid(parsedTidMulti))
+			if mw.suggestRelatedContent {
+				candidates := mw.collectRelatedCandidates(selectedEntries)
+				if len(candidates) > 0 {
+					chosenRelated, accepted := mw.showRelatedTitlesDialog(selectedEntries, candidates)
+					if accepted {
+						for _, entry := range chosenRelated {
+							if !mw.queuePane.IsTitleInQueue(entry) {
+								mw.queuePane.AddTitle(entry)
+							}
+						}
+					}
 				}
 			}
 		}
@@ -384,19 +369,17 @@ func (mw *MainWindow) BuildUI() {
 	column.SetSortColumnID(NAME_COLUMN)
 	mw.treeView.AppendColumn(column)
 
-	// Accessibility: Set up tree view for keyboard navigation
 	SetupTreeViewAccessibility(mw.treeView)
-	// Set tree view tooltip
 	mw.treeView.ToWidget().SetProperty("tooltip-text", "Game titles list. Use arrow keys to navigate, space or enter to toggle queue status for selected titles, or click checkboxes to add/remove titles.")
 
 	mainvBox, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 6)
 	if err != nil {
 		log.Fatalln("Unable to create box:", err)
 	}
-	mainvBox.SetMarginTop(6)
-	mainvBox.SetMarginBottom(6)
-	mainvBox.SetMarginStart(6)
-	mainvBox.SetMarginEnd(6)
+	mainvBox.SetMarginTop(UI_MARGIN_SMALL)
+	mainvBox.SetMarginBottom(UI_MARGIN_SMALL)
+	mainvBox.SetMarginStart(UI_MARGIN_SMALL)
+	mainvBox.SetMarginEnd(UI_MARGIN_SMALL)
 	menuBar, err := gtk.MenuBarNew()
 	if err != nil {
 		log.Fatalln("Unable to create menu bar:", err)
@@ -567,8 +550,11 @@ func (mw *MainWindow) BuildUI() {
 		if err != nil {
 			log.Fatalln("Unable to create radio button:", err)
 		}
-		button.SetMode(false) // Make it look like a regular button
-		buttonStyle, _ := button.GetStyleContext()
+		button.SetMode(false)
+		buttonStyle, err := button.GetStyleContext()
+		if err != nil {
+			log.Fatalln("Unable to get button style context:", err)
+		}
 		if buttonStyle != nil {
 			buttonStyle.AddClass("category-toggle")
 		}
@@ -583,7 +569,6 @@ func (mw *MainWindow) BuildUI() {
 		if buttonLabel == "Game" {
 			button.SetActive(true)
 		}
-		// Accessibility: Set category button description for screen readers
 		SetupToggleButtonAccessibility(&button.ToggleButton, "Filter titles by category: "+cat)
 		mw.categoryButtons = append(mw.categoryButtons, &button.ToggleButton)
 	}
@@ -611,7 +596,6 @@ func (mw *MainWindow) BuildUI() {
 	}
 	mw.downloadQueueButton.SetCanDefault(true)
 	mw.downloadQueueButton.GrabDefault()
-	// Accessibility: Set button description for screen readers
 	SetupButtonAccessibility(mw.downloadQueueButton, "Start downloading all titles in your queue. You can select multiple titles by clicking checkboxes and they will be added to your download queue.")
 
 	mw.decryptContentsCheckbox, err = gtk.CheckButtonNewWithLabel("Decrypt contents")
@@ -619,7 +603,6 @@ func (mw *MainWindow) BuildUI() {
 		log.Fatalln("Unable to create button:", err)
 	}
 	mw.decryptContentsCheckbox.SetActive(mw.decryptContents)
-	// Accessibility: Set checkbox description for screen readers
 	SetupCheckButtonAccessibility(mw.decryptContentsCheckbox, "When checked, downloaded game contents will be decrypted after download completes")
 
 	mw.deleteEncryptedContentsCheckbox, err = gtk.CheckButtonNewWithLabel("Delete encrypted contents after decryption")
@@ -628,7 +611,6 @@ func (mw *MainWindow) BuildUI() {
 	}
 	mw.deleteEncryptedContentsCheckbox.SetSensitive(mw.decryptContents)
 	mw.deleteEncryptedContentsCheckbox.SetActive(mw.deleteEncryptedContents)
-	// Accessibility: Set checkbox description for screen readers
 	SetupCheckButtonAccessibility(mw.deleteEncryptedContentsCheckbox, "When checked and decrypt contents is enabled, encrypted files will be deleted after successful decryption")
 	mw.deleteEncryptedContentsCheckbox.Connect("clicked", func() {
 		config, err := loadConfig()
@@ -656,67 +638,25 @@ func (mw *MainWindow) BuildUI() {
 			return
 		}
 
-		var selectedPath string
-		if config.RememberLastPath {
-			if isValidPath(config.LastSelectedPath) {
-				selectedPath = config.LastSelectedPath
-			} else {
-				glib.IdleAdd(func() {
-					ShowErrorDialog(mw.window, fmt.Errorf("Saved download path not found: %s", config.LastSelectedPath))
-				})
-				// fall through to dialog
-			}
-		}
-		if selectedPath == "" {
-			if isValidPath(config.LastSelectedPath) {
-				dialog.SetStartDir(config.LastSelectedPath)
-			}
-			chosen, err := dialog.Browse()
-			if err != nil {
-				glib.IdleAdd(func() {
-					mw.progressWindow.Window.Hide()
-				})
-				return
-			}
-			selectedPath = chosen
-			config.LastSelectedPath = chosen
-			if err := config.Save(); err != nil {
-				glib.IdleAdd(func() {
-					ShowErrorDialog(mw.window, err)
-				})
-			}
+		selectedPath, err := mw.resolveDownloadPath(config, dialog.SetStartDir, dialog.Browse)
+		if err != nil {
+			glib.IdleAdd(func() {
+				mw.progressWindow.Window.Hide()
+			})
+			return
 		}
 
 		mw.progressWindow.Window.ShowAll()
-
-		// Capture state on main thread before spawning goroutine
 		decryptContents := mw.decryptContents
 		deleteEncryptedContents := mw.getDeleteEncryptedContents()
 
 		go func() {
-			// Disable the window while downloading to prevent multiple clicks
 			glib.IdleAdd(func() {
-				mw.treeView.SetSensitive(false)
-				for _, button := range mw.categoryButtons {
-					button.SetSensitive(false)
-				}
-				mw.searchEntry.SetSensitive(false)
-				mw.downloadQueueButton.SetSensitive(false)
-				mw.deleteEncryptedContentsCheckbox.SetSensitive(false)
-				mw.decryptContentsCheckbox.SetSensitive(false)
-				mw.queuePane.removeFromQueueButton.SetSensitive(false)
+				mw.setDownloadControlsSensitive(false)
 			})
 
 			defer glib.IdleAdd(func() {
-				mw.treeView.SetSensitive(true)
-				for _, button := range mw.categoryButtons {
-					button.SetSensitive(true)
-				}
-				mw.searchEntry.SetSensitive(true)
-				mw.downloadQueueButton.SetSensitive(true)
-				mw.deleteEncryptedContentsCheckbox.SetSensitive(true)
-				mw.decryptContentsCheckbox.SetSensitive(true)
-				mw.queuePane.removeFromQueueButton.SetSensitive(true)
+				mw.setDownloadControlsSensitive(true)
 			})
 
 			if err := mw.onDownloadQueueClicked(selectedPath, decryptContents, deleteEncryptedContents, config); err != nil {
@@ -726,9 +666,8 @@ func (mw *MainWindow) BuildUI() {
 				return
 			}
 
-			// Show errors dialog if there were any errors
 			errors := mw.progressWindow.GetErrors()
-			if len(errors) > 0 {
+			if len(errors) > 0 && !config.ContinueOnError {
 				glib.IdleAdd(func() {
 					mw.showErrorsDialog(errors)
 				})
@@ -779,7 +718,7 @@ func (mw *MainWindow) BuildUI() {
 
 	mainvBox.PackEnd(bottomhBox, false, false, 0)
 
-	bottomhBox.SetSizeRequest(400, -1)
+	bottomhBox.SetSizeRequest(DOWNLOAD_PANE_MIN_WIDTH, -1)
 
 	splitPane, err := gtk.PanedNew(gtk.ORIENTATION_HORIZONTAL)
 	if err != nil {
@@ -788,10 +727,10 @@ func (mw *MainWindow) BuildUI() {
 	splitPane.Pack1(mw.queuePane.GetContainer(), true, false)
 	splitPane.Pack2(mainvBox, true, true)
 
-	splitPane.SetMarginBottom(2)
-	splitPane.SetMarginEnd(2)
-	splitPane.SetMarginStart(2)
-	splitPane.SetMarginTop(2)
+	splitPane.SetMarginBottom(SPLIT_PANE_MARGIN)
+	splitPane.SetMarginEnd(SPLIT_PANE_MARGIN)
+	splitPane.SetMarginStart(SPLIT_PANE_MARGIN)
+	splitPane.SetMarginTop(SPLIT_PANE_MARGIN)
 
 	mw.window.Add(splitPane)
 
@@ -820,7 +759,7 @@ func (mw *MainWindow) onSearchEntryChanged() {
 	if mw.searchTimer != nil {
 		mw.searchTimer.Stop()
 	}
-	mw.searchTimer = time.AfterFunc(200*time.Millisecond, func() {
+	mw.searchTimer = time.AfterFunc(SEARCH_DEBOUNCE_DELAY, func() {
 		glib.IdleAdd(func() {
 			text, err := mw.searchEntry.GetText()
 			if err != nil {
@@ -848,12 +787,43 @@ func (mw *MainWindow) onCategoryToggled(button *gtk.ToggleButton) {
 	})
 }
 
+func (mw *MainWindow) setDownloadControlsSensitive(sensitive bool) {
+	mw.treeView.SetSensitive(sensitive)
+	for _, button := range mw.categoryButtons {
+		button.SetSensitive(sensitive)
+	}
+	mw.searchEntry.SetSensitive(sensitive)
+	mw.downloadQueueButton.SetSensitive(sensitive)
+	mw.deleteEncryptedContentsCheckbox.SetSensitive(sensitive)
+	mw.decryptContentsCheckbox.SetSensitive(sensitive)
+	mw.queuePane.removeFromQueueButton.SetSensitive(sensitive)
+}
+
+func (mw *MainWindow) resolveDownloadPath(config *Config, setStartDir func(string) *dialog.DirectoryBuilder, browse func() (string, error)) (string, error) {
+	if config.RememberLastPath && isValidPath(config.LastSelectedPath) {
+		return config.LastSelectedPath, nil
+	}
+	if isValidPath(config.LastSelectedPath) {
+		setStartDir(config.LastSelectedPath)
+	}
+	chosen, err := browse()
+	if err != nil {
+		return "", err
+	}
+	config.LastSelectedPath = chosen
+	if saveErr := config.Save(); saveErr != nil {
+		glib.IdleAdd(func() {
+			ShowErrorDialog(mw.window, saveErr)
+		})
+	}
+	return chosen, nil
+}
+
 func (mw *MainWindow) onDecryptContentsMenuItemClicked(selectedPath string) error {
 	err := wiiudownloader.DecryptContents(selectedPath, mw.progressWindow, false)
 
 	glib.IdleAdd(func() {
 		mw.progressWindow.Window.Hide()
-		// Show decryption errors if ContinueOnError is enabled
 		config, loadErr := loadConfig()
 		if loadErr != nil {
 			return
@@ -888,6 +858,270 @@ func (mw *MainWindow) getDeleteEncryptedContents() bool {
 	return false
 }
 
+func (mw *MainWindow) getTitleEntryFromChildIter(iter *gtk.TreeIter) (wiiudownloader.TitleEntry, bool) {
+	tidVal, err := mw.childStore.ToTreeModel().GetValue(iter, TITLE_ID_COLUMN)
+	if err != nil {
+		return wiiudownloader.TitleEntry{}, false
+	}
+	tidStr, err := tidVal.GetString()
+	if err != nil {
+		return wiiudownloader.TitleEntry{}, false
+	}
+	parsedTid, err := strconv.ParseUint(tidStr, PARSE_UINT_BASE_16, PARSE_UINT_BITS_64)
+	if err != nil {
+		return wiiudownloader.TitleEntry{}, false
+	}
+
+	entry := wiiudownloader.GetTitleEntryFromTid(parsedTid)
+	if entry.TitleID == 0 {
+		return wiiudownloader.TitleEntry{}, false
+	}
+	return entry, true
+}
+
+func (mw *MainWindow) collectSelectedEntriesForToggle(clickedIter *gtk.TreeIter, selectedCount int) []wiiudownloader.TitleEntry {
+	result := make([]wiiudownloader.TitleEntry, 0)
+	seen := make(map[uint64]struct{})
+
+	addIfUnique := func(entry wiiudownloader.TitleEntry) {
+		if entry.TitleID == 0 {
+			return
+		}
+		if _, exists := seen[entry.TitleID]; exists {
+			return
+		}
+		seen[entry.TitleID] = struct{}{}
+		result = append(result, entry)
+	}
+
+	if selectedCount <= 1 {
+		entry, ok := mw.getTitleEntryFromChildIter(clickedIter)
+		if ok {
+			addIfUnique(entry)
+		}
+		return result
+	}
+
+	selection, err := mw.treeView.GetSelection()
+	if err != nil {
+		return result
+	}
+
+	paths := selection.GetSelectedRows(mw.sortModel)
+	for l := paths; l != nil; l = l.Next() {
+		data := l.Data()
+		sortPath, ok := data.(*gtk.TreePath)
+		if !ok || sortPath == nil {
+			continue
+		}
+
+		filterPath := mw.sortModel.ConvertPathToChildPath(sortPath)
+		if filterPath == nil {
+			continue
+		}
+
+		childPath := mw.filterModel.ConvertPathToChildPath(filterPath)
+		if childPath == nil {
+			continue
+		}
+
+		iter, err := mw.childStore.ToTreeModel().GetIter(childPath)
+		if err != nil {
+			continue
+		}
+
+		entry, ok := mw.getTitleEntryFromChildIter(iter)
+		if ok {
+			addIfUnique(entry)
+		}
+	}
+
+	if len(result) == 0 {
+		entry, ok := mw.getTitleEntryFromChildIter(clickedIter)
+		if ok {
+			addIfUnique(entry)
+		}
+	}
+
+	return result
+}
+
+func (mw *MainWindow) collectRelatedCandidates(originals []wiiudownloader.TitleEntry) []wiiudownloader.TitleEntry {
+	candidates := make([]wiiudownloader.TitleEntry, 0)
+	exclude := make(map[uint64]struct{})
+
+	for _, queued := range mw.queuePane.GetTitleQueue() {
+		exclude[queued.TitleID] = struct{}{}
+	}
+	for _, original := range originals {
+		exclude[original.TitleID] = struct{}{}
+	}
+
+	for _, original := range originals {
+		high := wiiudownloader.GetTitleIDHigh(original.TitleID)
+		targets := wiiudownloader.GetRelatedTypeTargets(high)
+		for _, targetHigh := range targets {
+			related, found := wiiudownloader.FindRelatedTitleByHighAndLow(original, targetHigh, exclude)
+			if !found {
+				continue
+			}
+			exclude[related.TitleID] = struct{}{}
+			candidates = append(candidates, related)
+		}
+	}
+
+	return candidates
+}
+
+func (mw *MainWindow) showRelatedTitlesDialog(originals, candidates []wiiudownloader.TitleEntry) ([]wiiudownloader.TitleEntry, bool) {
+	dialog, err := gtk.DialogNew()
+	if err != nil {
+		log.Printf("Error creating related titles dialog: %v", err)
+		return nil, false
+	}
+	defer dialog.Destroy()
+
+	dialog.SetTitle("Add Related Content")
+	dialog.SetModal(true)
+	dialog.SetTransientFor(mw.window)
+	dialog.SetPosition(gtk.WIN_POS_CENTER_ON_PARENT)
+	dialog.SetDefaultSize(RELATED_DIALOG_WIDTH, RELATED_DIALOG_HEIGHT)
+	SetupDialogAccessibility(dialog, "Add related content")
+
+	dialog.AddButton("Skip", gtk.RESPONSE_CANCEL)
+	dialog.AddButton("Add Selected", gtk.RESPONSE_ACCEPT)
+	dialog.SetDefaultResponse(gtk.RESPONSE_ACCEPT)
+
+	contentArea, err := dialog.GetContentArea()
+	if err != nil {
+		return nil, false
+	}
+	contentArea.SetSpacing(8)
+
+	headerLabel, err := gtk.LabelNew("")
+	if err != nil {
+		return nil, false
+	}
+	headerLabel.SetMarkup("<span font='14' weight='bold'>Related content found</span>")
+	headerLabel.SetHAlign(gtk.ALIGN_START)
+	headerLabel.SetMarginTop(DIALOG_MARGIN)
+	headerLabel.SetMarginStart(DIALOG_MARGIN)
+	contentArea.PackStart(headerLabel, false, false, 0)
+
+	descLabel, err := gtk.LabelNew(fmt.Sprintf("You added %d title(s). Select related Game/DLC/Update items to add to the queue.", len(originals)))
+	if err != nil {
+		return nil, false
+	}
+	descLabel.SetHAlign(gtk.ALIGN_START)
+	descLabel.SetLineWrap(true)
+	descLabel.SetMarginStart(DIALOG_MARGIN)
+	descLabel.SetMarginEnd(DIALOG_MARGIN)
+	contentArea.PackStart(descLabel, false, false, 0)
+
+	scrolledWindow, err := gtk.ScrolledWindowNew(nil, nil)
+	if err != nil {
+		return nil, false
+	}
+	scrolledWindow.SetPolicy(gtk.POLICY_NEVER, gtk.POLICY_AUTOMATIC)
+	scrolledWindow.SetMarginStart(DIALOG_MARGIN)
+	scrolledWindow.SetMarginEnd(DIALOG_MARGIN)
+	scrolledWindow.SetMarginBottom(DIALOG_MARGIN)
+	contentArea.PackStart(scrolledWindow, true, true, 0)
+
+	listBox, err := gtk.ListBoxNew()
+	if err != nil {
+		return nil, false
+	}
+	listBox.SetSelectionMode(gtk.SELECTION_NONE)
+	listBox.SetActivateOnSingleClick(false)
+	scrolledWindow.Add(listBox)
+
+	type rowOption struct {
+		entry *wiiudownloader.TitleEntry
+		check *gtk.CheckButton
+	}
+	options := make([]rowOption, 0, len(candidates))
+
+	for i := range candidates {
+		candidate := candidates[i]
+
+		row, err := gtk.ListBoxRowNew()
+		if err != nil {
+			continue
+		}
+		row.SetSelectable(false)
+
+		outerContainer, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
+		if err != nil {
+			continue
+		}
+		outerContainer.SetMarginStart(RELATED_ROW_HORIZONTAL_MARGIN)
+		outerContainer.SetMarginEnd(RELATED_ROW_HORIZONTAL_MARGIN)
+		outerContainer.SetMarginTop(RELATED_ROW_VERTICAL_MARGIN)
+		outerContainer.SetMarginBottom(RELATED_ROW_VERTICAL_MARGIN)
+		outerContainer.SetSpacing(RELATED_ROW_SPACING)
+		row.Add(outerContainer)
+
+		check, err := gtk.CheckButtonNewWithLabel("")
+		if err != nil {
+			continue
+		}
+		check.SetActive(true)
+		check.SetVAlign(gtk.ALIGN_START)
+		SetupCheckButtonAccessibility(check, fmt.Sprintf("Add %s", candidate.Name))
+		outerContainer.PackStart(check, false, false, 0)
+
+		textBox, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
+		if err != nil {
+			continue
+		}
+		textBox.SetSpacing(2)
+
+		mainLabel, err := gtk.LabelNew("")
+		if err != nil {
+			continue
+		}
+		mainLabel.SetMarkup(fmt.Sprintf("<span font='12' weight='600'>%s</span>", escapeMarkup(candidate.Name)))
+		mainLabel.SetHAlign(gtk.ALIGN_START)
+		textBox.PackStart(mainLabel, false, false, 0)
+
+		subLabel, err := gtk.LabelNew("")
+		if err != nil {
+			continue
+		}
+		subLabel.SetMarkup(fmt.Sprintf(
+			"<span font='10' alpha='80%%'>%s | %s | %016x</span>",
+			escapeMarkup(wiiudownloader.GetFormattedKind(candidate.TitleID)),
+			escapeMarkup(wiiudownloader.GetFormattedRegion(candidate.Region)),
+			candidate.TitleID,
+		))
+		subLabel.SetLineWrap(true)
+		subLabel.SetHAlign(gtk.ALIGN_START)
+		textBox.PackStart(subLabel, false, false, 0)
+
+		outerContainer.PackStart(textBox, true, true, 0)
+		listBox.Add(row)
+
+		candidateCopy := candidate
+		options = append(options, rowOption{entry: &candidateCopy, check: check})
+	}
+
+	contentArea.ShowAll()
+	response := dialog.Run()
+	if response != gtk.RESPONSE_ACCEPT {
+		return nil, false
+	}
+
+	selected := make([]wiiudownloader.TitleEntry, 0, len(options))
+	for _, option := range options {
+		if option.check.GetActive() {
+			selected = append(selected, *option.entry)
+		}
+	}
+
+	return selected, true
+}
+
 func (mw *MainWindow) updateTitlesInQueue() {
 	if mw.childStore == nil {
 		return
@@ -906,7 +1140,7 @@ func (mw *MainWindow) updateTitlesInQueue() {
 		}
 		if tid != nil {
 			if tidStr, err := tid.GetString(); err == nil {
-				tidNum, err := strconv.ParseUint(tidStr, 16, 64)
+				tidNum, err := strconv.ParseUint(tidStr, PARSE_UINT_BASE_16, PARSE_UINT_BITS_64)
 				if err != nil {
 					continue
 				}
@@ -943,33 +1177,30 @@ func (mw *MainWindow) showErrorsDialog(errors []DownloadError) {
 	dialog.SetModal(true)
 	dialog.SetTransientFor(mw.window)
 	dialog.SetPosition(gtk.WIN_POS_CENTER_ON_PARENT)
-	dialog.SetDefaultSize(600, 400)
+	dialog.SetDefaultSize(ERROR_DIALOG_WIDTH, ERROR_DIALOG_HEIGHT)
 
 	contentArea, err := dialog.GetContentArea()
 	if err != nil {
 		return
 	}
 
-	// Create a label for the header
 	headerLabel, err := gtk.LabelNew(fmt.Sprintf("The following %d title(s) failed to download:", len(errors)))
 	if err != nil {
 		return
 	}
-	headerLabel.SetMarginTop(10)
-	headerLabel.SetMarginStart(10)
+	headerLabel.SetMarginTop(DIALOG_MARGIN)
+	headerLabel.SetMarginStart(DIALOG_MARGIN)
 	contentArea.PackStart(headerLabel, false, false, 0)
 
-	// Create a scrolled window
 	scrolledWindow, err := gtk.ScrolledWindowNew(nil, nil)
 	if err != nil {
 		return
 	}
 	scrolledWindow.SetPolicy(gtk.POLICY_NEVER, gtk.POLICY_AUTOMATIC)
-	scrolledWindow.SetMarginStart(10)
-	scrolledWindow.SetMarginEnd(10)
+	scrolledWindow.SetMarginStart(DIALOG_MARGIN)
+	scrolledWindow.SetMarginEnd(DIALOG_MARGIN)
 	contentArea.PackStart(scrolledWindow, true, true, 0)
 
-	// Create a ListBox to display errors
 	listBox, err := gtk.ListBoxNew()
 	if err != nil {
 		return
@@ -977,7 +1208,6 @@ func (mw *MainWindow) showErrorsDialog(errors []DownloadError) {
 	listBox.SetSelectionMode(gtk.SELECTION_NONE)
 	scrolledWindow.Add(listBox)
 
-	// Add each error to the list
 	for _, dlErr := range errors {
 		row, err := gtk.ListBoxRowNew()
 		if err != nil {
@@ -988,12 +1218,11 @@ func (mw *MainWindow) showErrorsDialog(errors []DownloadError) {
 		if err != nil {
 			continue
 		}
-		box.SetMarginTop(5)
-		box.SetMarginBottom(5)
-		box.SetMarginStart(5)
-		box.SetMarginEnd(5)
+		box.SetMarginTop(ERROR_ROW_MARGIN)
+		box.SetMarginBottom(ERROR_ROW_MARGIN)
+		box.SetMarginStart(ERROR_ROW_MARGIN)
+		box.SetMarginEnd(ERROR_ROW_MARGIN)
 
-		// Title
 		titleLabel, err := gtk.LabelNew("")
 		if err != nil {
 			continue
@@ -1002,7 +1231,6 @@ func (mw *MainWindow) showErrorsDialog(errors []DownloadError) {
 		titleLabel.SetXAlign(0)
 		box.PackStart(titleLabel, false, false, 0)
 
-		// Error Type
 		if dlErr.ErrorType != "" {
 			errorTypeLabel, err := gtk.LabelNew("")
 			if err != nil {
@@ -1013,7 +1241,6 @@ func (mw *MainWindow) showErrorsDialog(errors []DownloadError) {
 			box.PackStart(errorTypeLabel, false, false, 0)
 		}
 
-		// Error message
 		errorLabel, err := gtk.LabelNew(dlErr.Error)
 		if err != nil {
 			continue
@@ -1023,7 +1250,6 @@ func (mw *MainWindow) showErrorsDialog(errors []DownloadError) {
 		errorLabel.SetLineWrapMode(pango.WRAP_WORD)
 		box.PackStart(errorLabel, false, false, 0)
 
-		// Separator
 		separator, err := gtk.SeparatorNew(gtk.ORIENTATION_HORIZONTAL)
 		if err != nil {
 			continue
@@ -1034,7 +1260,6 @@ func (mw *MainWindow) showErrorsDialog(errors []DownloadError) {
 		listBox.Add(row)
 	}
 
-	// Add close button
 	dialog.AddButton("Close", gtk.RESPONSE_OK)
 
 	contentArea.ShowAll()
@@ -1052,17 +1277,15 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string, decryptContent
 	defer close(queueStatusChan)
 	errGroup := errgroup.Group{}
 
-	// Clear errors and reset at the start of the queue
 	mw.progressWindow.ResetTotalsAndErrors()
 
 	mw.queuePane.ForEachRemoving(func(title wiiudownloader.TitleEntry) bool {
-		// Check for cancellation before starting next download
 		if mw.progressWindow.Cancelled() {
 			return false
 		}
 
 		errGroup.Go(func() error {
-			if mw.progressWindow.cancelled {
+			if mw.progressWindow.Cancelled() {
 				queueStatusChan <- true
 				return nil
 			}
@@ -1075,11 +1298,9 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string, decryptContent
 				mw.progressWindow.AddErrorWithType(title.Name, downloadErr.Error(), tidStr, errorType)
 
 				if config.ContinueOnError {
-					// Record error but continue with next download
 					queueStatusChan <- true
 					return nil
 				}
-				// If not continuing on error, signal to remove from queue and stop processing
 				queueStatusChan <- false
 				return downloadErr
 			}
@@ -1090,15 +1311,13 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string, decryptContent
 
 		if err = errGroup.Wait(); err != nil {
 			if mw.progressWindow.Cancelled() {
-				err = nil               // Suppress error so it doesn't show popup
-				queueStatusChan <- true // Processed (cancelled), so remove this one
+				err = nil
+				queueStatusChan <- true
 				return <-queueStatusChan
 			} else {
-				// Error occurred and ContinueOnError is false, stop processing
 				return <-queueStatusChan
 			}
 		} else {
-			// No error from goroutine, read the status from channel
 			return <-queueStatusChan
 		}
 	})

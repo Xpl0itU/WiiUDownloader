@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 
 	wiiudownloader "github.com/Xpl0itU/WiiUDownloader"
 	"github.com/gotk3/gotk3/glib"
@@ -10,28 +9,45 @@ import (
 )
 
 type InitialSetupAssistantWindow struct {
-	assistantWindow *gtk.Assistant
-	config          *Config
-	skipButton      *gtk.Button
-	nextButton      *gtk.Button
-	backButton      *gtk.Button
-	finishButton    *gtk.Button
+	assistantWindow   *gtk.Assistant
+	config            *Config
+	skipButton        *gtk.Button
+	nextButton        *gtk.Button
+	backButton        *gtk.Button
+	finishButton      *gtk.Button
+	postSetupCallback func()
 }
 
+const (
+	INITIAL_SETUP_WINDOW_WIDTH  = 600
+	INITIAL_SETUP_WINDOW_HEIGHT = 500
+	SETUP_PAGE_BORDER_WIDTH     = 24
+	SETUP_PAGE_SPACING_LARGE    = 16
+	SETUP_PAGE_SPACING          = 12
+	SETUP_INFO_SPACING          = 8
+	SETUP_ROW_HORIZONTAL_MARGIN = 16
+	SETUP_ROW_VERTICAL_MARGIN   = 12
+	SETUP_ROW_SPACING           = 12
+	SETUP_SUB_TEXT_SPACING      = 2
+	SETUP_SUMMARY_SPACING       = 4
+	SETUP_SUMMARY_MARGIN        = 8
+)
+
 func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindow, error) {
+	var performPostSetup func()
+
 	assistant, err := gtk.AssistantNew()
 	if err != nil {
 		return nil, err
 	}
 	assistant.Connect("cancel", func() {
-		os.Exit(0) // Hacky way to close the program
+		assistant.Destroy()
 	})
 	assistant.SetTitle("WiiUDownloader - Initial Setup")
-	assistant.SetDefaultSize(600, 500)
+	assistant.SetDefaultSize(INITIAL_SETUP_WINDOW_WIDTH, INITIAL_SETUP_WINDOW_HEIGHT)
 	assistant.SetPosition(gtk.WIN_POS_CENTER)
 	assistant.SetKeepAbove(true)
 
-	// Custom Navigation Buttons
 	actionBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 6)
 	if err != nil {
 		return nil, err
@@ -60,10 +76,12 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 		return nil, err
 	}
 	SetupButtonAccessibility(finishButton, "Complete the initial setup")
-	finishContext, _ := finishButton.GetStyleContext()
+	finishContext, err := finishButton.GetStyleContext()
+	if err != nil {
+		return nil, err
+	}
 	finishContext.AddClass("suggested-action")
 
-	// Layout: Skip [Spring] Back Next/Finish
 	actionBox.PackStart(skipButton, false, false, 0)
 	actionBox.PackEnd(finishButton, false, false, 0)
 	actionBox.PackEnd(nextButton, false, false, 0)
@@ -75,9 +93,8 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	if err != nil {
 		return nil, err
 	}
-	page1.SetBorderWidth(24)
-	page1.SetSpacing(16)
-	assistant.AppendPage(page1)
+	page1.SetBorderWidth(SETUP_PAGE_BORDER_WIDTH)
+	page1.SetSpacing(SETUP_PAGE_SPACING_LARGE)
 
 	page1Label, err := gtk.LabelNew("")
 	if err != nil {
@@ -96,19 +113,17 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	page1SubLabel.SetHAlign(gtk.ALIGN_START)
 	page1.PackStart(page1SubLabel, false, false, 0)
 
-	// Spacing
 	spacer, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
 	if err != nil {
 		return nil, err
 	}
 	page1.PackStart(spacer, true, true, 0)
 
-	// Info items
 	infoBox, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
 	if err != nil {
 		return nil, err
 	}
-	infoBox.SetSpacing(8)
+	infoBox.SetSpacing(SETUP_INFO_SPACING)
 
 	info1, err := gtk.LabelNew("")
 	if err != nil {
@@ -140,9 +155,8 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	if err != nil {
 		return nil, err
 	}
-	page2.SetBorderWidth(24)
-	page2.SetSpacing(12)
-	assistant.AppendPage(page2)
+	page2.SetBorderWidth(SETUP_PAGE_BORDER_WIDTH)
+	page2.SetSpacing(SETUP_PAGE_SPACING)
 
 	page2Label, err := gtk.LabelNew("")
 	if err != nil {
@@ -171,7 +185,6 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 
 	selectedRegionCheckboxes := uint8(0)
 
-	// Europe
 	europeRow, err := gtk.ListBoxRowNew()
 	if err != nil {
 		return nil, err
@@ -181,11 +194,7 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	if err != nil {
 		return nil, err
 	}
-	europeContainer.SetMarginStart(16)
-	europeContainer.SetMarginEnd(16)
-	europeContainer.SetMarginTop(12)
-	europeContainer.SetMarginBottom(12)
-	europeContainer.SetSpacing(12)
+	applySetupRowStyle(europeContainer)
 	europeRow.Add(europeContainer)
 
 	europeCheck, err := gtk.CheckButtonNewWithLabel("")
@@ -195,7 +204,6 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	europeCheck.SetActive(true)
 	selectedRegionCheckboxes++
 	europeCheck.SetVAlign(gtk.ALIGN_CENTER)
-	// Accessibility: Set checkbox description
 	SetupCheckButtonAccessibility(europeCheck, "Include games from the European region")
 	europeContainer.PackStart(europeCheck, false, false, 0)
 
@@ -209,7 +217,6 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	europeContainer.PackStart(europeLabel, true, true, 0)
 	regionList.Add(europeRow)
 
-	// USA
 	usaRow, err := gtk.ListBoxRowNew()
 	if err != nil {
 		return nil, err
@@ -219,11 +226,7 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	if err != nil {
 		return nil, err
 	}
-	usaContainer.SetMarginStart(16)
-	usaContainer.SetMarginEnd(16)
-	usaContainer.SetMarginTop(12)
-	usaContainer.SetMarginBottom(12)
-	usaContainer.SetSpacing(12)
+	applySetupRowStyle(usaContainer)
 	usaRow.Add(usaContainer)
 
 	usaCheck, err := gtk.CheckButtonNewWithLabel("")
@@ -233,7 +236,6 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	usaCheck.SetActive(true)
 	selectedRegionCheckboxes++
 	usaCheck.SetVAlign(gtk.ALIGN_CENTER)
-	// Accessibility: Set checkbox description
 	SetupCheckButtonAccessibility(usaCheck, "Include games from the USA region")
 	usaContainer.PackStart(usaCheck, false, false, 0)
 
@@ -247,7 +249,6 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	usaContainer.PackStart(usaLabel, true, true, 0)
 	regionList.Add(usaRow)
 
-	// Japan
 	japanRow, err := gtk.ListBoxRowNew()
 	if err != nil {
 		return nil, err
@@ -257,11 +258,7 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	if err != nil {
 		return nil, err
 	}
-	japanContainer.SetMarginStart(16)
-	japanContainer.SetMarginEnd(16)
-	japanContainer.SetMarginTop(12)
-	japanContainer.SetMarginBottom(12)
-	japanContainer.SetSpacing(12)
+	applySetupRowStyle(japanContainer)
 	japanRow.Add(japanContainer)
 
 	japanCheck, err := gtk.CheckButtonNewWithLabel("")
@@ -271,7 +268,6 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	japanCheck.SetActive(true)
 	selectedRegionCheckboxes++
 	japanCheck.SetVAlign(gtk.ALIGN_CENTER)
-	// Accessibility: Set checkbox description
 	SetupCheckButtonAccessibility(japanCheck, "Include games from the Japan region")
 	japanContainer.PackStart(japanCheck, false, false, 0)
 
@@ -285,18 +281,8 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	japanContainer.PackStart(japanLabel, true, true, 0)
 	regionList.Add(japanRow)
 
-	// Checkbox handlers
 	updateNextButton := func() {
-		count := 0
-		if europeCheck.GetActive() {
-			count++
-		}
-		if usaCheck.GetActive() {
-			count++
-		}
-		if japanCheck.GetActive() {
-			count++
-		}
+		count := selectedCount(europeCheck.GetActive(), usaCheck.GetActive(), japanCheck.GetActive())
 		nextButton.SetSensitive(count > 0)
 		assistant.SetPageComplete(page2, count > 0)
 	}
@@ -309,9 +295,8 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	if err != nil {
 		return nil, err
 	}
-	page3.SetBorderWidth(24)
-	page3.SetSpacing(12)
-	assistant.AppendPage(page3)
+	page3.SetBorderWidth(SETUP_PAGE_BORDER_WIDTH)
+	page3.SetSpacing(SETUP_PAGE_SPACING)
 
 	page3Label, err := gtk.LabelNew("")
 	if err != nil {
@@ -338,7 +323,6 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	platformList.SetActivateOnSingleClick(false)
 	page3.PackStart(platformList, true, true, 8)
 
-	// CEMU
 	cemuRow, err := gtk.ListBoxRowNew()
 	if err != nil {
 		return nil, err
@@ -348,11 +332,7 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	if err != nil {
 		return nil, err
 	}
-	cemuOuterContainer.SetMarginStart(16)
-	cemuOuterContainer.SetMarginEnd(16)
-	cemuOuterContainer.SetMarginTop(12)
-	cemuOuterContainer.SetMarginBottom(12)
-	cemuOuterContainer.SetSpacing(12)
+	applySetupRowStyle(cemuOuterContainer)
 	cemuRow.Add(cemuOuterContainer)
 
 	cemuCheck, err := gtk.CheckButtonNewWithLabel("")
@@ -361,7 +341,6 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	}
 	cemuCheck.SetActive(true)
 	cemuCheck.SetVAlign(gtk.ALIGN_START)
-	// Accessibility: Set checkbox description
 	SetupCheckButtonAccessibility(cemuCheck, "Enable downloads for CEMU emulator with decryption")
 	cemuOuterContainer.PackStart(cemuCheck, false, false, 0)
 
@@ -369,7 +348,7 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	if err != nil {
 		return nil, err
 	}
-	cemuTextBox.SetSpacing(2)
+	cemuTextBox.SetSpacing(SETUP_SUB_TEXT_SPACING)
 
 	cemuMainLabel, err := gtk.LabelNew("")
 	if err != nil {
@@ -391,7 +370,6 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	cemuOuterContainer.PackStart(cemuTextBox, true, true, 0)
 	platformList.Add(cemuRow)
 
-	// Wii U
 	wiiURow, err := gtk.ListBoxRowNew()
 	if err != nil {
 		return nil, err
@@ -401,11 +379,7 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	if err != nil {
 		return nil, err
 	}
-	wiiUOuterContainer.SetMarginStart(16)
-	wiiUOuterContainer.SetMarginEnd(16)
-	wiiUOuterContainer.SetMarginTop(12)
-	wiiUOuterContainer.SetMarginBottom(12)
-	wiiUOuterContainer.SetSpacing(12)
+	applySetupRowStyle(wiiUOuterContainer)
 	wiiURow.Add(wiiUOuterContainer)
 
 	wiiUCheck, err := gtk.CheckButtonNewWithLabel("")
@@ -414,7 +388,6 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	}
 	wiiUCheck.SetActive(true)
 	wiiUCheck.SetVAlign(gtk.ALIGN_START)
-	// Accessibility: Set checkbox description
 	SetupCheckButtonAccessibility(wiiUCheck, "Enable downloads for Wii U console with encrypted files")
 	wiiUOuterContainer.PackStart(wiiUCheck, false, false, 0)
 
@@ -422,7 +395,7 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	if err != nil {
 		return nil, err
 	}
-	wiiUTextBox.SetSpacing(2)
+	wiiUTextBox.SetSpacing(SETUP_SUB_TEXT_SPACING)
 
 	wiiUMainLabel, err := gtk.LabelNew("")
 	if err != nil {
@@ -444,12 +417,16 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	wiiUOuterContainer.PackStart(wiiUTextBox, true, true, 0)
 	platformList.Add(wiiURow)
 
-	page4, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0) // Finish page
+	page4, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
 	if err != nil {
 		return nil, err
 	}
-	page4.SetBorderWidth(24)
-	page4.SetSpacing(16)
+	page4.SetBorderWidth(SETUP_PAGE_BORDER_WIDTH)
+	page4.SetSpacing(SETUP_PAGE_SPACING_LARGE)
+
+	assistant.AppendPage(page1)
+	assistant.AppendPage(page2)
+	assistant.AppendPage(page3)
 	assistant.AppendPage(page4)
 
 	page4Label, err := gtk.LabelNew("")
@@ -469,14 +446,12 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	page4SubLabel.SetHAlign(gtk.ALIGN_START)
 	page4.PackStart(page4SubLabel, false, false, 0)
 
-	// Spacing
 	spacer4, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
 	if err != nil {
 		return nil, err
 	}
 	page4.PackStart(spacer4, true, true, 0)
 
-	// Summary box
 	summaryLabel, err := gtk.LabelNew("")
 	if err != nil {
 		return nil, err
@@ -489,9 +464,9 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	if err != nil {
 		return nil, err
 	}
-	summaryBox.SetSpacing(4)
-	summaryBox.SetMarginTop(8)
-	summaryBox.SetMarginStart(8)
+	summaryBox.SetSpacing(SETUP_SUMMARY_SPACING)
+	summaryBox.SetMarginTop(SETUP_SUMMARY_MARGIN)
+	summaryBox.SetMarginStart(SETUP_SUMMARY_MARGIN)
 	page4.PackStart(summaryBox, false, false, 0)
 
 	summaryRegions, err := gtk.LabelNew("")
@@ -515,7 +490,6 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	assistant.SetPageComplete(page3, true)
 	assistant.SetPageComplete(page4, true)
 
-	// Set all pages to CUSTOM to hide default buttons
 	assistant.SetPageType(page1, gtk.ASSISTANT_PAGE_CUSTOM)
 	assistant.SetPageType(page2, gtk.ASSISTANT_PAGE_CUSTOM)
 	assistant.SetPageType(page3, gtk.ASSISTANT_PAGE_CUSTOM)
@@ -526,28 +500,64 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	assistant.SetPageTitle(page3, "Platforms")
 	assistant.SetPageTitle(page4, "Finish")
 
-	assistant.Connect("apply", func() {
+	completeSetup := func() {
 		config.DidInitialSetup = true
-		selectedRegions := uint8(0)
-		if europeCheck.GetActive() {
-			selectedRegions |= wiiudownloader.MCP_REGION_EUROPE
-		}
-		if usaCheck.GetActive() {
-			selectedRegions |= wiiudownloader.MCP_REGION_USA
-		}
-		if japanCheck.GetActive() {
-			selectedRegions |= wiiudownloader.MCP_REGION_JAPAN
-		}
+		selectedRegions := selectedRegionMask(europeCheck.GetActive(), usaCheck.GetActive(), japanCheck.GetActive())
 		config.SelectedRegion = selectedRegions
 		config.DecryptContents = cemuCheck.GetActive()
 		config.DeleteEncryptedContents = !wiiUCheck.GetActive()
+
 		if err := config.Save(); err != nil {
 			ShowErrorDialog(nil, fmt.Errorf("Failed to save config: %w", err))
 			return
 		}
-		assistant.Hide()
-		assistant.Emit("close", glib.TYPE_BOOLEAN, nil)
-		assistant.SetDestroyWithParent(true)
+		closeAssistantWindow(assistant, performPostSetup)
+	}
+
+	assistant.Connect("apply", completeSetup)
+
+	skipButton.Connect("clicked", func() {
+		config.DidInitialSetup = true
+		if err := config.Save(); err != nil {
+			ShowErrorDialog(nil, fmt.Errorf("Failed to save config: %w", err))
+			return
+		}
+		closeAssistantWindow(assistant, performPostSetup)
+	})
+
+	backButton.Connect("clicked", func() {
+		assistant.PreviousPage()
+	})
+
+	nextButton.Connect("clicked", func() {
+		assistant.NextPage()
+	})
+
+	finishButton.Connect("clicked", func() {
+		completeSetup()
+	})
+
+	assistant.Connect("prepare", func(assistant *gtk.Assistant, page *gtk.Widget) {
+		pageNum := assistant.GetCurrentPage()
+
+		setSetupButtonsVisible(skipButton, backButton, nextButton, finishButton, false, false, false, false)
+
+		isFinishPage := pageNum == 3
+
+		if pageNum == 0 {
+			setSetupButtonsVisible(skipButton, backButton, nextButton, finishButton, true, false, true, false)
+		} else if pageNum == 1 {
+			setSetupButtonsVisible(skipButton, backButton, nextButton, finishButton, false, true, true, false)
+			count := selectedCount(europeCheck.GetActive(), usaCheck.GetActive(), japanCheck.GetActive())
+			nextButton.SetSensitive(count > 0)
+		} else if pageNum == 2 {
+			setSetupButtonsVisible(skipButton, backButton, nextButton, finishButton, false, true, true, false)
+			nextButton.SetSensitive(true)
+		} else if isFinishPage {
+			setSetupButtonsVisible(skipButton, backButton, nextButton, finishButton, false, true, false, true)
+			summaryRegions.SetMarkup("<span font='10' alpha='85%'>✓ Regions: " + selectedRegionsSummary(europeCheck.GetActive(), usaCheck.GetActive(), japanCheck.GetActive()) + "</span>")
+			summaryPlatforms.SetMarkup("<span font='10' alpha='85%'>✓ Platforms: " + selectedPlatformsSummary(cemuCheck.GetActive(), wiiUCheck.GetActive()) + "</span>")
+		}
 	})
 
 	// Button Logic
@@ -647,12 +657,19 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	})
 
 	initialSetupAssistantWindow := InitialSetupAssistantWindow{
-		assistantWindow: assistant,
-		config:          config,
-		skipButton:      skipButton,
-		nextButton:      nextButton,
-		backButton:      backButton,
-		finishButton:    finishButton,
+		assistantWindow:   assistant,
+		config:            config,
+		skipButton:        skipButton,
+		nextButton:        nextButton,
+		backButton:        backButton,
+		finishButton:      finishButton,
+		postSetupCallback: nil,
+	}
+
+	performPostSetup = func() {
+		if initialSetupAssistantWindow.postSetupCallback != nil {
+			initialSetupAssistantWindow.postSetupCallback()
+		}
 	}
 
 	return &initialSetupAssistantWindow, nil
@@ -667,6 +684,84 @@ func (assistant *InitialSetupAssistantWindow) Hide() {
 }
 
 func (assistant *InitialSetupAssistantWindow) SetPostSetupCallback(cb func()) {
-	assistant.assistantWindow.Connect("apply", cb)
-	assistant.skipButton.Connect("clicked", cb)
+	assistant.postSetupCallback = cb
+}
+
+func selectedCount(flags ...bool) int {
+	count := 0
+	for _, flag := range flags {
+		if flag {
+			count++
+		}
+	}
+	return count
+}
+
+func selectedRegionMask(europe, usa, japan bool) uint8 {
+	selectedRegions := uint8(0)
+	if europe {
+		selectedRegions |= wiiudownloader.MCP_REGION_EUROPE
+	}
+	if usa {
+		selectedRegions |= wiiudownloader.MCP_REGION_USA
+	}
+	if japan {
+		selectedRegions |= wiiudownloader.MCP_REGION_JAPAN
+	}
+	return selectedRegions
+}
+
+func selectedRegionsSummary(europe, usa, japan bool) string {
+	regions := ""
+	if europe {
+		regions += "Europe, "
+	}
+	if usa {
+		regions += "USA, "
+	}
+	if japan {
+		regions += "Japan, "
+	}
+	if len(regions) > 2 {
+		return regions[:len(regions)-2]
+	}
+	return regions
+}
+
+func selectedPlatformsSummary(cemu, wiiU bool) string {
+	platforms := ""
+	if cemu {
+		platforms += "CEMU"
+	}
+	if wiiU {
+		if platforms != "" {
+			platforms += " + "
+		}
+		platforms += "Wii U"
+	}
+	return platforms
+}
+
+func setSetupButtonsVisible(skipButton, backButton, nextButton, finishButton *gtk.Button, skip, back, next, finish bool) {
+	skipButton.SetVisible(skip)
+	backButton.SetVisible(back)
+	nextButton.SetVisible(next)
+	finishButton.SetVisible(finish)
+}
+
+func closeAssistantWindow(assistant *gtk.Assistant, callback func()) {
+	assistant.Hide()
+	if callback != nil {
+		callback()
+	}
+	assistant.Emit("close", glib.TYPE_BOOLEAN, nil)
+	assistant.SetDestroyWithParent(true)
+}
+
+func applySetupRowStyle(box *gtk.Box) {
+	box.SetMarginStart(SETUP_ROW_HORIZONTAL_MARGIN)
+	box.SetMarginEnd(SETUP_ROW_HORIZONTAL_MARGIN)
+	box.SetMarginTop(SETUP_ROW_VERTICAL_MARGIN)
+	box.SetMarginBottom(SETUP_ROW_VERTICAL_MARGIN)
+	box.SetSpacing(SETUP_ROW_SPACING)
 }

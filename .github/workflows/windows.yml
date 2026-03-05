@@ -37,6 +37,8 @@ jobs:
           wait
       - name: Deploy WiiUDownloader
         run: |
+          rm -rf dist
+          mkdir -p dist/lib dist/share/icons dist/share/glib-2.0/schemas
 
           ${MSYSTEM_PREFIX}/bin/ntldd -R main.exe | tr '\\' '/' | grep -io "$(cygpath -m ${MSYSTEM_PREFIX}).\+\.dll" | sort -u | cygpath -f - -u | xargs -I {} cp "{}" dist/
 

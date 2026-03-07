@@ -4,6 +4,7 @@ import (
 	"log"
 	"strings"
 
+	"github.com/gotk3/gotk3/gdk"
 	"github.com/gotk3/gotk3/gtk"
 )
 
@@ -118,4 +119,8 @@ func SetupDialogAccessibility(dialog *gtk.Dialog, _ string) error {
 
 func LogAccessibilitySetup(componentName string, label string) {
 	log.Printf("[Accessibility] Setting up %s: %s", componentName, label)
+}
+
+func isKeyboardActivationKey(keyVal uint) bool {
+	return keyVal == gdk.KEY_space || keyVal == gdk.KEY_Return || keyVal == gdk.KEY_KP_Enter
 }

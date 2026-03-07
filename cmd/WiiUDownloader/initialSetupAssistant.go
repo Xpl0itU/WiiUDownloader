@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	wiiudownloader "github.com/Xpl0itU/WiiUDownloader"
+	"github.com/gotk3/gotk3/gdk"
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
 )
@@ -47,6 +48,7 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	assistant.SetDefaultSize(INITIAL_SETUP_WINDOW_WIDTH, INITIAL_SETUP_WINDOW_HEIGHT)
 	assistant.SetPosition(gtk.WIN_POS_CENTER)
 	assistant.SetKeepAbove(true)
+	assistant.SetModal(true)
 
 	actionBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 6)
 	if err != nil {
@@ -83,9 +85,9 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	finishContext.AddClass("suggested-action")
 
 	actionBox.PackStart(skipButton, false, false, 0)
-	actionBox.PackEnd(finishButton, false, false, 0)
-	actionBox.PackEnd(nextButton, false, false, 0)
-	actionBox.PackEnd(backButton, false, false, 0)
+	actionBox.PackStart(backButton, false, false, 0)
+	actionBox.PackStart(nextButton, false, false, 0)
+	actionBox.PackStart(finishButton, false, false, 0)
 
 	assistant.AddActionWidget(actionBox)
 
@@ -179,7 +181,7 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	if err != nil {
 		return nil, err
 	}
-	regionList.SetSelectionMode(gtk.SELECTION_NONE)
+	regionList.SetSelectionMode(gtk.SELECTION_SINGLE)
 	regionList.SetActivateOnSingleClick(false)
 	page2.PackStart(regionList, true, true, 8)
 
@@ -189,7 +191,8 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	if err != nil {
 		return nil, err
 	}
-	europeRow.SetSelectable(false)
+	europeRow.SetSelectable(true)
+	europeRow.SetActivatable(true)
 	europeContainer, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
 	if err != nil {
 		return nil, err
@@ -221,7 +224,8 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	if err != nil {
 		return nil, err
 	}
-	usaRow.SetSelectable(false)
+	usaRow.SetSelectable(true)
+	usaRow.SetActivatable(true)
 	usaContainer, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
 	if err != nil {
 		return nil, err
@@ -253,7 +257,8 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	if err != nil {
 		return nil, err
 	}
-	japanRow.SetSelectable(false)
+	japanRow.SetSelectable(true)
+	japanRow.SetActivatable(true)
 	japanContainer, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
 	if err != nil {
 		return nil, err
@@ -290,6 +295,11 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	europeCheck.Connect("toggled", updateNextButton)
 	usaCheck.Connect("toggled", updateNextButton)
 	japanCheck.Connect("toggled", updateNextButton)
+	configureSetupOptionList(regionList,
+		setupOptionRow{row: europeRow, check: europeCheck},
+		setupOptionRow{row: usaRow, check: usaCheck},
+		setupOptionRow{row: japanRow, check: japanCheck},
+	)
 
 	page3, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
 	if err != nil {
@@ -319,7 +329,7 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	if err != nil {
 		return nil, err
 	}
-	platformList.SetSelectionMode(gtk.SELECTION_NONE)
+	platformList.SetSelectionMode(gtk.SELECTION_SINGLE)
 	platformList.SetActivateOnSingleClick(false)
 	page3.PackStart(platformList, true, true, 8)
 
@@ -327,7 +337,8 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	if err != nil {
 		return nil, err
 	}
-	cemuRow.SetSelectable(false)
+	cemuRow.SetSelectable(true)
+	cemuRow.SetActivatable(true)
 	cemuOuterContainer, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
 	if err != nil {
 		return nil, err
@@ -374,7 +385,8 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	if err != nil {
 		return nil, err
 	}
-	wiiURow.SetSelectable(false)
+	wiiURow.SetSelectable(true)
+	wiiURow.SetActivatable(true)
 	wiiUOuterContainer, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
 	if err != nil {
 		return nil, err
@@ -416,6 +428,10 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 
 	wiiUOuterContainer.PackStart(wiiUTextBox, true, true, 0)
 	platformList.Add(wiiURow)
+	configureSetupOptionList(platformList,
+		setupOptionRow{row: cemuRow, check: cemuCheck},
+		setupOptionRow{row: wiiURow, check: wiiUCheck},
+	)
 
 	page4, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
 	if err != nil {
@@ -485,27 +501,29 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	summaryPlatforms.SetHAlign(gtk.ALIGN_START)
 	summaryBox.PackStart(summaryPlatforms, false, false, 0)
 
-	assistant.SetPageComplete(page1, true)
-	assistant.SetPageComplete(page2, true)
-	assistant.SetPageComplete(page3, true)
-	assistant.SetPageComplete(page4, true)
+	pages := []struct {
+		widget *gtk.Box
+		title  string
+	}{
+		{widget: page1, title: "Welcome"},
+		{widget: page2, title: "Regions"},
+		{widget: page3, title: "Platforms"},
+		{widget: page4, title: "Finish"},
+	}
 
-	assistant.SetPageType(page1, gtk.ASSISTANT_PAGE_CUSTOM)
-	assistant.SetPageType(page2, gtk.ASSISTANT_PAGE_CUSTOM)
-	assistant.SetPageType(page3, gtk.ASSISTANT_PAGE_CUSTOM)
-	assistant.SetPageType(page4, gtk.ASSISTANT_PAGE_CUSTOM)
+	lastPageIndex := len(pages) - 1
 
-	assistant.SetPageTitle(page1, "Welcome")
-	assistant.SetPageTitle(page2, "Regions")
-	assistant.SetPageTitle(page3, "Platforms")
-	assistant.SetPageTitle(page4, "Finish")
+	for i, p := range pages {
+		assistant.SetPageComplete(p.widget, true)
+		assistant.SetPageType(p.widget, assistantPageTypeForIndex(i, len(pages)-1))
+		assistant.SetPageTitle(p.widget, p.title)
+	}
 
 	completeSetup := func() {
 		config.DidInitialSetup = true
 		selectedRegions := selectedRegionMask(europeCheck.GetActive(), usaCheck.GetActive(), japanCheck.GetActive())
 		config.SelectedRegion = selectedRegions
-		config.DecryptContents = cemuCheck.GetActive()
-		config.DeleteEncryptedContents = !wiiUCheck.GetActive()
+		config.DecryptContents, config.DeleteEncryptedContents = platformSelectionToConfig(cemuCheck.GetActive(), wiiUCheck.GetActive())
 
 		if err := config.Save(); err != nil {
 			ShowErrorDialog(nil, fmt.Errorf("Failed to save config: %w", err))
@@ -526,11 +544,11 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	})
 
 	backButton.Connect("clicked", func() {
-		assistant.PreviousPage()
+		assistant.SetCurrentPage(previousSetupPageIndex(assistant.GetCurrentPage()))
 	})
 
 	nextButton.Connect("clicked", func() {
-		assistant.NextPage()
+		assistant.SetCurrentPage(nextSetupPageIndex(assistant.GetCurrentPage(), lastPageIndex))
 	})
 
 	finishButton.Connect("clicked", func() {
@@ -546,113 +564,21 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 
 		if pageNum == 0 {
 			setSetupButtonsVisible(skipButton, backButton, nextButton, finishButton, true, false, true, false)
+			nextButton.GrabFocus()
 		} else if pageNum == 1 {
 			setSetupButtonsVisible(skipButton, backButton, nextButton, finishButton, false, true, true, false)
 			count := selectedCount(europeCheck.GetActive(), usaCheck.GetActive(), japanCheck.GetActive())
 			nextButton.SetSensitive(count > 0)
+			focusSetupOptionList(regionList)
 		} else if pageNum == 2 {
 			setSetupButtonsVisible(skipButton, backButton, nextButton, finishButton, false, true, true, false)
 			nextButton.SetSensitive(true)
+			focusSetupOptionList(platformList)
 		} else if isFinishPage {
 			setSetupButtonsVisible(skipButton, backButton, nextButton, finishButton, false, true, false, true)
 			summaryRegions.SetMarkup("<span font='10' alpha='85%'>✓ Regions: " + selectedRegionsSummary(europeCheck.GetActive(), usaCheck.GetActive(), japanCheck.GetActive()) + "</span>")
 			summaryPlatforms.SetMarkup("<span font='10' alpha='85%'>✓ Platforms: " + selectedPlatformsSummary(cemuCheck.GetActive(), wiiUCheck.GetActive()) + "</span>")
-		}
-	})
-
-	// Button Logic
-
-	// Skip
-	skipButton.Connect("clicked", func() {
-		config.DidInitialSetup = true
-		if err := config.Save(); err != nil {
-			ShowErrorDialog(nil, fmt.Errorf("Failed to save config: %w", err))
-			return
-		}
-		assistant.Hide()
-		assistant.Emit("close", glib.TYPE_BOOLEAN, nil)
-		assistant.SetDestroyWithParent(true)
-	})
-
-	// Back
-	backButton.Connect("clicked", func() {
-		assistant.PreviousPage()
-	})
-
-	// Next
-	nextButton.Connect("clicked", func() {
-		assistant.NextPage()
-	})
-
-	// Finish
-	finishButton.Connect("clicked", func() {
-		assistant.Commit()
-	})
-
-	// Manage Visibility
-	assistant.Connect("prepare", func(assistant *gtk.Assistant, page *gtk.Widget) {
-		pageNum := assistant.GetCurrentPage()
-
-		// Default
-		skipButton.SetVisible(false)
-		backButton.SetVisible(false)
-		nextButton.SetVisible(false)
-		finishButton.SetVisible(false)
-
-		switch pageNum {
-		case 0: // Welcome
-			skipButton.SetVisible(true)
-			nextButton.SetVisible(true)
-		case 1: // Regions
-			backButton.SetVisible(true)
-			nextButton.SetVisible(true)
-			// Update Next sensitivity
-			count := 0
-			if europeCheck.GetActive() {
-				count++
-			}
-			if usaCheck.GetActive() {
-				count++
-			}
-			if japanCheck.GetActive() {
-				count++
-			}
-			nextButton.SetSensitive(count > 0)
-		case 2: // Platforms
-			backButton.SetVisible(true)
-			nextButton.SetVisible(true)
-			nextButton.SetSensitive(true)
-		case 3: // Summary
-			backButton.SetVisible(true)
-			finishButton.SetVisible(true)
-
-			// Update summary text
-			regionsStr := ""
-			if europeCheck.GetActive() {
-				regionsStr += "Europe, "
-			}
-			if usaCheck.GetActive() {
-				regionsStr += "USA, "
-			}
-			if japanCheck.GetActive() {
-				regionsStr += "Japan, "
-			}
-			if len(regionsStr) > 2 {
-				regionsStr = regionsStr[:len(regionsStr)-2]
-			}
-			summaryRegions.SetMarkup("<span font='10' alpha='85%'>✓ Regions: " + regionsStr + "</span>")
-
-			platformsStr := ""
-			if cemuCheck.GetActive() {
-				platformsStr += "CEMU"
-			}
-			if wiiUCheck.GetActive() {
-				if platformsStr != "" {
-					platformsStr += " + "
-				}
-				platformsStr += "Wii U"
-			}
-			summaryPlatforms.SetMarkup("<span font='10' alpha='85%'>✓ Platforms: " + platformsStr + "</span>")
+			finishButton.GrabFocus()
 		}
 	})
 
@@ -673,6 +599,108 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	}
 
 	return &initialSetupAssistantWindow, nil
+}
+
+func assistantPageTypeForIndex(pageIndex, lastPageIndex int) gtk.AssistantPageType {
+	if pageIndex == lastPageIndex {
+		return gtk.ASSISTANT_PAGE_CUSTOM
+	}
+	return gtk.ASSISTANT_PAGE_CUSTOM
+}
+
+func platformSelectionToConfig(cemu, wiiU bool) (decryptContents, deleteEncryptedContents bool) {
+	decryptContents = cemu
+	deleteEncryptedContents = cemu && !wiiU
+	return decryptContents, deleteEncryptedContents
+}
+
+type setupOptionRow struct {
+	row   *gtk.ListBoxRow
+	check *gtk.CheckButton
+}
+
+func configureSetupOptionList(list *gtk.ListBox, options ...setupOptionRow) {
+	if list == nil {
+		return
+	}
+
+	list.SetCanFocus(true)
+	list.Connect("row-activated", func(_ *gtk.ListBox, row *gtk.ListBoxRow) {
+		toggleSetupOptionForRow(row, options)
+	})
+	list.Connect("key-press-event", func(_ *gtk.ListBox, event *gdk.Event) bool {
+		keyEvent := gdk.EventKeyNewFromEvent(event)
+		if !isKeyboardActivationKey(keyEvent.KeyVal()) {
+			return false
+		}
+
+		row := list.GetSelectedRow()
+		if row == nil {
+			row = list.GetRowAtIndex(0)
+			if row == nil {
+				return false
+			}
+			list.SelectRow(row)
+		}
+
+		return toggleSetupOptionForRow(row, options)
+	})
+
+	for _, option := range options {
+		if option.row == nil {
+			continue
+		}
+		option.row.ToWidget().SetCanFocus(true)
+	}
+}
+
+func toggleSetupOptionForRow(row *gtk.ListBoxRow, options []setupOptionRow) bool {
+	if row == nil {
+		return false
+	}
+
+	rowIndex := row.GetIndex()
+	if rowIndex < 0 || rowIndex >= len(options) {
+		return false
+	}
+
+	option := options[rowIndex]
+	if option.check == nil {
+		return false
+	}
+
+	option.check.SetActive(!option.check.GetActive())
+	return true
+}
+
+func focusSetupOptionList(list *gtk.ListBox) {
+	if list == nil {
+		return
+	}
+
+	if list.GetSelectedRow() == nil {
+		if firstRow := list.GetRowAtIndex(0); firstRow != nil {
+			list.SelectRow(firstRow)
+		}
+	}
+	list.GrabFocus()
+}
+
+func nextSetupPageIndex(currentPage, lastPageIndex int) int {
+	if currentPage >= lastPageIndex {
+		return lastPageIndex
+	}
+	if currentPage < 0 {
+		return 0
+	}
+	return currentPage + 1
+}
+
+func previousSetupPageIndex(currentPage int) int {
+	if currentPage <= 0 {
+		return 0
+	}
+	return currentPage - 1
 }
 
 func (assistant *InitialSetupAssistantWindow) ShowAll() {

@@ -13,6 +13,7 @@ import (
 
 	wiiudownloader "github.com/Xpl0itU/WiiUDownloader"
 	"github.com/Xpl0itU/dialog"
+	"github.com/gotk3/gotk3/gdk"
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
 	"github.com/gotk3/gotk3/pango"
@@ -68,6 +69,7 @@ type MainWindow struct {
 	currentCategory                 uint8
 	client                          *http.Client
 	uiBuilt                         bool
+	syncingDownloadOptionWidgets    bool
 	searchTimer                     *time.Timer
 	filterModel                     *gtk.TreeModelFilter
 	sortModel                       *gtk.TreeModelSort
@@ -137,8 +139,7 @@ func (mw *MainWindow) createConfigWindow(config *Config) error {
 
 func (mw *MainWindow) applyConfig(config *Config) {
 	setDarkTheme(config.DarkMode)
-	mw.decryptContents = config.DecryptContents
-	mw.deleteEncryptedContents = config.DeleteEncryptedContents
+	mw.applyDownloadOptionState(config.DecryptContents, config.DeleteEncryptedContents)
 	mw.suggestRelatedContent = config.SuggestRelatedContent
 	mw.currentRegion = config.SelectedRegion
 }
@@ -265,66 +266,7 @@ func (mw *MainWindow) BuildUI() {
 		if err != nil {
 			log.Fatalln("Unable to create tree path:", err)
 		}
-
-		filterPath := mw.sortModel.ConvertPathToChildPath(pathObj)
-		if filterPath == nil {
-			return
-		}
-
-		childPath := mw.filterModel.ConvertPathToChildPath(filterPath)
-		if childPath == nil {
-			return
-		}
-
-		iter, err := mw.childStore.ToTreeModel().GetIter(childPath)
-		if err != nil {
-			return
-		}
-
-		inQueueVal, err := mw.childStore.ToTreeModel().GetValue(iter, IN_QUEUE_COLUMN)
-		if err != nil {
-			log.Fatalln("Unable to get value:", err)
-		}
-		isInQueue, err := inQueueVal.GoValue()
-		if err != nil {
-			log.Fatalln("Unable to get value:", err)
-		}
-
-		sel, err := mw.treeView.GetSelection()
-		if err != nil {
-			return
-		}
-
-		selectedCount := sel.CountSelectedRows()
-		selectedEntries := mw.collectSelectedEntriesForToggle(iter, selectedCount)
-
-		if isInQueue.(bool) {
-			for _, entry := range selectedEntries {
-				mw.queuePane.RemoveTitle(entry)
-			}
-		} else {
-			for _, entry := range selectedEntries {
-				if !mw.queuePane.IsTitleInQueue(entry) {
-					mw.queuePane.AddTitle(entry)
-				}
-			}
-
-			if mw.suggestRelatedContent {
-				candidates := mw.collectRelatedCandidates(selectedEntries)
-				if len(candidates) > 0 {
-					chosenRelated, accepted := mw.showRelatedTitlesDialog(selectedEntries, candidates)
-					if accepted {
-						for _, entry := range chosenRelated {
-							if !mw.queuePane.IsTitleInQueue(entry) {
-								mw.queuePane.AddTitle(entry)
-							}
-						}
-					}
-				}
-			}
-		}
-
-		mw.updateTitlesInQueue()
+		mw.toggleQueueForSortPath(pathObj)
 	})
 	column, err := gtk.TreeViewColumnNewWithAttribute("Queue", toggleRenderer, "active", IN_QUEUE_COLUMN)
 	if err != nil {
@@ -371,6 +313,15 @@ func (mw *MainWindow) BuildUI() {
 
 	SetupTreeViewAccessibility(mw.treeView)
 	mw.treeView.ToWidget().SetProperty("tooltip-text", "Game titles list. Use arrow keys to navigate, space or enter to toggle queue status for selected titles, or click checkboxes to add/remove titles.")
+	mw.treeView.Connect("key-press-event", func(treeView *gtk.TreeView, event *gdk.Event) bool {
+		keyEvent := gdk.EventKeyNewFromEvent(event)
+		if !isKeyboardActivationKey(keyEvent.KeyVal()) {
+			return false
+		}
+		return mw.toggleQueueFromKeyboard()
+	})
+	mw.ensureTreeViewCursor()
+	mw.window.SetFocusChild(mw.treeView.ToWidget())
 
 	mainvBox, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 6)
 	if err != nil {
@@ -602,21 +553,23 @@ func (mw *MainWindow) BuildUI() {
 	if err != nil {
 		log.Fatalln("Unable to create button:", err)
 	}
-	mw.decryptContentsCheckbox.SetActive(mw.decryptContents)
 	SetupCheckButtonAccessibility(mw.decryptContentsCheckbox, "When checked, downloaded game contents will be decrypted after download completes")
 
 	mw.deleteEncryptedContentsCheckbox, err = gtk.CheckButtonNewWithLabel("Delete encrypted contents after decryption")
 	if err != nil {
 		log.Fatalln("Unable to create button:", err)
 	}
-	mw.deleteEncryptedContentsCheckbox.SetSensitive(mw.decryptContents)
-	mw.deleteEncryptedContentsCheckbox.SetActive(mw.deleteEncryptedContents)
 	SetupCheckButtonAccessibility(mw.deleteEncryptedContentsCheckbox, "When checked and decrypt contents is enabled, encrypted files will be deleted after successful decryption")
-	mw.deleteEncryptedContentsCheckbox.Connect("clicked", func() {
+	mw.applyDownloadOptionState(mw.decryptContents, mw.deleteEncryptedContents)
+	mw.deleteEncryptedContentsCheckbox.Connect("toggled", func() {
+		if mw.syncingDownloadOptionWidgets {
+			return
+		}
 		config, err := loadConfig()
 		if err != nil {
 			return
 		}
+		mw.deleteEncryptedContents = mw.getDeleteEncryptedContents()
 		config.DeleteEncryptedContents = mw.getDeleteEncryptedContents()
 		if err := config.Save(); err != nil {
 			ShowErrorDialog(mw.window, err)
@@ -674,7 +627,7 @@ func (mw *MainWindow) BuildUI() {
 			}
 		}()
 	})
-	mw.decryptContentsCheckbox.Connect("clicked", mw.onDecryptContentsClicked)
+	mw.decryptContentsCheckbox.Connect("toggled", mw.onDecryptContentsClicked)
 	bottomhBox.PackStart(mw.downloadQueueButton, false, false, 0)
 
 	checkboxvBox, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
@@ -838,13 +791,17 @@ func (mw *MainWindow) onDecryptContentsMenuItemClicked(selectedPath string) erro
 }
 
 func (mw *MainWindow) onDecryptContentsClicked() {
-	mw.decryptContents = !mw.decryptContents
-	mw.deleteEncryptedContentsCheckbox.SetSensitive(mw.decryptContents)
+	if mw.syncingDownloadOptionWidgets {
+		return
+	}
+
+	mw.applyDownloadOptionState(mw.decryptContentsCheckbox.GetActive(), mw.getDeleteEncryptedContents())
 	config, err := loadConfig()
 	if err != nil {
 		return
 	}
 	config.DecryptContents = mw.decryptContents
+	config.DeleteEncryptedContents = mw.deleteEncryptedContents
 	if err := config.Save(); err != nil {
 		ShowErrorDialog(mw.window, err)
 		return
@@ -856,6 +813,37 @@ func (mw *MainWindow) getDeleteEncryptedContents() bool {
 		return mw.deleteEncryptedContentsCheckbox.GetActive()
 	}
 	return false
+}
+
+func downloadOptionCheckboxState(decryptContents, deleteEncryptedContents bool) (decryptActive, deleteActive, deleteSensitive bool) {
+	decryptActive = decryptContents
+	deleteSensitive = decryptContents
+	deleteActive = decryptContents && deleteEncryptedContents
+	return decryptActive, deleteActive, deleteSensitive
+}
+
+func (mw *MainWindow) applyDownloadOptionState(decryptContents, deleteEncryptedContents bool) {
+	decryptActive, deleteActive, deleteSensitive := downloadOptionCheckboxState(decryptContents, deleteEncryptedContents)
+
+	mw.decryptContents = decryptActive
+	mw.deleteEncryptedContents = deleteActive
+
+	mw.syncingDownloadOptionWidgets = true
+	defer func() {
+		mw.syncingDownloadOptionWidgets = false
+	}()
+
+	if mw.decryptContentsCheckbox != nil {
+		if mw.decryptContentsCheckbox.GetActive() != decryptActive {
+			mw.decryptContentsCheckbox.SetActive(decryptActive)
+		}
+	}
+	if mw.deleteEncryptedContentsCheckbox != nil {
+		mw.deleteEncryptedContentsCheckbox.SetSensitive(deleteSensitive)
+		if mw.deleteEncryptedContentsCheckbox.GetActive() != deleteActive {
+			mw.deleteEncryptedContentsCheckbox.SetActive(deleteActive)
+		}
+	}
 }
 
 func (mw *MainWindow) getTitleEntryFromChildIter(iter *gtk.TreeIter) (wiiudownloader.TitleEntry, bool) {
@@ -944,6 +932,123 @@ func (mw *MainWindow) collectSelectedEntriesForToggle(clickedIter *gtk.TreeIter,
 	}
 
 	return result
+}
+
+func (mw *MainWindow) toggleQueueForSortPath(sortPath *gtk.TreePath) bool {
+	if sortPath == nil {
+		return false
+	}
+
+	filterPath := mw.sortModel.ConvertPathToChildPath(sortPath)
+	if filterPath == nil {
+		return false
+	}
+
+	childPath := mw.filterModel.ConvertPathToChildPath(filterPath)
+	if childPath == nil {
+		return false
+	}
+
+	iter, err := mw.childStore.ToTreeModel().GetIter(childPath)
+	if err != nil {
+		return false
+	}
+
+	inQueueVal, err := mw.childStore.ToTreeModel().GetValue(iter, IN_QUEUE_COLUMN)
+	if err != nil {
+		log.Fatalln("Unable to get value:", err)
+	}
+	isInQueue, err := inQueueVal.GoValue()
+	if err != nil {
+		log.Fatalln("Unable to get value:", err)
+	}
+
+	selection, err := mw.treeView.GetSelection()
+	if err != nil {
+		return false
+	}
+
+	selectedCount := selection.CountSelectedRows()
+	selectedEntries := mw.collectSelectedEntriesForToggle(iter, selectedCount)
+
+	if isInQueue.(bool) {
+		for _, entry := range selectedEntries {
+			mw.queuePane.RemoveTitle(entry)
+		}
+	} else {
+		for _, entry := range selectedEntries {
+			if !mw.queuePane.IsTitleInQueue(entry) {
+				mw.queuePane.AddTitle(entry)
+			}
+		}
+
+		if mw.suggestRelatedContent {
+			candidates := mw.collectRelatedCandidates(selectedEntries)
+			if len(candidates) > 0 {
+				chosenRelated, accepted := mw.showRelatedTitlesDialog(selectedEntries, candidates)
+				if accepted {
+					for _, entry := range chosenRelated {
+						if !mw.queuePane.IsTitleInQueue(entry) {
+							mw.queuePane.AddTitle(entry)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	mw.updateTitlesInQueue()
+	return true
+}
+
+func (mw *MainWindow) toggleQueueFromKeyboard() bool {
+	if mw.treeView == nil || mw.sortModel == nil {
+		return false
+	}
+
+	sortPath, _ := mw.treeView.GetCursor()
+	if sortPath == nil {
+		if !mw.ensureTreeViewCursor() {
+			return false
+		}
+		sortPath, _ = mw.treeView.GetCursor()
+	}
+	if sortPath == nil {
+		return false
+	}
+
+	selection, err := mw.treeView.GetSelection()
+	if err != nil {
+		return false
+	}
+	if selection.CountSelectedRows() <= 1 && !selection.PathIsSelected(sortPath) {
+		selection.UnselectAll()
+		selection.SelectPath(sortPath)
+	}
+
+	return mw.toggleQueueForSortPath(sortPath)
+}
+
+func (mw *MainWindow) ensureTreeViewCursor() bool {
+	if mw.treeView == nil || mw.sortModel == nil {
+		return false
+	}
+
+	sortPath, _ := mw.treeView.GetCursor()
+	if sortPath != nil {
+		return true
+	}
+
+	firstPath, err := gtk.TreePathNewFirst()
+	if err != nil {
+		return false
+	}
+	if _, err := mw.sortModel.ToTreeModel().GetIter(firstPath); err != nil {
+		return false
+	}
+
+	mw.treeView.SetCursor(firstPath, nil, false)
+	return true
 }
 
 func (mw *MainWindow) collectRelatedCandidates(originals []wiiudownloader.TitleEntry) []wiiudownloader.TitleEntry {

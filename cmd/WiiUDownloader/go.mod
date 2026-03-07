@@ -1,8 +1,6 @@
 module github.com/Xpl0itU/WiiUDownloader/cmd/WiiUDownloader
 
-go 1.24.0
-
-toolchain go1.24.3
+go 1.25.0
 
 require (
 	github.com/Xpl0itU/WiiUDownloader v0.0.0-00010101000000-000000000000
@@ -12,7 +10,8 @@ require (
 	github.com/knadh/koanf/parsers/json v1.0.0
 	github.com/knadh/koanf/providers/file v1.2.1
 	github.com/knadh/koanf/providers/structs v1.0.0
-	github.com/knadh/koanf/v2 v2.3.2
+	github.com/knadh/koanf/v2 v2.3.3
+	github.com/lithammer/fuzzysearch v1.1.8
 	golang.org/x/sync v0.19.0
 )
 
@@ -26,8 +25,9 @@ require (
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	golang.org/x/crypto v0.48.0 // indirect
-	golang.org/x/net v0.50.0 // indirect
+	golang.org/x/net v0.51.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect
+	golang.org/x/text v0.34.0 // indirect
 )
 
 replace github.com/Xpl0itU/WiiUDownloader => ../..

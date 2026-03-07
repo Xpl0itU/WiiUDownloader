@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
 	wiiudownloader "github.com/Xpl0itU/WiiUDownloader"
@@ -224,9 +223,7 @@ func (mw *MainWindow) BuildUI() {
 		}
 
 		if mw.lastSearchText != "" {
-			search := strings.ToLower(mw.lastSearchText)
-			if !strings.Contains(strings.ToLower(nameStr), search) &&
-				!strings.Contains(strings.ToLower(tidStr), search) {
+			if !titleMatchesSearch(mw.lastSearchText, nameStr, tidStr) {
 				return false
 			}
 		}

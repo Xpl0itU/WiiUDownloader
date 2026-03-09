@@ -3,12 +3,16 @@ package wiiudownloader
 import (
 	"bytes"
 	"crypto/sha1"
+	"encoding/binary"
 	"errors"
 	"os"
 )
 
 func expectedContentDownloadSize(content Content) int64 {
-	return int64(content.Size)
+	if content.Type&CONTENT_TYPE_HASHED == CONTENT_TYPE_HASHED {
+		return int64(content.Size)
+	}
+	return int64(alignToAESBlockSize(content.Size))
 }
 
 func expectedH3DownloadSize(content Content) int64 {
@@ -29,6 +33,40 @@ func verifyH3File(path string, content Content) error {
 	sum := sha1.Sum(data)
 	if len(content.Hash) < sha1.Size || !bytes.Equal(sum[:], content.Hash[:sha1.Size]) {
 		return errors.New("H3 Hash mismatch")
+	}
+	return nil
+}
+
+func validateTMDFile(path string, expectedTitleID uint64) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	tmd, err := ParseTMD(data)
+	if err != nil {
+		return err
+	}
+	if expectedTitleID != 0 && tmd.TitleID != expectedTitleID {
+		return errors.New("title.tmd title ID mismatch")
+	}
+	return nil
+}
+
+func validateTicketFile(path string, expectedTitleID uint64, expectedTitleVersion uint16) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	if len(data) < TICKET_TITLE_VERSION_OFFSET+TICKET_TITLE_VERSION_SIZE {
+		return errors.New("title.tik too small")
+	}
+	gotTitleID := binary.BigEndian.Uint64(data[TICKET_TITLE_ID_OFFSET : TICKET_TITLE_ID_OFFSET+TICKET_TITLE_ID_SIZE])
+	if expectedTitleID != 0 && gotTitleID != expectedTitleID {
+		return errors.New("title.tik title ID mismatch")
+	}
+	gotTitleVersion := binary.LittleEndian.Uint16(data[TICKET_TITLE_VERSION_OFFSET : TICKET_TITLE_VERSION_OFFSET+TICKET_TITLE_VERSION_SIZE])
+	if expectedTitleVersion != 0 && gotTitleVersion != expectedTitleVersion {
+		return errors.New("title.tik title version mismatch")
 	}
 	return nil
 }

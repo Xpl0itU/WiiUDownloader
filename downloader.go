@@ -474,7 +474,14 @@ func DownloadTitle(titleID, outputDirectory string, doDecryption bool, progressR
 	}
 
 	tmdPath := filepath.Join(outputDir, "title.tmd")
-	if err := downloadFile(progressReporter, client, fmt.Sprintf("%s/%s", baseURL, "tmd"), tmdPath, true); err != nil {
+	if err := downloadFileWithOptions(context.Background(), progressReporter, client, fmt.Sprintf("%s/%s", baseURL, "tmd"), tmdPath, downloadOptions{
+		DoRetries:   true,
+		AllowResume: true,
+		UserAgent:   "WiiUDownloader",
+		Validate: func(path string) error {
+			return validateTMDFile(path, tid)
+		},
+	}); err != nil {
 		if progressReporter.Cancelled() || err == errCancel {
 			return nil
 		}
@@ -492,7 +499,14 @@ func DownloadTitle(titleID, outputDirectory string, doDecryption bool, progressR
 	}
 
 	tikPath := filepath.Join(outputDir, "title.tik")
-	if err := downloadFile(progressReporter, client, fmt.Sprintf("%s/%s", baseURL, "cetk"), tikPath, false); err != nil {
+	if err := downloadFileWithOptions(context.Background(), progressReporter, client, fmt.Sprintf("%s/%s", baseURL, "cetk"), tikPath, downloadOptions{
+		DoRetries:   false,
+		AllowResume: true,
+		UserAgent:   "WiiUDownloader",
+		Validate: func(path string) error {
+			return validateTicketFile(path, tmd.TitleID, tmd.TitleVersion)
+		},
+	}); err != nil {
 		if progressReporter.Cancelled() || err == errCancel {
 			return nil
 		}
@@ -500,7 +514,7 @@ func DownloadTitle(titleID, outputDirectory string, doDecryption bool, progressR
 		if err != nil {
 			return err
 		}
-		if err := GenerateTicket(tikPath, tEntry.TitleID, titleKey, tmd.TitleVersion); err != nil {
+		if err := GenerateTicket(tikPath, tmd.TitleID, titleKey, tmd.TitleVersion); err != nil {
 			return err
 		}
 	}

@@ -102,7 +102,9 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 		}
 	}
 
-	progressReporter.UpdateDecryptionProgress(1.0)
+	if progressReporter != nil {
+		progressReporter.UpdateDecryptionProgress(1.0)
+	}
 	if deleteEncryptedContents {
 		if err := doDeleteEncryptedContents(path); err != nil {
 			log.Printf("failed to remove encrypted contents in %q: %v", path, err)

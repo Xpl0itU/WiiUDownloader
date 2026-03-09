@@ -47,7 +47,6 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	assistant.SetTitle("WiiUDownloader - Initial Setup")
 	assistant.SetDefaultSize(INITIAL_SETUP_WINDOW_WIDTH, INITIAL_SETUP_WINDOW_HEIGHT)
 	assistant.SetPosition(gtk.WIN_POS_CENTER)
-	assistant.SetKeepAbove(true)
 	assistant.SetModal(true)
 
 	actionBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 6)

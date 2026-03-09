@@ -609,15 +609,16 @@ func (mw *MainWindow) BuildUI() {
 				mw.setDownloadControlsSensitive(true)
 			})
 
-			if err := mw.onDownloadQueueClicked(selectedPath, decryptContents, deleteEncryptedContents, config); err != nil {
+			runErr := mw.onDownloadQueueClicked(selectedPath, decryptContents, deleteEncryptedContents, config)
+			if runErr != nil {
 				glib.IdleAdd(func() {
-					mw.showError(err)
+					mw.showError(runErr)
 				})
 				return
 			}
 
 			errors := mw.progressWindow.GetErrors()
-			if len(errors) > 0 && !config.ContinueOnError {
+			if shouldShowQueueErrorSummary(runErr, errors) {
 				glib.IdleAdd(func() {
 					mw.showErrorsDialog(errors)
 				})
@@ -767,6 +768,10 @@ func (mw *MainWindow) resolveDownloadPath(config *Config, setStartDir func(strin
 		})
 	}
 	return chosen, nil
+}
+
+func shouldShowQueueErrorSummary(runErr error, errors []DownloadError) bool {
+	return runErr == nil && len(errors) > 0
 }
 
 func (mw *MainWindow) onDecryptContentsMenuItemClicked(selectedPath string) error {

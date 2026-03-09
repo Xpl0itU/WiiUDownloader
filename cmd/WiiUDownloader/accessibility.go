@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log"
 	"strings"
 
 	"github.com/gotk3/gotk3/gdk"
@@ -27,18 +26,6 @@ func composeAccessibleText(label, description, separator string) string {
 		return description
 	}
 	return strings.TrimSpace(label + separator + description)
-}
-
-func SetAccessibleLabel(widget gtk.IWidget, label string) {
-	setTooltip(widget, label)
-}
-
-func SetAccessibleDescription(widget gtk.IWidget, description string) {
-	setTooltip(widget, description)
-}
-
-func MakeWidgetAccessible(widget gtk.IWidget, label, description string) {
-	setTooltip(widget, composeAccessibleText(label, description, " - "))
 }
 
 func SetupButtonAccessibility(button *gtk.Button, description string) error {
@@ -105,7 +92,6 @@ func SetupWindowAccessibility(window *gtk.Window, _ string) error {
 	if window == nil {
 		return nil
 	}
-	window.SetKeepAbove(false)
 	return nil
 }
 
@@ -113,12 +99,7 @@ func SetupDialogAccessibility(dialog *gtk.Dialog, _ string) error {
 	if dialog == nil {
 		return nil
 	}
-	dialog.SetKeepAbove(true)
 	return nil
-}
-
-func LogAccessibilitySetup(componentName string, label string) {
-	log.Printf("[Accessibility] Setting up %s: %s", componentName, label)
 }
 
 func isKeyboardActivationKey(keyVal uint) bool {

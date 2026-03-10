@@ -1,9 +1,11 @@
 package wiiudownloader
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -12,11 +14,19 @@ import (
 
 const (
 	defaultDownloadSegmentSize = 1 << 20
-	downloadPartExtension      = ".part"
-	downloadStateExtension     = ".resume.json"
-	downloadStateDirPerm       = 0o755
-	downloadFilePerm           = 0o644
+	mediumDownloadSegmentSize  = 4 << 20
+	largeDownloadSegmentSize   = 16 << 20
+	maxSmallDownloadSize       = 64 << 20
+	maxMediumDownloadSize      = 1 << 30
+
+	downloadPartExtension  = ".part"
+	downloadStateExtension = ".resume.json"
+	downloadStateDirPerm   = 0o755
+	downloadFilePerm       = 0o644
+	resumeJournalMagic     = "WUDRESUME2"
 )
+
+var resumeJournalHeader = []byte(resumeJournalMagic + "\n")
 
 type downloadOptions struct {
 	ExpectedSize int64
@@ -66,49 +76,165 @@ func hashSegmentHex(data []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func loadDownloadState(path string) (downloadState, error) {
+func loadDownloadState(path string) (downloadState, bool, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return downloadState{}, err
+		return downloadState{}, false, err
 	}
+	if bytes.HasPrefix(data, resumeJournalHeader) {
+		return loadDownloadStateJournal(data)
+	}
+	return loadLegacyDownloadState(data)
+}
+
+func loadLegacyDownloadState(data []byte) (downloadState, bool, error) {
 	var state downloadState
 	if err := json.Unmarshal(data, &state); err != nil {
-		return downloadState{}, err
+		return downloadState{}, false, err
 	}
-	if state.SegmentSize <= 0 {
-		state.SegmentSize = defaultDownloadSegmentSize
+	state.SegmentSize = normalizeSegmentSize(state.SegmentSize, state.ExpectedSize)
+	return state, false, nil
+}
+
+func loadDownloadStateJournal(data []byte) (downloadState, bool, error) {
+	lines := bytes.Split(data[len(resumeJournalHeader):], []byte{'\n'})
+	var (
+		state downloadState
+		found bool
+		dirty bool
+	)
+
+	for _, line := range lines {
+		line = bytes.TrimSpace(line)
+		if len(line) == 0 {
+			continue
+		}
+		var snapshot downloadState
+		if err := json.Unmarshal(line, &snapshot); err != nil {
+			if found {
+				dirty = true
+				break
+			}
+			return downloadState{}, false, err
+		}
+		snapshot.SegmentSize = normalizeSegmentSize(snapshot.SegmentSize, snapshot.ExpectedSize)
+		state = snapshot
+		found = true
 	}
-	return state, nil
+
+	if !found {
+		return downloadState{}, false, errors.New("download state journal is empty")
+	}
+	return state, dirty, nil
 }
 
 func saveDownloadState(path string, state downloadState) error {
+	return persistDownloadState(path, state, false)
+}
+
+func rewriteDownloadState(path string, state downloadState) error {
+	return persistDownloadState(path, state, true)
+}
+
+func persistDownloadState(path string, state downloadState, rewrite bool) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, downloadStateDirPerm); err != nil {
 		return err
 	}
+
+	state.SegmentSize = normalizeSegmentSize(state.SegmentSize, state.ExpectedSize)
 	data, err := json.Marshal(state)
 	if err != nil {
 		return err
 	}
-	tmpPath := path + ".tmp"
-	if err := os.WriteFile(tmpPath, data, downloadFilePerm); err != nil {
+	snapshot := append(data, '\n')
+
+	if rewrite {
+		file, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, downloadFilePerm)
+		if err != nil {
+			return err
+		}
+		if _, err := file.Write(resumeJournalHeader); err != nil {
+			file.Close()
+			return err
+		}
+		if _, err := file.Write(snapshot); err != nil {
+			file.Close()
+			return err
+		}
+		if err := file.Sync(); err != nil {
+			file.Close()
+			return err
+		}
+		return file.Close()
+	}
+
+	hasHeader, err := resumeStateHasJournalHeader(path)
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmpPath, path)
+	if !hasHeader {
+		return persistDownloadState(path, state, true)
+	}
+
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, downloadFilePerm)
+	if err != nil {
+		return err
+	}
+	if _, err := file.Write(snapshot); err != nil {
+		file.Close()
+		return err
+	}
+	if err := file.Sync(); err != nil {
+		file.Close()
+		return err
+	}
+	return file.Close()
 }
 
-func normalizeSegmentSize(segmentSize int64) int64 {
+func resumeStateHasJournalHeader(path string) (bool, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	defer file.Close()
+
+	header := make([]byte, len(resumeJournalHeader))
+	if _, err := io.ReadFull(file, header); err != nil {
+		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+			return false, nil
+		}
+		return false, err
+	}
+	return bytes.Equal(header, resumeJournalHeader), nil
+}
+
+func normalizeSegmentSize(segmentSize int64, expectedSize int64) int64 {
 	if segmentSize > 0 {
 		return segmentSize
 	}
-	return defaultDownloadSegmentSize
+	switch {
+	case expectedSize > 0 && expectedSize <= defaultDownloadSegmentSize:
+		return expectedSize
+	case expectedSize > 0 && expectedSize <= maxSmallDownloadSize:
+		return defaultDownloadSegmentSize
+	case expectedSize > 0 && expectedSize <= maxMediumDownloadSize:
+		return mediumDownloadSegmentSize
+	case expectedSize > 0:
+		return largeDownloadSegmentSize
+	default:
+		return defaultDownloadSegmentSize
+	}
 }
 
 func resetDownloadState(downloadURL string, expectedSize int64, segmentSize int64) downloadState {
 	return downloadState{
 		URL:          downloadURL,
 		ExpectedSize: expectedSize,
-		SegmentSize:  normalizeSegmentSize(segmentSize),
+		SegmentSize:  normalizeSegmentSize(segmentSize, expectedSize),
 		Segments:     make([]downloadSegment, 0),
 	}
 }
@@ -134,7 +260,7 @@ func prepareDownloadState(dstPath, downloadURL string, expectedSize int64, allow
 	partPath := partPathFor(dstPath)
 	statePath := statePathFor(dstPath)
 
-	state, err := loadDownloadState(statePath)
+	state, dirty, err := loadDownloadState(statePath)
 	switch {
 	case os.IsNotExist(err):
 		if _, statErr := os.Stat(partPath); statErr == nil {
@@ -175,7 +301,7 @@ func prepareDownloadState(dstPath, downloadURL string, expectedSize int64, allow
 	}
 
 	state.URL = downloadURL
-	state.SegmentSize = normalizeSegmentSize(segmentSize)
+	state.SegmentSize = normalizeSegmentSize(segmentSize, expectedSize)
 	if expectedSize > 0 {
 		state.ExpectedSize = expectedSize
 	}
@@ -184,8 +310,8 @@ func prepareDownloadState(dstPath, downloadURL string, expectedSize int64, allow
 	if err != nil {
 		return nil, 0, err
 	}
-	if changed {
-		if err := saveDownloadState(statePath, state); err != nil {
+	if changed || dirty {
+		if err := rewriteDownloadState(statePath, state); err != nil {
 			return nil, 0, err
 		}
 	}
@@ -199,9 +325,7 @@ func verifyPartialFile(partPath string, state *downloadState) (int64, bool, erro
 	}
 	defer file.Close()
 
-	if state.SegmentSize <= 0 {
-		state.SegmentSize = defaultDownloadSegmentSize
-	}
+	state.SegmentSize = normalizeSegmentSize(state.SegmentSize, state.ExpectedSize)
 
 	validOffset := int64(0)
 	trimmedSegments := state.Segments[:0]
@@ -314,7 +438,30 @@ func (w *resumeStateWriter) Write(p []byte) (int, error) {
 }
 
 func (w *resumeStateWriter) Finalize() error {
+	if err := w.reconcileFromFile(); err != nil {
+		return err
+	}
 	return w.record(nil, true)
+}
+
+func (w *resumeStateWriter) reconcileFromFile() error {
+	info, err := w.file.Stat()
+	if err != nil {
+		return err
+	}
+	recordedOffset := w.state.VerifiedOffset
+	if len(w.pending) > 0 {
+		recordedOffset = w.pendingAt + int64(len(w.pending))
+	}
+	if info.Size() <= recordedOffset {
+		return nil
+	}
+
+	missing := make([]byte, info.Size()-recordedOffset)
+	if _, err := w.file.ReadAt(missing, recordedOffset); err != nil {
+		return err
+	}
+	return w.record(missing, false)
 }
 
 func (w *resumeStateWriter) record(p []byte, finalize bool) error {
@@ -331,13 +478,8 @@ func (w *resumeStateWriter) record(p []byte, finalize bool) error {
 			}
 		}
 	}
-	if !finalize && len(w.pending) > 0 {
-		if err := w.savePartialPending(); err != nil {
-			return err
-		}
-	}
 	if finalize && len(w.pending) > 0 {
-		if err := w.persistPending(); err != nil {
+		if err := w.savePartialPending(); err != nil {
 			return err
 		}
 	}
@@ -349,19 +491,18 @@ func (w *resumeStateWriter) persistPending() error {
 		w.state.PartialSegment = nil
 		return nil
 	}
+
 	segment := downloadSegment{
 		Offset: w.pendingAt,
 		Size:   int64(len(w.pending)),
 		SHA256: hashSegmentHex(w.pending),
 	}
-	w.state.PartialSegment = &segment
+	w.state.Segments = append(w.state.Segments, segment)
+	w.state.PartialSegment = nil
 	w.state.VerifiedOffset = segment.Offset + segment.Size
-	if int64(len(w.pending)) == w.segmentSize {
-		w.state.Segments = append(w.state.Segments, segment)
-		w.state.PartialSegment = nil
-		w.pending = w.pending[:0]
-		w.pendingAt = w.state.VerifiedOffset
-	}
+	w.pending = w.pending[:0]
+	w.pendingAt = w.state.VerifiedOffset
+
 	return saveDownloadState(w.statePath, *w.state)
 }
 

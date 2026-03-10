@@ -5,7 +5,6 @@ go 1.25.0
 require (
 	github.com/Xpl0itU/WiiUDownloader v0.0.0-00010101000000-000000000000
 	github.com/Xpl0itU/dialog v0.0.0-20230805114139-ec888310aded
-	github.com/dustin/go-humanize v1.0.1
 	github.com/gotk3/gotk3 v0.6.5-0.20240618185848-ff349ae13f56
 	github.com/knadh/koanf/parsers/json v1.0.0
 	github.com/knadh/koanf/providers/file v1.2.1

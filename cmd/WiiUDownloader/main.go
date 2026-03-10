@@ -195,6 +195,9 @@ func buildHTTPClient() *http.Client {
 }
 
 func showMainWindow(app *gtk.Application, win *MainWindow) {
+	if config, err := loadConfig(); err == nil && config != nil {
+		win.applyConfig(config)
+	}
 	win.SetApplicationForGTKWindow(app)
 	win.BuildUI()
 	app.AddWindow(win.window)

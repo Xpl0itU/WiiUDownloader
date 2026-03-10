@@ -56,6 +56,14 @@ type MainWindow struct {
 	downloadQueueButton             *gtk.Button
 	decryptContentsCheckbox         *gtk.CheckButton
 	deleteEncryptedContentsCheckbox *gtk.CheckButton
+	decryptContentsToggleHandle     glib.SignalHandle
+	deleteEncryptedContentsHandle   glib.SignalHandle
+	japanRegionCheckbox             *gtk.CheckButton
+	usaRegionCheckbox               *gtk.CheckButton
+	europeRegionCheckbox            *gtk.CheckButton
+	japanRegionToggleHandle         glib.SignalHandle
+	usaRegionToggleHandle           glib.SignalHandle
+	europeRegionToggleHandle        glib.SignalHandle
 	deleteEncryptedContents         bool
 	progressWindow                  *ProgressWindow
 	configWindow                    *ConfigWindow
@@ -68,7 +76,6 @@ type MainWindow struct {
 	currentCategory                 uint8
 	client                          *http.Client
 	uiBuilt                         bool
-	syncingDownloadOptionWidgets    bool
 	searchTimer                     *time.Timer
 	filterModel                     *gtk.TreeModelFilter
 	sortModel                       *gtk.TreeModelSort
@@ -140,7 +147,7 @@ func (mw *MainWindow) applyConfig(config *Config) {
 	setDarkTheme(config.DarkMode)
 	mw.applyDownloadOptionState(config.DecryptContents, config.DeleteEncryptedContents)
 	mw.suggestRelatedContent = config.SuggestRelatedContent
-	mw.currentRegion = config.SelectedRegion
+	mw.applyRegionSelection(config.SelectedRegion)
 }
 
 func (mw *MainWindow) BuildUI() {
@@ -557,11 +564,7 @@ func (mw *MainWindow) BuildUI() {
 		log.Fatalln("Unable to create button:", err)
 	}
 	SetupCheckButtonAccessibility(mw.deleteEncryptedContentsCheckbox, "When checked and decrypt contents is enabled, encrypted files will be deleted after successful decryption")
-	mw.applyDownloadOptionState(mw.decryptContents, mw.deleteEncryptedContents)
-	mw.deleteEncryptedContentsCheckbox.Connect("toggled", func() {
-		if mw.syncingDownloadOptionWidgets {
-			return
-		}
+	mw.deleteEncryptedContentsHandle = mw.deleteEncryptedContentsCheckbox.Connect("toggled", func() {
 		config, err := loadConfig()
 		if err != nil {
 			return
@@ -625,7 +628,8 @@ func (mw *MainWindow) BuildUI() {
 			}
 		}()
 	})
-	mw.decryptContentsCheckbox.Connect("toggled", mw.onDecryptContentsClicked)
+	mw.decryptContentsToggleHandle = mw.decryptContentsCheckbox.Connect("toggled", mw.onDecryptContentsClicked)
+	mw.applyDownloadOptionState(mw.decryptContents, mw.deleteEncryptedContents)
 	bottomhBox.PackStart(mw.downloadQueueButton, false, false, 0)
 
 	checkboxvBox, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
@@ -638,34 +642,35 @@ func (mw *MainWindow) BuildUI() {
 	bottomhBox.PackStart(checkboxvBox, false, false, 0)
 
 	japanButton, err := gtk.CheckButtonNewWithLabel("Japan")
-	japanButton.SetActive(mw.currentRegion&wiiudownloader.MCP_REGION_JAPAN != 0)
 	if err != nil {
 		log.Fatalln("Unable to create button:", err)
 	}
-	japanButton.Connect("clicked", func() {
+	mw.japanRegionCheckbox = japanButton
+	mw.japanRegionToggleHandle = japanButton.Connect("toggled", func() {
 		mw.onRegionChange(japanButton, wiiudownloader.MCP_REGION_JAPAN)
 	})
 	bottomhBox.PackEnd(japanButton, false, false, 0)
 
 	usaButton, err := gtk.CheckButtonNewWithLabel("USA")
-	usaButton.SetActive(mw.currentRegion&wiiudownloader.MCP_REGION_USA != 0)
 	if err != nil {
 		log.Fatalln("Unable to create button:", err)
 	}
-	usaButton.Connect("clicked", func() {
+	mw.usaRegionCheckbox = usaButton
+	mw.usaRegionToggleHandle = usaButton.Connect("toggled", func() {
 		mw.onRegionChange(usaButton, wiiudownloader.MCP_REGION_USA)
 	})
 	bottomhBox.PackEnd(usaButton, false, false, 0)
 
 	europeButton, err := gtk.CheckButtonNewWithLabel("Europe")
-	europeButton.SetActive(mw.currentRegion&wiiudownloader.MCP_REGION_EUROPE != 0)
 	if err != nil {
 		log.Fatalln("Unable to create button:", err)
 	}
-	europeButton.Connect("clicked", func() {
+	mw.europeRegionCheckbox = europeButton
+	mw.europeRegionToggleHandle = europeButton.Connect("toggled", func() {
 		mw.onRegionChange(europeButton, wiiudownloader.MCP_REGION_EUROPE)
 	})
 	bottomhBox.PackEnd(europeButton, false, false, 0)
+	mw.syncRegionCheckboxes()
 
 	mainvBox.PackEnd(bottomhBox, false, false, 0)
 
@@ -689,12 +694,10 @@ func (mw *MainWindow) BuildUI() {
 }
 
 func (mw *MainWindow) onRegionChange(button *gtk.CheckButton, region uint8) {
-	if button.GetActive() {
-		mw.currentRegion = region | mw.currentRegion
-	} else {
-		mw.currentRegion = region ^ mw.currentRegion
+	mw.currentRegion = updateRegionMask(mw.currentRegion, region, button.GetActive())
+	if mw.filterModel != nil {
+		mw.filterModel.Refilter()
 	}
-	mw.filterModel.Refilter()
 	config, err := loadConfig()
 	if err != nil {
 		return
@@ -704,6 +707,38 @@ func (mw *MainWindow) onRegionChange(button *gtk.CheckButton, region uint8) {
 		ShowErrorDialog(mw.window, err)
 		return
 	}
+}
+
+func updateRegionMask(current, region uint8, active bool) uint8 {
+	if active {
+		return current | region
+	}
+	return current &^ region
+}
+
+func regionCheckboxStates(regionMask uint8) (europe, usa, japan bool) {
+	return regionMask&wiiudownloader.MCP_REGION_EUROPE != 0,
+		regionMask&wiiudownloader.MCP_REGION_USA != 0,
+		regionMask&wiiudownloader.MCP_REGION_JAPAN != 0
+}
+
+func (mw *MainWindow) applyRegionSelection(regionMask uint8) {
+	mw.currentRegion = regionMask
+	mw.syncRegionCheckboxes()
+	if mw.filterModel != nil {
+		mw.filterModel.Refilter()
+	}
+}
+
+func (mw *MainWindow) syncRegionCheckboxes() {
+	if mw.europeRegionCheckbox == nil || mw.usaRegionCheckbox == nil || mw.japanRegionCheckbox == nil {
+		return
+	}
+
+	europeActive, usaActive, japanActive := regionCheckboxStates(mw.currentRegion)
+	setCheckButtonActiveWithoutSignal(mw.europeRegionCheckbox, mw.europeRegionToggleHandle, europeActive)
+	setCheckButtonActiveWithoutSignal(mw.usaRegionCheckbox, mw.usaRegionToggleHandle, usaActive)
+	setCheckButtonActiveWithoutSignal(mw.japanRegionCheckbox, mw.japanRegionToggleHandle, japanActive)
 }
 
 func (mw *MainWindow) onSearchEntryChanged() {
@@ -793,10 +828,6 @@ func (mw *MainWindow) onDecryptContentsMenuItemClicked(selectedPath string) erro
 }
 
 func (mw *MainWindow) onDecryptContentsClicked() {
-	if mw.syncingDownloadOptionWidgets {
-		return
-	}
-
 	mw.applyDownloadOptionState(mw.decryptContentsCheckbox.GetActive(), mw.getDeleteEncryptedContents())
 	config, err := loadConfig()
 	if err != nil {
@@ -830,22 +861,28 @@ func (mw *MainWindow) applyDownloadOptionState(decryptContents, deleteEncryptedC
 	mw.decryptContents = decryptActive
 	mw.deleteEncryptedContents = deleteActive
 
-	mw.syncingDownloadOptionWidgets = true
-	defer func() {
-		mw.syncingDownloadOptionWidgets = false
-	}()
-
 	if mw.decryptContentsCheckbox != nil {
-		if mw.decryptContentsCheckbox.GetActive() != decryptActive {
-			mw.decryptContentsCheckbox.SetActive(decryptActive)
-		}
+		setCheckButtonActiveWithoutSignal(mw.decryptContentsCheckbox, mw.decryptContentsToggleHandle, decryptActive)
 	}
 	if mw.deleteEncryptedContentsCheckbox != nil {
 		mw.deleteEncryptedContentsCheckbox.SetSensitive(deleteSensitive)
-		if mw.deleteEncryptedContentsCheckbox.GetActive() != deleteActive {
-			mw.deleteEncryptedContentsCheckbox.SetActive(deleteActive)
-		}
+		setCheckButtonActiveWithoutSignal(mw.deleteEncryptedContentsCheckbox, mw.deleteEncryptedContentsHandle, deleteActive)
 	}
+}
+
+func setCheckButtonActiveWithoutSignal(button *gtk.CheckButton, handle glib.SignalHandle, active bool) {
+	if button == nil || button.GetActive() == active {
+		return
+	}
+
+	if handle == 0 {
+		button.SetActive(active)
+		return
+	}
+
+	button.HandlerBlock(handle)
+	defer button.HandlerUnblock(handle)
+	button.SetActive(active)
 }
 
 func (mw *MainWindow) getTitleEntryFromChildIter(iter *gtk.TreeIter) (wiiudownloader.TitleEntry, bool) {

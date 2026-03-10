@@ -48,7 +48,7 @@ func extractWiiUContents(path string, tmd *TMD, cipherHashTree cipher.Block, pro
 	entriesLen := uint32(len(table.Entries))
 
 	for i := uint32(1); i < entriesLen; i++ {
-		if entriesLen > 1 {
+		if progressReporter != nil && entriesLen > 1 {
 			progressReporter.UpdateDecryptionProgress(float64(i) / float64(entriesLen-1))
 		}
 

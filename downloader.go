@@ -70,6 +70,10 @@ func waitUntilResumed(progressReporter ProgressReporter) bool {
 	return !progressReporter.Cancelled()
 }
 
+func isCancelled(progressReporter ProgressReporter) bool {
+	return progressReporter != nil && progressReporter.Cancelled()
+}
+
 func shouldRetry(progressReporter ProgressReporter, doRetries bool, attempt int) bool {
 	return doRetries && attempt < maxRetries && waitUntilResumed(progressReporter)
 }
@@ -86,7 +90,7 @@ func monitorCancellation(ctx context.Context, cancel context.CancelFunc, progres
 			case <-done:
 				return
 			case <-ticker.C:
-				if progressReporter != nil && progressReporter.Cancelled() {
+				if isCancelled(progressReporter) {
 					cancel()
 					return
 				}
@@ -190,7 +194,7 @@ func downloadFileWithOptions(ctx context.Context, progressReporter ProgressRepor
 		if err != nil {
 			stopMonitor()
 			cancel()
-			if progressReporter != nil && progressReporter.Cancelled() {
+			if isCancelled(progressReporter) {
 				return errCancel
 			}
 			if shouldRetry(progressReporter, opts.DoRetries, attempt) {
@@ -369,7 +373,7 @@ func downloadFileWithOptions(ctx context.Context, progressReporter ProgressRepor
 			}
 			file.Close()
 			cancel()
-			if progressReporter != nil && progressReporter.Cancelled() {
+			if isCancelled(progressReporter) {
 				return errCancel
 			}
 			if shouldRetry(progressReporter, opts.DoRetries, attempt) {
@@ -482,7 +486,7 @@ func DownloadTitle(titleID, outputDirectory string, doDecryption bool, progressR
 			return validateTMDFile(path, tid)
 		},
 	}); err != nil {
-		if progressReporter.Cancelled() || err == errCancel {
+		if isCancelled(progressReporter) || err == errCancel {
 			return nil
 		}
 		return err
@@ -507,7 +511,7 @@ func DownloadTitle(titleID, outputDirectory string, doDecryption bool, progressR
 			return validateTicketFile(path, tmd.TitleID, tmd.TitleVersion)
 		},
 	}); err != nil {
-		if progressReporter.Cancelled() || err == errCancel {
+		if isCancelled(progressReporter) || err == errCancel {
 			return nil
 		}
 		titleKey, err := GenerateKey(titleID)
@@ -531,7 +535,7 @@ func DownloadTitle(titleID, outputDirectory string, doDecryption bool, progressR
 	}
 
 	if err := GenerateCert(tmd, filepath.Join(outputDir, "title.cert"), progressReporter, client); err != nil {
-		if progressReporter.Cancelled() || err == errCancel {
+		if isCancelled(progressReporter) || err == errCancel {
 			return nil
 		}
 		return err
@@ -558,7 +562,7 @@ func DownloadTitle(titleID, outputDirectory string, doDecryption bool, progressR
 				AllowResume:  true,
 				UserAgent:    "WiiUDownloader",
 			}, sem); err != nil {
-				if progressReporter.Cancelled() {
+				if isCancelled(progressReporter) {
 					return errCancel
 				}
 				return err
@@ -575,13 +579,13 @@ func DownloadTitle(titleID, outputDirectory string, doDecryption bool, progressR
 						return verifyH3File(path, content)
 					},
 				}, sem); err != nil {
-					if progressReporter.Cancelled() {
+					if isCancelled(progressReporter) {
 						return errCancel
 					}
 					return err
 				}
 			}
-			if progressReporter.Cancelled() {
+			if isCancelled(progressReporter) {
 				return errCancel
 			}
 			return nil
@@ -595,7 +599,7 @@ func DownloadTitle(titleID, outputDirectory string, doDecryption bool, progressR
 		return err
 	}
 
-	if doDecryption && !progressReporter.Cancelled() {
+	if doDecryption && !isCancelled(progressReporter) {
 		if err := DecryptContents(outputDir, progressReporter, deleteEncryptedContents); err != nil {
 			return err
 		}

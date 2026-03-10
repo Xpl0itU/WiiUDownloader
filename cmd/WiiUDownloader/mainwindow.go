@@ -995,11 +995,11 @@ func (mw *MainWindow) toggleQueueForSortPath(sortPath *gtk.TreePath) bool {
 
 	inQueueVal, err := mw.childStore.ToTreeModel().GetValue(iter, IN_QUEUE_COLUMN)
 	if err != nil {
-		log.Fatalln("Unable to get value:", err)
+		return false
 	}
 	isInQueue, err := inQueueVal.GoValue()
 	if err != nil {
-		log.Fatalln("Unable to get value:", err)
+		return false
 	}
 
 	selection, err := mw.treeView.GetSelection()

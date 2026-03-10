@@ -28,6 +28,8 @@ const (
 
 var resumeJournalHeader = []byte(resumeJournalMagic + "\n")
 
+var errInvalidDownloadState = errors.New("invalid download state")
+
 type downloadOptions struct {
 	ExpectedSize int64
 	DoRetries    bool
@@ -90,7 +92,7 @@ func loadDownloadState(path string) (downloadState, bool, error) {
 func loadLegacyDownloadState(data []byte) (downloadState, bool, error) {
 	var state downloadState
 	if err := json.Unmarshal(data, &state); err != nil {
-		return downloadState{}, false, err
+		return downloadState{}, false, fmt.Errorf("%w: %v", errInvalidDownloadState, err)
 	}
 	state.SegmentSize = normalizeSegmentSize(state.SegmentSize, state.ExpectedSize)
 	return state, false, nil
@@ -115,7 +117,7 @@ func loadDownloadStateJournal(data []byte) (downloadState, bool, error) {
 				dirty = true
 				break
 			}
-			return downloadState{}, false, err
+			return downloadState{}, false, fmt.Errorf("%w: %v", errInvalidDownloadState, err)
 		}
 		snapshot.SegmentSize = normalizeSegmentSize(snapshot.SegmentSize, snapshot.ExpectedSize)
 		state = snapshot
@@ -123,7 +125,7 @@ func loadDownloadStateJournal(data []byte) (downloadState, bool, error) {
 	}
 
 	if !found {
-		return downloadState{}, false, errors.New("download state journal is empty")
+		return downloadState{}, false, fmt.Errorf("%w: download state journal is empty", errInvalidDownloadState)
 	}
 	return state, dirty, nil
 }
@@ -271,6 +273,13 @@ func prepareDownloadState(dstPath, downloadURL string, expectedSize int64, allow
 		newState := resetDownloadState(downloadURL, expectedSize, segmentSize)
 		return &newState, 0, nil
 	case err != nil:
+		if errors.Is(err, errInvalidDownloadState) {
+			if err := cleanupPartialDownload(dstPath); err != nil {
+				return nil, 0, err
+			}
+			newState := resetDownloadState(downloadURL, expectedSize, segmentSize)
+			return &newState, 0, nil
+		}
 		return nil, 0, err
 	}
 

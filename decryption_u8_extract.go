@@ -20,7 +20,7 @@ const (
 
 func extractWiiContents(path string, tmd *TMD, cipherHashTree cipher.Block, progressReporter ProgressReporter) error {
 	for i, content := range tmd.Contents {
-		if len(tmd.Contents) > 0 {
+		if progressReporter != nil && len(tmd.Contents) > 0 {
 			progressReporter.UpdateDecryptionProgress(float64(i) / float64(len(tmd.Contents)))
 		}
 

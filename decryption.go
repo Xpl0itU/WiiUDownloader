@@ -44,7 +44,7 @@ type Content struct {
 func DecryptContents(path string, progressReporter ProgressReporter, deleteEncryptedContents bool) (err error) {
 	defer func() {
 		if err != nil {
-			err = fmt.Errorf("Decryption Error: %w", err)
+			err = fmt.Errorf("decryption error: %w", err)
 		}
 	}()
 

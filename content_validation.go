@@ -8,6 +8,21 @@ import (
 	"os"
 )
 
+const tidHighWiiSystemApp = 0x00010002
+
+func titleIDsMatchTMD(expectedTitleID, actualTitleID uint64, tmdVersion byte) bool {
+	if expectedTitleID == 0 || actualTitleID == expectedTitleID {
+		return true
+	}
+	if tmdVersion != TMD_VERSION_WII {
+		return false
+	}
+	if GetTitleIDHigh(expectedTitleID) != TID_HIGH_VWII_SYSTEM_APP || GetTitleIDHigh(actualTitleID) != tidHighWiiSystemApp {
+		return false
+	}
+	return GetTitleIDLow(expectedTitleID) == GetTitleIDLow(actualTitleID)
+}
+
 func expectedContentDownloadSize(content Content) int64 {
 	if content.Type&CONTENT_TYPE_HASHED == CONTENT_TYPE_HASHED {
 		return int64(content.Size)
@@ -46,7 +61,7 @@ func validateTMDFile(path string, expectedTitleID uint64) error {
 	if err != nil {
 		return err
 	}
-	if expectedTitleID != 0 && tmd.TitleID != expectedTitleID {
+	if !titleIDsMatchTMD(expectedTitleID, tmd.TitleID, tmd.Version) {
 		return errors.New("title.tmd title ID mismatch")
 	}
 	return nil

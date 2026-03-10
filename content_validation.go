@@ -19,7 +19,7 @@ func expectedH3DownloadSize(content Content) int64 {
 	if content.Type&CONTENT_TYPE_HASHED != CONTENT_TYPE_HASHED {
 		return 0
 	}
-	chunkCount := (content.Size + HASH_BLOCK_SIZE - 1) / HASH_BLOCK_SIZE
+	chunkCount := (content.Size + BLOCK_SIZE_HASHED - 1) / BLOCK_SIZE_HASHED
 	h3Entries := (chunkCount + (HASH_ENTRIES_PER_LEVEL * HASH_ENTRIES_PER_LEVEL * HASH_ENTRIES_PER_LEVEL) - 1) /
 		(HASH_ENTRIES_PER_LEVEL * HASH_ENTRIES_PER_LEVEL * HASH_ENTRIES_PER_LEVEL)
 	return int64(h3Entries) * HASH_ENTRY_SIZE

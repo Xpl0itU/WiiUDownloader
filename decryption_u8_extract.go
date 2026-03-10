@@ -18,7 +18,7 @@ const (
 	U8_MAGIC_OFFSET_SIZE = 4
 )
 
-func extractWiiContents(path string, tmd *TMD, cipherHashTree cipher.Block, progressReporter ProgressReporter) error {
+func extractWiiContents(path string, tmd *TMD, cipherHashTree cipher.Block, progressReporter ProgressReporter, deleteEncryptedContents bool) error {
 	for i, content := range tmd.Contents {
 		if progressReporter != nil && len(tmd.Contents) > 0 {
 			progressReporter.UpdateDecryptionProgress(float64(i) / float64(len(tmd.Contents)))
@@ -67,10 +67,18 @@ func extractWiiContents(path string, tmd *TMD, cipherHashTree cipher.Block, prog
 		}
 
 		if !foundU8 {
-			if err := os.WriteFile(filepath.Join(path, content.CIDStr+".app"), decData, 0o644); err != nil {
+			outputPath := decryptedWiiContentPath(path, content.CIDStr, deleteEncryptedContents)
+			if err := os.WriteFile(outputPath, decData, 0o644); err != nil {
 				return err
 			}
 		}
 	}
 	return nil
+}
+
+func decryptedWiiContentPath(path string, cid string, deleteEncryptedContents bool) string {
+	if deleteEncryptedContents {
+		return filepath.Join(path, cid+".app")
+	}
+	return filepath.Join(path, cid+".dec.app")
 }

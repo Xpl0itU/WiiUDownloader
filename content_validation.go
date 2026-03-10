@@ -9,6 +9,7 @@ import (
 )
 
 const tidHighWiiSystemApp = 0x00010002
+const tidHighWiiSystem = 0x00010008
 
 func titleIDsMatchTMD(expectedTitleID, actualTitleID uint64, tmdVersion byte) bool {
 	if expectedTitleID == 0 || actualTitleID == expectedTitleID {
@@ -17,7 +18,18 @@ func titleIDsMatchTMD(expectedTitleID, actualTitleID uint64, tmdVersion byte) bo
 	if tmdVersion != TMD_VERSION_WII {
 		return false
 	}
-	if GetTitleIDHigh(expectedTitleID) != TID_HIGH_VWII_SYSTEM_APP || GetTitleIDHigh(actualTitleID) != tidHighWiiSystemApp {
+	expectedHigh := GetTitleIDHigh(expectedTitleID)
+	actualHigh := GetTitleIDHigh(actualTitleID)
+	switch expectedHigh {
+	case TID_HIGH_VWII_SYSTEM_APP:
+		if actualHigh != tidHighWiiSystemApp {
+			return false
+		}
+	case TID_HIGH_VWII_SYSTEM:
+		if actualHigh != tidHighWiiSystem {
+			return false
+		}
+	default:
 		return false
 	}
 	return GetTitleIDLow(expectedTitleID) == GetTitleIDLow(actualTitleID)
@@ -79,7 +91,7 @@ func validateTicketFile(path string, expectedTitleID uint64, expectedTitleVersio
 	if expectedTitleID != 0 && gotTitleID != expectedTitleID {
 		return errors.New("title.tik title ID mismatch")
 	}
-	gotTitleVersion := binary.LittleEndian.Uint16(data[TICKET_TITLE_VERSION_OFFSET : TICKET_TITLE_VERSION_OFFSET+TICKET_TITLE_VERSION_SIZE])
+	gotTitleVersion := binary.BigEndian.Uint16(data[TICKET_TITLE_VERSION_OFFSET : TICKET_TITLE_VERSION_OFFSET+TICKET_TITLE_VERSION_SIZE])
 	if expectedTitleVersion != 0 && gotTitleVersion != expectedTitleVersion {
 		return errors.New("title.tik title version mismatch")
 	}

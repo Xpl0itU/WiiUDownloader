@@ -20,6 +20,19 @@ var (
 	keygen_pw = []byte{0x6d, 0x79, 0x70, 0x61, 0x73, 0x73}
 )
 
+var titleKeyPasswords = map[uint8][]byte{
+	TITLE_KEY_mypass:     []byte("mypass"),
+	TITLE_KEY_nintendo:   []byte("nintendo"),
+	TITLE_KEY_test:       []byte("test"),
+	TITLE_KEY_1234567890: []byte("1234567890"),
+	TITLE_KEY_Lucy131211: []byte("Lucy131211"),
+	TITLE_KEY_fbf10:      []byte("fbf10"),
+	TITLE_KEY_5678:       []byte("5678"),
+	TITLE_KEY_1234:       []byte("1234"),
+	TITLE_KEY_:           []byte(""),
+	TITLE_KEY_MAGIC:      []byte("MAGIC"),
+}
+
 func encryptAES(data, key, iv []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -36,6 +49,10 @@ func encryptAES(data, key, iv []byte) ([]byte, error) {
 }
 
 func GenerateKey(tid string) ([]byte, error) {
+	return GenerateKeyWithType(tid, TITLE_KEY_mypass)
+}
+
+func GenerateKeyWithType(tid string, keyType uint8) ([]byte, error) {
 	if err := validateTitleIDHex(tid); err != nil {
 		return nil, err
 	}
@@ -52,7 +69,11 @@ func GenerateKey(tid string) ([]byte, error) {
 
 	md5sum := md5.Sum(bh)
 
-	key := pbkdf2WithSHA1(keygen_pw, md5sum[:], 20, 16)
+	password, ok := titleKeyPasswords[keyType]
+	if !ok {
+		password = keygen_pw
+	}
+	key := pbkdf2WithSHA1(password, md5sum[:], 20, 16)
 
 	iv := make([]byte, 16)
 	for i, j := 0, 0; j < 8; i += 2 {

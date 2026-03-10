@@ -78,7 +78,7 @@ func GenerateTicket(path string, titleID uint64, titleKey []byte, titleVersion u
 	copy(ticketData[TICKET_TITLE_ID_OFFSET:TICKET_TITLE_ID_OFFSET+TICKET_TITLE_ID_SIZE], titleIDBytes[:])
 
 	var versionBytes [TICKET_TITLE_VERSION_SIZE]byte
-	binary.LittleEndian.PutUint16(versionBytes[:], titleVersion)
+	binary.BigEndian.PutUint16(versionBytes[:], titleVersion)
 	copy(ticketData[TICKET_TITLE_VERSION_OFFSET:TICKET_TITLE_VERSION_OFFSET+TICKET_TITLE_VERSION_SIZE], versionBytes[:])
 
 	_, err = ticketFile.Write(ticketData)

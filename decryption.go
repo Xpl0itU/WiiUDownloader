@@ -93,11 +93,11 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 	}
 
 	if tmd.Version == TMD_VERSION_WIIU {
-		if err := extractWiiUContents(path, tmd, cipherHashTree, progressReporter); err != nil {
+		if err := extractWiiUContents(path, tmd, cipherHashTree, progressReporter, deleteEncryptedContents); err != nil {
 			return err
 		}
 	} else {
-		if err := extractWiiContents(path, tmd, cipherHashTree, progressReporter); err != nil {
+		if err := extractWiiContents(path, tmd, cipherHashTree, progressReporter, deleteEncryptedContents); err != nil {
 			return err
 		}
 	}

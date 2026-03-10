@@ -419,14 +419,19 @@ func (mw *MainWindow) BuildUI() {
 				return
 			}
 
-			titleKey, err := wiiudownloader.GenerateKey(fmt.Sprintf("%016x", tmd.TitleID))
+			titleIDHex := fmt.Sprintf("%016x", tmd.TitleID)
+			titleEntry := wiiudownloader.GetTitleEntryFromTid(tmd.TitleID)
+			titleKeyType := uint8(wiiudownloader.TITLE_KEY_mypass)
+			if titleEntry.TitleID == tmd.TitleID {
+				titleKeyType = titleEntry.Key
+			}
+			titleKey, err := wiiudownloader.GenerateKeyWithType(titleIDHex, titleKeyType)
 			if err != nil {
 				glib.IdleAdd(func() {
 					ShowErrorDialog(mw.window, err)
 				})
 				return
 			}
-
 			if err := wiiudownloader.GenerateTicket(filepath.Join(parentDir, "title.tik"), tmd.TitleID, titleKey, tmd.TitleVersion); err != nil {
 				glib.IdleAdd(func() {
 					ShowErrorDialog(mw.window, err)

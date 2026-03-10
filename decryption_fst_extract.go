@@ -3,6 +3,7 @@ package wiiudownloader
 import (
 	"bytes"
 	"crypto/cipher"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"os"
@@ -23,7 +24,7 @@ const (
 	FST_HASHED_CONTENT_TYPE = 0x02
 )
 
-func extractWiiUContents(path string, tmd *TMD, cipherHashTree cipher.Block, progressReporter ProgressReporter) error {
+func extractWiiUContents(path string, tmd *TMD, cipherHashTree cipher.Block, progressReporter ProgressReporter, deleteEncryptedContents bool) error {
 	fstEncFile, err := os.Open(filepath.Join(path, tmd.Contents[0].CIDStr+".app"))
 	if err != nil {
 		return err
@@ -37,10 +38,10 @@ func extractWiiUContents(path string, tmd *TMD, cipherHashTree cipher.Block, pro
 
 	table, err := fstfmt.Parse(decryptedBuffer.Bytes())
 	if err != nil {
-		return err
+		return extractRawWiiUContents(path, tmd, cipherHashTree, progressReporter, deleteEncryptedContents)
 	}
 	if len(table.Entries) == 0 {
-		return errors.New("empty FST")
+		return extractRawWiiUContents(path, tmd, cipherHashTree, progressReporter, deleteEncryptedContents)
 	}
 
 	entry := make([]uint32, MAX_LEVELS)
@@ -117,6 +118,35 @@ func extractWiiUContents(path string, tmd *TMD, cipherHashTree cipher.Block, pro
 		closeErr := srcFile.Close()
 		if err != nil {
 			return fmt.Errorf("failed to extract file %s (ID: %d, offset: %d, size: %d): %w", fileName, matchingContent.ID, contentOffset, currentEntry.Length, err)
+		}
+		if closeErr != nil {
+			return closeErr
+		}
+	}
+	return nil
+}
+
+func extractRawWiiUContents(path string, tmd *TMD, cipherHashTree cipher.Block, progressReporter ProgressReporter, deleteEncryptedContents bool) error {
+	for i, content := range tmd.Contents {
+		if progressReporter != nil && len(tmd.Contents) > 0 {
+			progressReporter.UpdateDecryptionProgress(float64(i) / float64(len(tmd.Contents)))
+		}
+
+		srcFile, err := os.Open(filepath.Join(path, content.CIDStr+".app"))
+		if err != nil {
+			return err
+		}
+
+		targetPath := decryptedWiiContentPath(path, content.CIDStr, deleteEncryptedContents)
+		contentIndex := binary.BigEndian.Uint16(content.Index)
+		if content.Type&FST_HASHED_CONTENT_TYPE != 0 {
+			err = extractFileHash(srcFile, 0, 0, content.Size, targetPath, contentIndex, cipherHashTree)
+		} else {
+			err = extractFile(srcFile, 0, 0, content.Size, targetPath, contentIndex, cipherHashTree)
+		}
+		closeErr := srcFile.Close()
+		if err != nil {
+			return fmt.Errorf("failed to extract raw content %s: %w", content.CIDStr, err)
 		}
 		if closeErr != nil {
 			return closeErr

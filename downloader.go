@@ -514,7 +514,11 @@ func DownloadTitle(titleID, outputDirectory string, doDecryption bool, progressR
 		if isCancelled(progressReporter) || err == errCancel {
 			return nil
 		}
-		titleKey, err := GenerateKey(titleID)
+		titleKeyType := uint8(TITLE_KEY_mypass)
+		if tEntry.TitleID == tid {
+			titleKeyType = tEntry.Key
+		}
+		titleKey, err := GenerateKeyWithType(titleID, titleKeyType)
 		if err != nil {
 			return err
 		}

@@ -110,6 +110,9 @@ type ProgressWindow struct {
 	startTime       time.Time
 	errors          []DownloadError
 	errorsMutex     sync.Mutex
+	updatePending   bool
+	decPending      bool
+	decProgress     float64
 }
 
 func (pw *ProgressWindow) SetGameTitle(title string) {
@@ -122,19 +125,31 @@ func (pw *ProgressWindow) UpdateDownloadProgress(downloaded int64, filename stri
 	if downloaded == 0 {
 		return
 	}
+	
+	pw.progressMutex.Lock()
+	if _, ok := pw.progressPerFile[filename]; !ok {
+		pw.progressMutex.Unlock()
+		return
+	}
+	pw.progressPerFile[filename] += downloaded
+	
+	if pw.updatePending {
+		pw.progressMutex.Unlock()
+		return
+	}
+	pw.updatePending = true
+	pw.progressMutex.Unlock()
+
 	glib.IdleAdd(func() bool {
 		pw.setTransferControlsSensitive(true)
 		pw.progressMutex.Lock()
-		if _, ok := pw.progressPerFile[filename]; !ok {
-			pw.progressMutex.Unlock()
-			return false
-		}
-		pw.progressPerFile[filename] += downloaded
+		pw.updatePending = false
 		total := pw.totalDownloaded
 		for _, v := range pw.progressPerFile {
 			total += v
 		}
 		pw.progressMutex.Unlock()
+		
 		pw.bar.SetFraction(float64(total) / float64(pw.totalToDownload))
 		pw.speedAverager.AddSpeed(calculateDownloadSpeed(total, pw.startTime, time.Now()))
 		pw.bar.SetText(fmt.Sprintf(
@@ -148,10 +163,24 @@ func (pw *ProgressWindow) UpdateDownloadProgress(downloaded int64, filename stri
 }
 
 func (pw *ProgressWindow) UpdateDecryptionProgress(progress float64) {
+	pw.progressMutex.Lock()
+	pw.decProgress = progress
+	if pw.decPending {
+		pw.progressMutex.Unlock()
+		return
+	}
+	pw.decPending = true
+	pw.progressMutex.Unlock()
+
 	glib.IdleAdd(func() bool {
 		pw.setTransferControlsSensitive(false)
-		pw.bar.SetFraction(progress)
-		pw.bar.SetText(fmt.Sprintf("Decrypting (%.2f%%)", progress*PERCENT_SCALE))
+		pw.progressMutex.Lock()
+		prog := pw.decProgress
+		pw.decPending = false
+		pw.progressMutex.Unlock()
+		
+		pw.bar.SetFraction(prog)
+		pw.bar.SetText(fmt.Sprintf("Decrypting (%.2f%%)", prog*PERCENT_SCALE))
 		return false
 	})
 }

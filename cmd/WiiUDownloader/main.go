@@ -73,7 +73,7 @@ func main() {
 
 	win := NewMainWindow(wiiudownloader.GetTitleEntries(wiiudownloader.TITLE_CATEGORY_GAME), client, config)
 	config.saveConfigCallback = func() {
-		glib.IdleAdd(func() {
+		uiIdleAdd(func() {
 			win.applyConfig(config)
 		})
 	}

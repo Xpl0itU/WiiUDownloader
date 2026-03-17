@@ -360,7 +360,7 @@ func (mw *MainWindow) BuildUI() {
 		}
 		selectedPath, err := dialog.Directory().Title("Select the game path").Browse()
 		if err != nil {
-			glib.IdleAdd(func() {
+			uiIdleAdd(func() {
 				mw.progressWindow.Window.Hide()
 			})
 			return
@@ -369,7 +369,7 @@ func (mw *MainWindow) BuildUI() {
 		mw.progressWindow.Window.ShowAll()
 		go func() {
 			if err := mw.onDecryptContentsMenuItemClicked(selectedPath); err != nil {
-				glib.IdleAdd(func() {
+				uiIdleAdd(func() {
 					mw.showError(err)
 				})
 			}
@@ -398,14 +398,14 @@ func (mw *MainWindow) BuildUI() {
 		mw.progressWindow.ResetTotals()
 
 		go func() {
-			defer glib.IdleAdd(func() {
+			defer uiIdleAdd(func() {
 				mw.progressWindow.Window.Hide()
 			})
 
 			parentDir := filepath.Dir(tmdPath)
 			tmdData, err := os.ReadFile(tmdPath)
 			if err != nil {
-				glib.IdleAdd(func() {
+				uiIdleAdd(func() {
 					ShowErrorDialog(mw.window, err)
 				})
 				return
@@ -413,7 +413,7 @@ func (mw *MainWindow) BuildUI() {
 
 			tmd, err := wiiudownloader.ParseTMD(tmdData)
 			if err != nil {
-				glib.IdleAdd(func() {
+				uiIdleAdd(func() {
 					ShowErrorDialog(mw.window, err)
 				})
 				return
@@ -427,26 +427,26 @@ func (mw *MainWindow) BuildUI() {
 			}
 			titleKey, err := wiiudownloader.GenerateKeyWithType(titleIDHex, titleKeyType)
 			if err != nil {
-				glib.IdleAdd(func() {
+				uiIdleAdd(func() {
 					ShowErrorDialog(mw.window, err)
 				})
 				return
 			}
 			if err := wiiudownloader.GenerateTicket(filepath.Join(parentDir, "title.tik"), tmd.TitleID, titleKey, tmd.TitleVersion); err != nil {
-				glib.IdleAdd(func() {
+				uiIdleAdd(func() {
 					ShowErrorDialog(mw.window, err)
 				})
 				return
 			}
 
 			if err := wiiudownloader.GenerateCert(tmd, filepath.Join(parentDir, "title.cert"), mw.progressWindow, http.DefaultClient); err != nil {
-				glib.IdleAdd(func() {
+				uiIdleAdd(func() {
 					ShowErrorDialog(mw.window, err)
 				})
 				return
 			}
 
-			glib.IdleAdd(func() {
+			uiIdleAdd(func() {
 				infoDialog := gtk.MessageDialogNew(mw.window, gtk.DIALOG_MODAL, gtk.MESSAGE_INFO, gtk.BUTTONS_OK, "Successfully generated fake ticket and cert.")
 				infoDialog.Run()
 				infoDialog.Destroy()
@@ -598,7 +598,7 @@ func (mw *MainWindow) BuildUI() {
 
 		selectedPath, err := mw.resolveDownloadPath(config, dialog.SetStartDir, dialog.Browse)
 		if err != nil {
-			glib.IdleAdd(func() {
+			uiIdleAdd(func() {
 				mw.progressWindow.Window.Hide()
 			})
 			return
@@ -609,17 +609,17 @@ func (mw *MainWindow) BuildUI() {
 		deleteEncryptedContents := mw.getDeleteEncryptedContents()
 
 		go func() {
-			glib.IdleAdd(func() {
+			uiIdleAdd(func() {
 				mw.setDownloadControlsSensitive(false)
 			})
 
-			defer glib.IdleAdd(func() {
+			defer uiIdleAdd(func() {
 				mw.setDownloadControlsSensitive(true)
 			})
 
 			runErr := mw.onDownloadQueueClicked(selectedPath, decryptContents, deleteEncryptedContents, config)
 			if runErr != nil {
-				glib.IdleAdd(func() {
+				uiIdleAdd(func() {
 					mw.showError(runErr)
 				})
 				return
@@ -627,7 +627,7 @@ func (mw *MainWindow) BuildUI() {
 
 			errors := mw.progressWindow.GetErrors()
 			if shouldShowQueueErrorSummary(runErr, errors) {
-				glib.IdleAdd(func() {
+				uiIdleAdd(func() {
 					mw.showErrorsDialog(errors)
 				})
 			}
@@ -751,7 +751,7 @@ func (mw *MainWindow) onSearchEntryChanged() {
 		mw.searchTimer.Stop()
 	}
 	mw.searchTimer = time.AfterFunc(SEARCH_DEBOUNCE_DELAY, func() {
-		glib.IdleAdd(func() {
+		uiIdleAdd(func() {
 			text, err := mw.searchEntry.GetText()
 			if err != nil {
 				log.Printf("Unable to get text: %v", err)
@@ -773,7 +773,7 @@ func (mw *MainWindow) onCategoryToggled(button *gtk.ToggleButton) {
 		return
 	}
 	mw.currentCategory = wiiudownloader.GetCategoryFromFormattedCategory(category)
-	glib.IdleAdd(func() {
+	uiIdleAdd(func() {
 		mw.filterModel.Refilter()
 	})
 }
@@ -803,7 +803,7 @@ func (mw *MainWindow) resolveDownloadPath(config *Config, setStartDir func(strin
 	}
 	config.LastSelectedPath = chosen
 	if saveErr := config.Save(); saveErr != nil {
-		glib.IdleAdd(func() {
+		uiIdleAdd(func() {
 			ShowErrorDialog(mw.window, saveErr)
 		})
 	}
@@ -817,7 +817,7 @@ func shouldShowQueueErrorSummary(runErr error, errors []DownloadError) bool {
 func (mw *MainWindow) onDecryptContentsMenuItemClicked(selectedPath string) error {
 	err := wiiudownloader.DecryptContents(selectedPath, mw.progressWindow, false)
 
-	glib.IdleAdd(func() {
+	uiIdleAdd(func() {
 		mw.progressWindow.Window.Hide()
 		config, loadErr := loadConfig()
 		if loadErr != nil {
@@ -1306,7 +1306,7 @@ func (mw *MainWindow) updateTitlesInQueue() {
 }
 
 func (mw *MainWindow) showError(err error) {
-	glib.IdleAdd(func() {
+	uiIdleAdd(func() {
 		mw.progressWindow.Window.Hide()
 	})
 	errorDialog := gtk.MessageDialogNew(mw.window, gtk.DIALOG_MODAL, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, "%s", err.Error())
@@ -1471,7 +1471,7 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string, decryptContent
 		}
 	})
 
-	glib.IdleAdd(func() {
+	uiIdleAdd(func() {
 		mw.progressWindow.Window.Hide()
 		mw.updateTitlesInQueue()
 	})

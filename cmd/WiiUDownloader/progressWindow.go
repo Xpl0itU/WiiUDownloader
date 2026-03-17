@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/gotk3/gotk3/gdk"
-	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
 )
 
@@ -116,7 +115,7 @@ type ProgressWindow struct {
 }
 
 func (pw *ProgressWindow) SetGameTitle(title string) {
-	glib.IdleAdd(func() {
+	uiIdleAdd(func() {
 		pw.gameLabel.SetText(title)
 	})
 }
@@ -140,7 +139,7 @@ func (pw *ProgressWindow) UpdateDownloadProgress(downloaded int64, filename stri
 	pw.updatePending = true
 	pw.progressMutex.Unlock()
 
-	glib.IdleAdd(func() bool {
+	uiIdleAddBool(func() bool {
 		pw.setTransferControlsSensitive(true)
 		pw.progressMutex.Lock()
 		pw.updatePending = false
@@ -172,7 +171,7 @@ func (pw *ProgressWindow) UpdateDecryptionProgress(progress float64) {
 	pw.decPending = true
 	pw.progressMutex.Unlock()
 
-	glib.IdleAdd(func() bool {
+	uiIdleAddBool(func() bool {
 		pw.setTransferControlsSensitive(false)
 		pw.progressMutex.Lock()
 		prog := pw.decProgress
@@ -203,7 +202,7 @@ func (pw *ProgressWindow) SetCancelled() {
 	}
 	pw.controlMutex.Unlock()
 
-	glib.IdleAdd(func() bool {
+	uiIdleAddBool(func() bool {
 		pw.setTransferControlsSensitive(false)
 		if pw.pauseButton != nil {
 			pw.pauseButton.SetLabel("Pause")
@@ -239,7 +238,7 @@ func (pw *ProgressWindow) TogglePaused() {
 	}
 	pw.controlMutex.Unlock()
 
-	glib.IdleAdd(func() bool {
+	uiIdleAddBool(func() bool {
 		if pw.pauseButton != nil {
 			if paused {
 				pw.pauseButton.SetLabel("Resume")
@@ -274,7 +273,7 @@ func (pw *ProgressWindow) resetTransferState() {
 }
 
 func (pw *ProgressWindow) ResetTotals() {
-	glib.IdleAdd(func() {
+	uiIdleAdd(func() {
 		pw.setTransferControlsSensitive(true)
 		if pw.pauseButton != nil {
 			pw.pauseButton.SetLabel("Pause")
@@ -291,7 +290,7 @@ func (pw *ProgressWindow) ResetTotals() {
 }
 
 func (pw *ProgressWindow) ResetTotalsAndErrors() {
-	glib.IdleAdd(func() {
+	uiIdleAdd(func() {
 		pw.setTransferControlsSensitive(true)
 		if pw.pauseButton != nil {
 			pw.pauseButton.SetLabel("Pause")

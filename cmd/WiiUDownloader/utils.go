@@ -100,6 +100,28 @@ func applyStyling() {
 	.settings-grid button {
 		padding: 6px 10px;
 	}
+	.gratitude-footer {
+		border-top: 2px solid #00a2ed;
+		background: shade(@theme_bg_color, 0.92);
+		padding: 12px;
+	}
+	button.kofi-btn {
+		background-image: none;
+		background-color: #ff813f;
+		color: white;
+		font-weight: bold;
+		border-radius: 8px;
+		padding: 6px 16px;
+		transition: all 0.2s ease-in-out;
+	}
+	button.kofi-btn:hover {
+		background-image: none;
+		background-color: shade(#ff813f, 1.15);
+	}
+	.success-flash {
+		background-color: #00a2ed;
+		color: white;
+	}
 	`
 	if err := provider.LoadFromData(css); err != nil {
 		log.Printf("failed to load CSS styling: %v", err)

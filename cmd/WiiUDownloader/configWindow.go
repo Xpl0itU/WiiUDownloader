@@ -114,7 +114,16 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 	SetupCheckButtonAccessibility(suggestRelatedContentCheck, "When checked, adding a game, update, or DLC to the queue will offer related content that matches the same title ID")
 	grid.AttachNextTo(suggestRelatedContentCheck, continueOnErrorCheck, gtk.POS_BOTTOM, 1, 1)
 
-	var lastWidget gtk.IWidget = suggestRelatedContentCheck
+	showDonationBarCheck, err := gtk.CheckButtonNewWithLabel("Show support nudge")
+	if err != nil {
+		return nil, err
+	}
+	showDonationBarCheck.SetActive(config.ShowDonationBar)
+	showDonationBarCheck.SetMarginTop(SETTINGS_FIELD_MARGIN_TOP)
+	SetupCheckButtonAccessibility(showDonationBarCheck, "When checked, a small bar will appear at the bottom of the main window to support the project development")
+	grid.AttachNextTo(showDonationBarCheck, suggestRelatedContentCheck, gtk.POS_BOTTOM, 1, 1)
+
+	var lastWidget gtk.IWidget = showDonationBarCheck
 
 	saveButton, err := gtk.ButtonNewWithLabel("Save and Apply")
 	if err != nil {
@@ -138,6 +147,7 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 	rememberPathCheck.Connect("toggled", func() { dirty = true })
 	continueOnErrorCheck.Connect("toggled", func() { dirty = true })
 	suggestRelatedContentCheck.Connect("toggled", func() { dirty = true })
+	showDonationBarCheck.Connect("toggled", func() { dirty = true })
 	downloadPathEntry.Connect("changed", func() { dirty = true })
 
 	saveButton.Connect("clicked", func() {
@@ -158,6 +168,7 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 		config.RememberLastPath = rememberPathCheck.GetActive()
 		config.ContinueOnError = continueOnErrorCheck.GetActive()
 		config.SuggestRelatedContent = suggestRelatedContentCheck.GetActive()
+		config.ShowDonationBar = showDonationBarCheck.GetActive()
 
 		setButtonsSensitive(false, saveButton, closeButton)
 

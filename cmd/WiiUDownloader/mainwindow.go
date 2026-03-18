@@ -6,7 +6,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"time"
 
@@ -29,7 +31,7 @@ const (
 
 const (
 	MAIN_WINDOW_WIDTH             = 870
-	MAIN_WINDOW_HEIGHT            = 400
+	MAIN_WINDOW_HEIGHT            = 460
 	SEARCH_ENTRY_WIDTH_CHARS      = 24
 	UI_MARGIN_SMALL               = 6
 	SPLIT_PANE_MARGIN             = 2
@@ -80,6 +82,9 @@ type MainWindow struct {
 	filterModel                     *gtk.TreeModelFilter
 	sortModel                       *gtk.TreeModelSort
 	childStore                      *gtk.ListStore
+	donationBar                     *gtk.Box
+	donationLabel                   *gtk.Label
+	showDonationBar                 bool
 }
 
 func NewMainWindow(entries []wiiudownloader.TitleEntry, client *http.Client, config *Config) *MainWindow {
@@ -148,6 +153,7 @@ func (mw *MainWindow) applyConfig(config *Config) {
 	mw.applyDownloadOptionState(config.DecryptContents, config.DeleteEncryptedContents)
 	mw.suggestRelatedContent = config.SuggestRelatedContent
 	mw.applyRegionSelection(config.SelectedRegion)
+	mw.setDonationBarVisible(config.ShowDonationBar)
 }
 
 func (mw *MainWindow) BuildUI() {
@@ -679,6 +685,11 @@ func (mw *MainWindow) BuildUI() {
 
 	mainvBox.PackEnd(bottomhBox, false, false, 0)
 
+	mw.setupDonationBar()
+	if mw.donationBar != nil {
+		mainvBox.PackEnd(mw.donationBar, false, false, 0)
+	}
+
 	bottomhBox.SetSizeRequest(DOWNLOAD_PANE_MIN_WIDTH, -1)
 
 	splitPane, err := gtk.PanedNew(gtk.ORIENTATION_HORIZONTAL)
@@ -827,9 +838,108 @@ func (mw *MainWindow) onDecryptContentsMenuItemClicked(selectedPath string) erro
 		errors := mw.progressWindow.GetErrors()
 		if len(errors) > 0 && config.ContinueOnError {
 			mw.showErrorsDialog(errors)
+		} else if len(errors) == 0 {
+			mw.updateDonationBar(true)
 		}
 	})
 	return err
+}
+
+func (mw *MainWindow) setupDonationBar() {
+	bar, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 12)
+	if err != nil {
+		log.Println("Unable to create donation bar:", err)
+		return
+	}
+	bar.SetMarginTop(0)
+	bar.SetMarginBottom(0)
+	bar.SetMarginStart(0)
+	bar.SetMarginEnd(0)
+	addStyleClass(bar.GetStyleContext, "gratitude-footer")
+
+	label, err := gtk.LabelNew("")
+	if err != nil {
+		log.Println("Unable to create label:", err)
+		return
+	}
+	label.SetHAlign(gtk.ALIGN_START)
+	label.SetLineWrap(true)
+	label.SetLineWrapMode(pango.WRAP_WORD)
+	bar.PackStart(label, true, true, 0)
+	mw.donationLabel = label
+
+	button, err := gtk.ButtonNewWithLabel("Support on Ko-Fi")
+	if err != nil {
+		log.Println("Unable to create button:", err)
+	} else {
+		addStyleClass(button.GetStyleContext, "kofi-btn")
+		button.Connect("clicked", func() {
+			openURL("https://ko-fi.com/dathinkingchair")
+		})
+		bar.PackEnd(button, false, false, 0)
+	}
+
+	mw.donationBar = bar
+	mw.updateDonationBar(false)
+	mw.setDonationBarVisible(mw.showDonationBar)
+}
+
+func (mw *MainWindow) updateDonationBar(success bool) {
+	if mw.donationLabel == nil || mw.donationBar == nil {
+		return
+	}
+	text := "<span size='large'><b>Love WiiUDownloader?</b> Support the developer to keep this project alive</span>"
+	if success {
+		text = "<span size='large'><b>Ready to play!</b> If I helped you out today, please consider a small tip</span>"
+
+		styleContext, err := mw.donationBar.GetStyleContext()
+		if err == nil {
+			count := 0
+			glib.TimeoutAdd(300, func() bool {
+				if count >= 6 {
+					styleContext.RemoveClass("success-flash")
+					return false
+				}
+				if count%2 == 0 {
+					styleContext.AddClass("success-flash")
+				} else {
+					styleContext.RemoveClass("success-flash")
+				}
+				count++
+				return true
+			})
+		}
+	}
+	mw.donationLabel.SetMarkup(text)
+}
+
+func (mw *MainWindow) setDonationBarVisible(visible bool) {
+	mw.showDonationBar = visible
+	if mw.donationBar != nil {
+		mw.donationBar.SetVisible(visible)
+	}
+}
+
+func openURL(url string) {
+	var err error
+	switch runtime.GOOS {
+	case "linux":
+		err = execCommand("xdg-open", url)
+	case "darwin":
+		err = execCommand("open", url)
+	case "windows":
+		err = execCommand("rundll32", "url.dll,FileProtocolHandler", url)
+	default:
+		log.Printf("unsupported platform for opening URL: %s", url)
+	}
+	if err != nil {
+		log.Printf("failed to open URL %s: %v", url, err)
+	}
+}
+
+func execCommand(name string, args ...string) error {
+	cmd := exec.Command(name, args...)
+	return cmd.Start()
 }
 
 func (mw *MainWindow) onDecryptContentsClicked() {
@@ -1474,6 +1584,11 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string, decryptContent
 	uiIdleAdd(func() {
 		mw.progressWindow.Window.Hide()
 		mw.updateTitlesInQueue()
+
+		errors := mw.progressWindow.GetErrors()
+		if len(errors) == 0 && !mw.progressWindow.Cancelled() {
+			mw.updateDonationBar(true)
+		}
 	})
 
 	return err

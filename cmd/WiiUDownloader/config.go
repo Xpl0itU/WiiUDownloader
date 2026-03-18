@@ -24,6 +24,7 @@ type Config struct {
 	DidInitialSetup         bool   `koanf:"didInitialSetup"`
 	LastSelectedPath        string `koanf:"lastSelectedPath"`
 	RememberLastPath        bool   `koanf:"rememberLastPath"`
+	ShowDonationBar         bool   `koanf:"showDonationBar"`
 	saveConfigCallback      func()
 	saveMutex               *sync.Mutex
 }
@@ -52,8 +53,8 @@ func getDefaultConfig() *Config {
 		SuggestRelatedContent:   true,
 		SelectedRegion:          wiiudownloader.MCP_REGION_EUROPE | wiiudownloader.MCP_REGION_USA | wiiudownloader.MCP_REGION_JAPAN,
 		DidInitialSetup:         false,
-		LastSelectedPath:        "",
 		RememberLastPath:        false,
+		ShowDonationBar:         true,
 		saveConfigCallback:      nil,
 		saveMutex:               &sync.Mutex{},
 	}
@@ -146,6 +147,9 @@ func (c *Config) SetValuesFromConfig(newK *koanf.Koanf) error {
 	}
 	if !newK.Exists("suggestRelatedContent") {
 		c.SuggestRelatedContent = true
+	}
+	if !newK.Exists("showDonationBar") {
+		c.ShowDonationBar = true
 	}
 	return nil
 }

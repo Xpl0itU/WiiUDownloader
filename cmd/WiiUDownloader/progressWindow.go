@@ -368,7 +368,7 @@ func createProgressWindow(parent *gtk.Window) (*ProgressWindow, error) {
 	}
 	win.SetTitle("WiiUDownloader - Downloading")
 	win.SetTypeHint(gdk.WINDOW_TYPE_HINT_DIALOG)
-	win.SetModal(true)
+	win.SetModal(false)
 	if parent != nil {
 		win.SetTransientFor(parent)
 		win.SetPosition(gtk.WIN_POS_CENTER_ON_PARENT)

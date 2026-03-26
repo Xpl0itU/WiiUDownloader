@@ -13,7 +13,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-15-intel, macos-latest]
+        os: [macos-15-intel, macos-15]
     steps:
       - name: Check out repository code
         uses: actions/checkout@v6
@@ -45,7 +45,7 @@ jobs:
 
   release:
     name: Release Universal Binary
-    runs-on: macos-latest
+    runs-on: macos-15
     needs: build
     steps:
       - name: Check out repository code
@@ -62,7 +62,7 @@ jobs:
       - name: Download ARM Artifact
         uses: actions/download-artifact@v7
         with:
-          name: WiiUDownloader-App-macos-latest
+          name: WiiUDownloader-App-macos-15
           path: arm_dist
       - name: Merge Universal Binary
         run: |

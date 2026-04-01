@@ -1,13 +1,79 @@
 package main
 
 import (
+	"fmt"
+	"io"
 	"log"
+	"math"
+	"net/http"
 	"os"
 	"strings"
 
+	wiiudownloader "github.com/Xpl0itU/WiiUDownloader"
 	"github.com/gotk3/gotk3/gdk"
 	"github.com/gotk3/gotk3/gtk"
 )
+
+func formatBytes(bytes uint64) string {
+	const unit = 1000
+
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+
+	value := float64(bytes)
+	units := []string{"B", "KB", "MB", "GB", "TB", "PB", "EB"}
+	unitIndex := 0
+	for value >= unit && unitIndex < len(units)-1 {
+		value /= unit
+		unitIndex++
+	}
+	value = math.Round(value*100) / 100
+	return fmt.Sprintf("%.2f %s", value, units[unitIndex])
+}
+
+func fetchTMDSize(titleID uint64, client *http.Client) (uint64, error) {
+	baseURL := fmt.Sprintf("http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/%016x", titleID)
+	tmdURL := fmt.Sprintf("%s/tmd", baseURL)
+
+	resp, err := client.Get(tmdURL)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("failed to fetch TMD: status %d", resp.StatusCode)
+	}
+
+	// Create temp file as requested
+	tmpFile, err := os.CreateTemp("", "wiiu_tmd_*.bin")
+	if err != nil {
+		return 0, err
+	}
+	defer os.Remove(tmpFile.Name()) // Ensure deletion after parsing
+	defer tmpFile.Close()
+
+	if _, err := io.Copy(tmpFile, resp.Body); err != nil {
+		return 0, err
+	}
+
+	if _, err := tmpFile.Seek(0, 0); err != nil {
+		return 0, err
+	}
+
+	tmdData, err := io.ReadAll(tmpFile)
+	if err != nil {
+		return 0, err
+	}
+
+	tmd, err := wiiudownloader.ParseTMD(tmdData)
+	if err != nil {
+		return 0, err
+	}
+
+	return tmd.CalculateTotalSize(), nil
+}
 
 func normalizeFilename(filename string) string {
 	var out strings.Builder
@@ -122,7 +188,25 @@ func applyStyling() {
 		background-color: #00a2ed;
 		color: white;
 	}
+	.total-size-label {
+		font-weight: bold;
+		font-size: 1.1em;
+		padding: 8px 12px;
+		color: @theme_fg_color;
+	}
+	.queue-pane-vbox {
+		background: @theme_bg_color;
+	}
+	notebook {
+		padding: 0;
+	}
+	notebook stack {
+		background: @theme_bg_color;
+		padding: 12px;
+	}
 	`
+
+
 	if err := provider.LoadFromData(css); err != nil {
 		log.Printf("failed to load CSS styling: %v", err)
 	}

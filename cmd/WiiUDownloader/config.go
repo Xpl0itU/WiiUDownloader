@@ -25,6 +25,7 @@ type Config struct {
 	LastSelectedPath        string `koanf:"lastSelectedPath"`
 	RememberLastPath        bool   `koanf:"rememberLastPath"`
 	ShowDonationBar         bool   `koanf:"showDonationBar"`
+	GetSizeOnQueue          bool   `koanf:"getSizeOnQueue"`
 	saveConfigCallback      func()
 	saveMutex               *sync.Mutex
 }
@@ -55,6 +56,7 @@ func getDefaultConfig() *Config {
 		DidInitialSetup:         false,
 		RememberLastPath:        false,
 		ShowDonationBar:         true,
+		GetSizeOnQueue:          true,
 		saveConfigCallback:      nil,
 		saveMutex:               &sync.Mutex{},
 	}

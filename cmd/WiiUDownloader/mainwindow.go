@@ -32,10 +32,12 @@ const (
 const (
 	MAIN_WINDOW_WIDTH             = 870
 	MAIN_WINDOW_HEIGHT            = 460
-	SEARCH_ENTRY_WIDTH_CHARS      = 24
+	SEARCH_ENTRY_WIDTH_CHARS      = 18
+
 	UI_MARGIN_SMALL               = 6
 	SPLIT_PANE_MARGIN             = 2
-	DOWNLOAD_PANE_MIN_WIDTH       = 400
+	DOWNLOAD_PANE_MIN_WIDTH       = 300
+	QUEUE_PANE_MIN_WIDTH          = 200
 	SEARCH_DEBOUNCE_DELAY         = 200 * time.Millisecond
 	PARSE_UINT_BASE_16            = 16
 	PARSE_UINT_BITS_64            = 64
@@ -48,7 +50,9 @@ const (
 	RELATED_ROW_VERTICAL_MARGIN   = 12
 	RELATED_ROW_SPACING           = 12
 	ERROR_ROW_MARGIN              = 5
+	MAX_CONCURRENT_SIZE_FETCHES   = 8
 )
+
 
 type MainWindow struct {
 	window                          *gtk.Window
@@ -85,7 +89,9 @@ type MainWindow struct {
 	donationBar                     *gtk.Box
 	donationLabel                   *gtk.Label
 	showDonationBar                 bool
+	sizeFetchSemaphore              chan struct{}
 }
+
 
 func NewMainWindow(entries []wiiudownloader.TitleEntry, client *http.Client, config *Config) *MainWindow {
 	win, err := gtk.WindowNew(gtk.WINDOW_TOPLEVEL)
@@ -106,7 +112,8 @@ func NewMainWindow(entries []wiiudownloader.TitleEntry, client *http.Client, con
 		log.Fatalln("Unable to create entry:", err)
 	}
 	searchEntry.SetPlaceholderText("Search...")
-	searchEntry.SetHExpand(true)
+	searchEntry.SetHExpand(false)
+	searchEntry.SetHAlign(gtk.ALIGN_END)
 	searchEntry.SetWidthChars(SEARCH_ENTRY_WIDTH_CHARS)
 	SetupEntryAccessibility(searchEntry, "Search titles", "Enter a game title or title ID to search. You can use the category buttons above to filter by type.")
 
@@ -123,7 +130,9 @@ func NewMainWindow(entries []wiiudownloader.TitleEntry, client *http.Client, con
 		currentRegion:  wiiudownloader.MCP_REGION_EUROPE | wiiudownloader.MCP_REGION_JAPAN | wiiudownloader.MCP_REGION_USA,
 		lastSearchText: "",
 		client:         client,
+		sizeFetchSemaphore: make(chan struct{}, MAX_CONCURRENT_SIZE_FETCHES),
 	}
+
 
 	queuePane.updateFunc = mainWindow.updateTitlesInQueue
 
@@ -132,8 +141,12 @@ func NewMainWindow(entries []wiiudownloader.TitleEntry, client *http.Client, con
 
 	searchEntry.Connect("changed", mainWindow.onSearchEntryChanged)
 
+	mainWindow.queuePane.SetDownloadCallback(mainWindow.onDownloadQueueButtonClicked)
+
 	return &mainWindow
 }
+
+
 
 func (mw *MainWindow) SetApplicationForGTKWindow(app *gtk.Application) {
 	mw.window.SetApplication(app)
@@ -538,8 +551,10 @@ func (mw *MainWindow) BuildUI() {
 		SetupToggleButtonAccessibility(&button.ToggleButton, "Filter titles by category: "+cat)
 		mw.categoryButtons = append(mw.categoryButtons, &button.ToggleButton)
 	}
-	tophBox.PackEnd(mw.searchEntry, true, true, 0)
-
+	dummy, _ := gtk.LabelNew("")
+	dummy.SetHExpand(true)
+	tophBox.PackStart(dummy, true, true, 0)
+	tophBox.PackEnd(mw.searchEntry, false, false, 0)
 	mainvBox.PackStart(tophBox, false, false, 0)
 
 	scrollable, err := gtk.ScrolledWindowNew(nil, nil)
@@ -556,13 +571,11 @@ func (mw *MainWindow) BuildUI() {
 		log.Fatalln("Unable to create box:", err)
 	}
 
-	mw.downloadQueueButton, err = gtk.ButtonNewWithLabel("Download Queue")
-	if err != nil {
-		log.Fatalln("Unable to create button:", err)
-	}
+	mw.downloadQueueButton = mw.queuePane.downloadButton
 	mw.downloadQueueButton.SetCanDefault(true)
 	mw.downloadQueueButton.GrabDefault()
-	SetupButtonAccessibility(mw.downloadQueueButton, "Start downloading all titles in your queue. You can select multiple titles by clicking checkboxes and they will be added to your download queue.")
+	SetupButtonAccessibility(mw.downloadQueueButton, "Start downloading all titles in your queue")
+
 
 	mw.decryptContentsCheckbox, err = gtk.CheckButtonNewWithLabel("Decrypt contents")
 	if err != nil {
@@ -588,60 +601,8 @@ func (mw *MainWindow) BuildUI() {
 		}
 	})
 
-	mw.downloadQueueButton.Connect("clicked", func() {
-		if mw.queuePane.IsQueueEmpty() {
-			return
-		}
-		mw.progressWindow, err = createProgressWindow(mw.window)
-		if err != nil {
-			return
-		}
-		dialog := dialog.Directory().Title("Select a path to save the games to")
-		config, err := loadConfig()
-		if err != nil {
-			return
-		}
-
-		selectedPath, err := mw.resolveDownloadPath(config, dialog.SetStartDir, dialog.Browse)
-		if err != nil {
-			uiIdleAdd(func() {
-				mw.progressWindow.Window.Hide()
-			})
-			return
-		}
-
-		mw.progressWindow.Window.ShowAll()
-		decryptContents := mw.decryptContents
-		deleteEncryptedContents := mw.getDeleteEncryptedContents()
-
-		go func() {
-			uiIdleAdd(func() {
-				mw.setDownloadControlsSensitive(false)
-			})
-
-			defer uiIdleAdd(func() {
-				mw.setDownloadControlsSensitive(true)
-			})
-
-			runErr := mw.onDownloadQueueClicked(selectedPath, decryptContents, deleteEncryptedContents, config)
-			if runErr != nil {
-				uiIdleAdd(func() {
-					mw.showError(runErr)
-				})
-				return
-			}
-
-			errors := mw.progressWindow.GetErrors()
-			if shouldShowQueueErrorSummary(runErr, errors) {
-				uiIdleAdd(func() {
-					mw.showErrorsDialog(errors)
-				})
-			}
-		}()
-	})
 	mw.decryptContentsToggleHandle = mw.decryptContentsCheckbox.Connect("toggled", mw.onDecryptContentsClicked)
 	mw.applyDownloadOptionState(mw.decryptContents, mw.deleteEncryptedContents)
-	bottomhBox.PackStart(mw.downloadQueueButton, false, false, 0)
 
 	checkboxvBox, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
 	if err != nil {
@@ -692,11 +653,13 @@ func (mw *MainWindow) BuildUI() {
 
 	bottomhBox.SetSizeRequest(DOWNLOAD_PANE_MIN_WIDTH, -1)
 
+	mw.queuePane.GetContainer().SetSizeRequest(QUEUE_PANE_MIN_WIDTH, -1)
+
 	splitPane, err := gtk.PanedNew(gtk.ORIENTATION_HORIZONTAL)
 	if err != nil {
 		log.Fatalln("Unable to create paned:", err)
 	}
-	splitPane.Pack1(mw.queuePane.GetContainer(), true, false)
+	splitPane.Pack1(mw.queuePane.GetContainer(), false, false)
 	splitPane.Pack2(mainvBox, true, true)
 
 	splitPane.SetMarginBottom(SPLIT_PANE_MARGIN)
@@ -706,8 +669,67 @@ func (mw *MainWindow) BuildUI() {
 
 	mw.window.Add(splitPane)
 
+	splitPane.SetPosition(280) // Set default width for QueuePane
 	splitPane.ShowAll()
 }
+
+
+func (mw *MainWindow) onDownloadQueueButtonClicked() {
+	if mw.queuePane.IsQueueEmpty() {
+		return
+	}
+	progressWindow, err := createProgressWindow(mw.window)
+	if err != nil {
+		return
+	}
+	mw.progressWindow = progressWindow
+	dialog := dialog.Directory().Title("Select a path to save the games to")
+	config, err := loadConfig()
+
+		if err != nil {
+			return
+		}
+
+		selectedPath, err := mw.resolveDownloadPath(config, dialog.SetStartDir, dialog.Browse)
+		if err != nil {
+			uiIdleAdd(func() {
+				mw.progressWindow.Window.Hide()
+			})
+			return
+		}
+
+		mw.progressWindow.Window.ShowAll()
+		decryptContents := mw.decryptContents
+		deleteEncryptedContents := mw.getDeleteEncryptedContents()
+
+		go func() {
+			uiIdleAdd(func() {
+				mw.setDownloadControlsSensitive(false)
+			})
+
+			defer uiIdleAdd(func() {
+				mw.setDownloadControlsSensitive(true)
+			})
+
+			runErr := mw.onDownloadQueueClicked(selectedPath, decryptContents, deleteEncryptedContents, config)
+			if runErr != nil {
+				uiIdleAdd(func() {
+					mw.showError(runErr)
+				})
+				return
+			}
+
+			errors := mw.progressWindow.GetErrors()
+			if shouldShowQueueErrorSummary(runErr, errors) {
+				uiIdleAdd(func() {
+					mw.showErrorsDialog(errors)
+				})
+			}
+		}()
+}
+
+
+
 
 func (mw *MainWindow) onRegionChange(button *gtk.CheckButton, region uint8) {
 	mw.currentRegion = updateRegionMask(mw.currentRegion, region, button.GetActive())
@@ -1049,32 +1071,32 @@ func (mw *MainWindow) collectSelectedEntriesForToggle(clickedIter *gtk.TreeIter,
 		return result
 	}
 
-	paths := selection.GetSelectedRows(mw.sortModel)
-	for l := paths; l != nil; l = l.Next() {
-		data := l.Data()
-		sortPath, ok := data.(*gtk.TreePath)
-		if !ok || sortPath == nil {
-			continue
+	iter, ok := mw.sortModel.ToTreeModel().GetIterFirst()
+	if !ok {
+		return result
+	}
+
+	for {
+		path, err := mw.sortModel.ToTreeModel().GetPath(iter)
+		if err == nil {
+			if selection.PathIsSelected(path) {
+				filterPath := mw.sortModel.ConvertPathToChildPath(path)
+				if filterPath != nil {
+					childPath := mw.filterModel.ConvertPathToChildPath(filterPath)
+					if childPath != nil {
+						childIter, err := mw.childStore.ToTreeModel().GetIter(childPath)
+						if err == nil {
+							if entry, ok := mw.getTitleEntryFromChildIter(childIter); ok {
+								addIfUnique(entry)
+							}
+						}
+					}
+				}
+			}
 		}
 
-		filterPath := mw.sortModel.ConvertPathToChildPath(sortPath)
-		if filterPath == nil {
-			continue
-		}
-
-		childPath := mw.filterModel.ConvertPathToChildPath(filterPath)
-		if childPath == nil {
-			continue
-		}
-
-		iter, err := mw.childStore.ToTreeModel().GetIter(childPath)
-		if err != nil {
-			continue
-		}
-
-		entry, ok := mw.getTitleEntryFromChildIter(iter)
-		if ok {
-			addIfUnique(entry)
+		if !mw.sortModel.ToTreeModel().IterNext(iter) {
+			break
 		}
 	}
 
@@ -1126,30 +1148,21 @@ func (mw *MainWindow) toggleQueueForSortPath(sortPath *gtk.TreePath) bool {
 	selectedEntries := mw.collectSelectedEntriesForToggle(iter, selectedCount)
 
 	if isInQueue.(bool) {
-		for _, entry := range selectedEntries {
-			mw.queuePane.RemoveTitle(entry)
-		}
+		mw.queuePane.RemoveTitles(mw.collectTIDs(selectedEntries))
 	} else {
-		for _, entry := range selectedEntries {
-			if !mw.queuePane.IsTitleInQueue(entry) {
-				mw.queuePane.AddTitle(entry)
-			}
-		}
-
+		mw.addTitlesToQueue(selectedEntries)
+	
 		if mw.suggestRelatedContent {
 			candidates := mw.collectRelatedCandidates(selectedEntries)
 			if len(candidates) > 0 {
 				chosenRelated, accepted := mw.showRelatedTitlesDialog(selectedEntries, candidates)
 				if accepted {
-					for _, entry := range chosenRelated {
-						if !mw.queuePane.IsTitleInQueue(entry) {
-							mw.queuePane.AddTitle(entry)
-						}
-					}
+					mw.addTitlesToQueue(chosenRelated)
 				}
 			}
 		}
 	}
+
 
 	mw.updateTitlesInQueue()
 	return true
@@ -1593,3 +1606,62 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string, decryptContent
 
 	return err
 }
+
+func (mw *MainWindow) collectTIDs(titles []wiiudownloader.TitleEntry) []uint64 {
+	tids := make([]uint64, len(titles))
+	for i, t := range titles {
+		tids[i] = t.TitleID
+	}
+	return tids
+}
+
+func (mw *MainWindow) addTitlesToQueue(titles []wiiudownloader.TitleEntry) {
+	var toAdd []wiiudownloader.TitleEntry
+	for _, entry := range titles {
+		if !mw.queuePane.IsTitleInQueue(entry) {
+			toAdd = append(toAdd, entry)
+		}
+	}
+
+	if len(toAdd) == 0 {
+		return
+	}
+
+	for _, entry := range toAdd {
+		mw.queuePane.SetTitleLoadingNoUpdate(entry.TitleID)
+	}
+	mw.queuePane.AddTitles(toAdd)
+
+	config, _ := loadConfig()
+	if !config.GetSizeOnQueue {
+		return
+	}
+
+	for _, entry := range toAdd {
+		go func(e wiiudownloader.TitleEntry) {
+			// Acquire semaphore
+			mw.sizeFetchSemaphore <- struct{}{}
+			defer func() { <-mw.sizeFetchSemaphore }()
+
+			if !mw.queuePane.IsTitleInQueue(e) {
+				return
+			}
+
+			size, err := fetchTMDSize(e.TitleID, mw.client)
+
+			if !mw.queuePane.IsTitleInQueue(e) {
+				return
+			}
+
+			uiIdleAdd(func() {
+				if err != nil {
+					log.Printf("Failed to fetch size for %016x: %v", e.TitleID, err)
+					mw.queuePane.SetTitleError(e.TitleID)
+				} else {
+					mw.queuePane.SetTitleSize(e.TitleID, size)
+				}
+			})
+		}(entry)
+	}
+}
+

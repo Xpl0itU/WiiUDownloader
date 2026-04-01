@@ -21,6 +21,16 @@ type TMD struct {
 	Certificate2 []byte
 }
 
+func (t *TMD) CalculateTotalSize() uint64 {
+	var total uint64
+	for _, content := range t.Contents {
+		total += uint64(expectedContentDownloadSize(content))
+		total += uint64(expectedH3DownloadSize(content))
+	}
+	return total
+}
+
+
 func ParseTMD(data []byte) (*TMD, error) {
 	parsed, err := tmdfmt.Parse(data)
 	if err != nil {

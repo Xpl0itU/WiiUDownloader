@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"math"
 	"sync"
 	"time"
 
@@ -72,23 +71,6 @@ func (sa *SpeedAverager) GetAverageSpeed() float64 {
 	return SMOOTHING_FACTOR*float64(sa.speeds[len(sa.speeds)-1]) + (1-SMOOTHING_FACTOR)*float64(sa.averageSpeed)
 }
 
-func formatDownloadSize(bytes uint64) string {
-	const unit = 1000
-
-	if bytes < unit {
-		return fmt.Sprintf("%d B", bytes)
-	}
-
-	value := float64(bytes)
-	units := []string{"B", "KB", "MB", "GB", "TB", "PB", "EB"}
-	unitIndex := 0
-	for value >= unit && unitIndex < len(units)-1 {
-		value /= unit
-		unitIndex++
-	}
-	value = math.Round(value*100) / 100
-	return fmt.Sprintf("%.2f %s", value, units[unitIndex])
-}
 
 type ProgressWindow struct {
 	Window          *gtk.Window
@@ -153,10 +135,11 @@ func (pw *ProgressWindow) UpdateDownloadProgress(downloaded int64, filename stri
 		pw.speedAverager.AddSpeed(calculateDownloadSpeed(total, pw.startTime, time.Now()))
 		pw.bar.SetText(fmt.Sprintf(
 			"Downloading... (%s/%s) (%s/s)",
-			formatDownloadSize(uint64(total)),
-			formatDownloadSize(uint64(pw.totalToDownload)),
-			formatDownloadSize(uint64(int64(pw.speedAverager.GetAverageSpeed()))),
+			formatBytes(uint64(total)),
+			formatBytes(uint64(pw.totalToDownload)),
+			formatBytes(uint64(int64(pw.speedAverager.GetAverageSpeed()))),
 		))
+
 		return false
 	})
 }

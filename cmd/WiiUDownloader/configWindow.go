@@ -11,14 +11,13 @@ type ConfigWindow struct {
 }
 
 const (
-	SETTINGS_WINDOW_WIDTH               = 420
-	SETTINGS_WINDOW_HEIGHT              = 200
-	SETTINGS_GRID_MIN_WIDTH             = 450
+	SETTINGS_WINDOW_WIDTH               = 480
+	SETTINGS_WINDOW_HEIGHT              = 320
+	SETTINGS_GRID_MIN_WIDTH             = 440
 	SETTINGS_GRID_MARGIN                = 12
 	SETTINGS_FIELD_MARGIN_TOP           = 10
-	SETTINGS_ENTRY_WIDTH_CHARS          = 40
+	SETTINGS_ENTRY_WIDTH_CHARS          = 35
 	SETTINGS_ENTRY_MARGIN_END           = 10
-	SETTINGS_DESCRIPTION_MAX_WIDTH      = 50
 	UNSAVED_CHANGES_CONFIRM_MESSAGE     = "You have unsaved changes. Close without saving?"
 	INVALID_DOWNLOAD_PATH_ERROR_MESSAGE = "Invalid download path. Please select a valid directory."
 )
@@ -32,46 +31,53 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 	win.SetDecorated(true)
 	win.SetPosition(gtk.WIN_POS_CENTER)
 	win.SetDefaultSize(SETTINGS_WINDOW_WIDTH, SETTINGS_WINDOW_HEIGHT)
-
-	grid, err := gtk.GridNew()
-	if err != nil {
-		return nil, err
-	}
-	grid.SetVAlign(gtk.ALIGN_CENTER)
-	grid.SetHAlign(gtk.ALIGN_CENTER)
-	grid.SetRowSpacing(8)
-	grid.SetColumnSpacing(8)
-	grid.SetMarginTop(SETTINGS_GRID_MARGIN)
-	grid.SetMarginBottom(SETTINGS_GRID_MARGIN)
-	grid.SetMarginStart(SETTINGS_GRID_MARGIN)
-	grid.SetMarginEnd(SETTINGS_GRID_MARGIN)
-	grid.SetSizeRequest(SETTINGS_GRID_MIN_WIDTH, -1)
 	addStyleClass(win.GetStyleContext, "settings-window")
-	addStyleClass(grid.GetStyleContext, "settings-grid")
-	win.Add(grid)
-	darkModeCheck, err := gtk.CheckButtonNewWithLabel("Dark Mode")
+
+	mainBox, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 12)
 	if err != nil {
 		return nil, err
 	}
-	darkModeCheck.SetActive(config.DarkMode)
-	SetupCheckButtonAccessibility(darkModeCheck, "Enable dark theme for the application interface")
-	grid.Attach(darkModeCheck, 0, 0, 1, 1)
+	mainBox.SetMarginTop(SETTINGS_GRID_MARGIN)
+	mainBox.SetMarginBottom(SETTINGS_GRID_MARGIN)
+	mainBox.SetMarginStart(SETTINGS_GRID_MARGIN)
+	mainBox.SetMarginEnd(SETTINGS_GRID_MARGIN)
+	win.Add(mainBox)
+
+	notebook, err := gtk.NotebookNew()
+	if err != nil {
+		return nil, err
+	}
+	mainBox.PackStart(notebook, true, true, 0)
+
+	// --- General Tab ---
+	generalGrid, err := gtk.GridNew()
+	if err != nil {
+		return nil, err
+	}
+	generalGrid.SetRowSpacing(12)
+	generalGrid.SetColumnSpacing(12)
+	generalGrid.SetMarginTop(12)
+	generalGrid.SetMarginBottom(12)
+	generalGrid.SetMarginStart(12)
+	generalGrid.SetMarginEnd(12)
+
 	downloadPathLabel, err := gtk.LabelNew("Download Path:")
 	if err != nil {
 		return nil, err
 	}
 	downloadPathLabel.SetHAlign(gtk.ALIGN_START)
-	downloadPathLabel.SetMarginTop(SETTINGS_FIELD_MARGIN_TOP)
-	grid.AttachNextTo(downloadPathLabel, darkModeCheck, gtk.POS_BOTTOM, 1, 1)
+	generalGrid.Attach(downloadPathLabel, 0, 0, 2, 1)
+
 	downloadPathEntry, err := gtk.EntryNew()
 	if err != nil {
 		return nil, err
 	}
 	downloadPathEntry.SetText(config.LastSelectedPath)
 	downloadPathEntry.SetWidthChars(SETTINGS_ENTRY_WIDTH_CHARS)
-	downloadPathEntry.SetMarginEnd(SETTINGS_ENTRY_MARGIN_END)
-	SetupEntryAccessibility(downloadPathEntry, "Download path", "Location where downloaded games will be saved. Click Browse to select a different directory")
-	grid.AttachNextTo(downloadPathEntry, downloadPathLabel, gtk.POS_BOTTOM, 1, 1)
+	downloadPathEntry.SetHExpand(true)
+	SetupEntryAccessibility(downloadPathEntry, "Download path", "Location where downloaded games will be saved.")
+	generalGrid.Attach(downloadPathEntry, 0, 1, 1, 1)
+
 	downloadPathButton, err := gtk.ButtonNewWithLabel("Browse")
 	if err != nil {
 		return nil, err
@@ -86,61 +92,109 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 			downloadPathEntry.SetText(selectedPath)
 		}
 	})
+	generalGrid.Attach(downloadPathButton, 1, 1, 1, 1)
 
 	rememberPathCheck, err := gtk.CheckButtonNewWithLabel("Automatically save files to last used location")
 	if err != nil {
 		return nil, err
 	}
 	rememberPathCheck.SetActive(config.RememberLastPath)
-	rememberPathCheck.SetMarginTop(SETTINGS_FIELD_MARGIN_TOP)
-	SetupCheckButtonAccessibility(rememberPathCheck, "When checked, the application will remember and automatically use the last download location")
-	grid.AttachNextTo(rememberPathCheck, downloadPathEntry, gtk.POS_BOTTOM, 1, 1)
+	SetupCheckButtonAccessibility(rememberPathCheck, "Remember and automatically use the last download location")
+	generalGrid.Attach(rememberPathCheck, 0, 2, 2, 1)
+
+	generalTabLabel, _ := gtk.LabelNew("General")
+	notebook.AppendPage(generalGrid, generalTabLabel)
+
+	// --- Downloads Tab ---
+	downloadsGrid, err := gtk.GridNew()
+	if err != nil {
+		return nil, err
+	}
+	downloadsGrid.SetRowSpacing(12)
+	downloadsGrid.SetMarginTop(12)
+	downloadsGrid.SetMarginBottom(12)
+	downloadsGrid.SetMarginStart(12)
+	downloadsGrid.SetMarginEnd(12)
 
 	continueOnErrorCheck, err := gtk.CheckButtonNewWithLabel("Continue downloading on errors (show summary at end)")
 	if err != nil {
 		return nil, err
 	}
 	continueOnErrorCheck.SetActive(config.ContinueOnError)
-	continueOnErrorCheck.SetMarginTop(SETTINGS_FIELD_MARGIN_TOP)
-	SetupCheckButtonAccessibility(continueOnErrorCheck, "When checked, the downloader will continue with remaining titles even if some fail, showing a summary of errors at the end")
-	grid.AttachNextTo(continueOnErrorCheck, rememberPathCheck, gtk.POS_BOTTOM, 1, 1)
+	SetupCheckButtonAccessibility(continueOnErrorCheck, "Continue with remaining titles even if some fail")
+	downloadsGrid.Attach(continueOnErrorCheck, 0, 0, 1, 1)
 
 	suggestRelatedContentCheck, err := gtk.CheckButtonNewWithLabel("Suggest related Game/DLC/Update when queueing")
 	if err != nil {
 		return nil, err
 	}
 	suggestRelatedContentCheck.SetActive(config.SuggestRelatedContent)
-	suggestRelatedContentCheck.SetMarginTop(SETTINGS_FIELD_MARGIN_TOP)
-	SetupCheckButtonAccessibility(suggestRelatedContentCheck, "When checked, adding a game, update, or DLC to the queue will offer related content that matches the same title ID")
-	grid.AttachNextTo(suggestRelatedContentCheck, continueOnErrorCheck, gtk.POS_BOTTOM, 1, 1)
+	SetupCheckButtonAccessibility(suggestRelatedContentCheck, "Offer related content that matches the same title ID")
+	downloadsGrid.Attach(suggestRelatedContentCheck, 0, 1, 1, 1)
+
+	downloadsTabLabel, _ := gtk.LabelNew("Downloads")
+	notebook.AppendPage(downloadsGrid, downloadsTabLabel)
+
+	// --- Interface Tab ---
+	interfaceGrid, err := gtk.GridNew()
+	if err != nil {
+		return nil, err
+	}
+	interfaceGrid.SetRowSpacing(12)
+	interfaceGrid.SetMarginTop(12)
+	interfaceGrid.SetMarginBottom(12)
+	interfaceGrid.SetMarginStart(12)
+	interfaceGrid.SetMarginEnd(12)
+
+	darkModeCheck, err := gtk.CheckButtonNewWithLabel("Dark Mode")
+	if err != nil {
+		return nil, err
+	}
+	darkModeCheck.SetActive(config.DarkMode)
+	SetupCheckButtonAccessibility(darkModeCheck, "Enable dark theme for the interface")
+	interfaceGrid.Attach(darkModeCheck, 0, 0, 1, 1)
 
 	showDonationBarCheck, err := gtk.CheckButtonNewWithLabel("Show support nudge")
 	if err != nil {
 		return nil, err
 	}
 	showDonationBarCheck.SetActive(config.ShowDonationBar)
-	showDonationBarCheck.SetMarginTop(SETTINGS_FIELD_MARGIN_TOP)
-	SetupCheckButtonAccessibility(showDonationBarCheck, "When checked, a small bar will appear at the bottom of the main window to support the project development")
-	grid.AttachNextTo(showDonationBarCheck, suggestRelatedContentCheck, gtk.POS_BOTTOM, 1, 1)
+	SetupCheckButtonAccessibility(showDonationBarCheck, "Show a small bar at the bottom to support the project")
+	interfaceGrid.Attach(showDonationBarCheck, 0, 1, 1, 1)
 
-	var lastWidget gtk.IWidget = showDonationBarCheck
+	getSizeOnQueueCheck, err := gtk.CheckButtonNewWithLabel("Fetch game size when adding to queue")
+	if err != nil {
+		return nil, err
+	}
+	getSizeOnQueueCheck.SetActive(config.GetSizeOnQueue)
+	SetupCheckButtonAccessibility(getSizeOnQueueCheck, "Automatically calculate game size using TMD file when added to queue")
+	interfaceGrid.Attach(getSizeOnQueueCheck, 0, 2, 1, 1)
+
+	interfaceTabLabel, _ := gtk.LabelNew("Interface")
+	notebook.AppendPage(interfaceGrid, interfaceTabLabel)
+
+	// --- Action Buttons ---
+	buttonBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 6)
+	if err != nil {
+		return nil, err
+	}
+	buttonBox.SetHAlign(gtk.ALIGN_END)
+	mainBox.PackEnd(buttonBox, false, false, 0)
 
 	saveButton, err := gtk.ButtonNewWithLabel("Save and Apply")
 	if err != nil {
 		return nil, err
 	}
-	saveButton.SetMarginTop(SETTINGS_FIELD_MARGIN_TOP)
-	saveButton.SetHAlign(gtk.ALIGN_END)
+	saveButton.SetCanDefault(true)
 	SetupButtonAccessibility(saveButton, "Save all configuration changes and apply them immediately")
-	grid.AttachNextTo(saveButton, lastWidget, gtk.POS_BOTTOM, 1, 1)
+	buttonBox.PackStart(saveButton, false, false, 0)
+
 	closeButton, err := gtk.ButtonNewWithLabel("Close")
 	if err != nil {
 		return nil, err
 	}
-	closeButton.SetMarginTop(SETTINGS_FIELD_MARGIN_TOP)
-	closeButton.SetHAlign(gtk.ALIGN_END)
 	SetupButtonAccessibility(closeButton, "Close settings window without saving changes")
-	grid.AttachNextTo(closeButton, saveButton, gtk.POS_RIGHT, 1, 1)
+	buttonBox.PackStart(closeButton, false, false, 0)
 
 	dirty := false
 	darkModeCheck.Connect("toggled", func() { dirty = true })
@@ -148,6 +202,7 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 	continueOnErrorCheck.Connect("toggled", func() { dirty = true })
 	suggestRelatedContentCheck.Connect("toggled", func() { dirty = true })
 	showDonationBarCheck.Connect("toggled", func() { dirty = true })
+	getSizeOnQueueCheck.Connect("toggled", func() { dirty = true })
 	downloadPathEntry.Connect("changed", func() { dirty = true })
 
 	saveButton.Connect("clicked", func() {
@@ -169,6 +224,7 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 		config.ContinueOnError = continueOnErrorCheck.GetActive()
 		config.SuggestRelatedContent = suggestRelatedContentCheck.GetActive()
 		config.ShowDonationBar = showDonationBarCheck.GetActive()
+		config.GetSizeOnQueue = getSizeOnQueueCheck.GetActive()
 
 		setButtonsSensitive(false, saveButton, closeButton)
 
@@ -196,8 +252,6 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 	win.Connect("delete-event", func() bool {
 		return dirty && !confirmCloseWithoutSaving(win)
 	})
-
-	win.SetBorderWidth(SETTINGS_FIELD_MARGIN_TOP)
 
 	configWindow := ConfigWindow{
 		Window: win,

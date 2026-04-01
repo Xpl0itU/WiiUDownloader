@@ -910,9 +910,9 @@ func (mw *MainWindow) updateDonationBar(success bool) {
 	if mw.donationLabel == nil || mw.donationBar == nil {
 		return
 	}
-	text := "<span size='large'><b>Love WiiUDownloader?</b> Support the developer to keep this project alive</span>"
+	text := "<span size='large'><b>Enjoying WiiUDownloader?</b> A small tip keeps the project actively maintained.</span>"
 	if success {
-		text = "<span size='large'><b>Ready to play!</b> If I helped you out today, please consider a small tip</span>"
+		text = "<span size='large'><b>Downloads complete!</b> If this tool has been useful to you today, please consider a small tip.</span>"
 
 		styleContext, err := mw.donationBar.GetStyleContext()
 		if err == nil {

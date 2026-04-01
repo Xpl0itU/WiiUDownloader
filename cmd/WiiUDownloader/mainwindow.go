@@ -1417,7 +1417,16 @@ func (mw *MainWindow) updateTitlesInQueue() {
 					continue
 				}
 				isInQueue := mw.queuePane.IsTitleInQueue(wiiudownloader.TitleEntry{TitleID: tidNum})
-				storeRef.SetValue(iter, IN_QUEUE_COLUMN, isInQueue)
+				
+				if inQueueVal, err := storeRef.GetValue(iter, IN_QUEUE_COLUMN); err == nil {
+					if currentInQueue, err := inQueueVal.GoValue(); err == nil {
+						if currentInQueue.(bool) != isInQueue {
+							storeRef.SetValue(iter, IN_QUEUE_COLUMN, isInQueue)
+						}
+					}
+					inQueueVal.Unset()
+				}
+
 				tid.Unset()
 			}
 		}

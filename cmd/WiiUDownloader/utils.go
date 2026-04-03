@@ -51,8 +51,12 @@ func fetchTMDSize(titleID uint64, client *http.Client) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer os.Remove(tmpFile.Name()) // Ensure deletion after parsing
-	defer tmpFile.Close()
+	
+	tmpPath := tmpFile.Name()
+	defer func() {
+		tmpFile.Close()
+		os.Remove(tmpPath)
+	}()
 
 	if _, err := io.Copy(tmpFile, resp.Body); err != nil {
 		return 0, err

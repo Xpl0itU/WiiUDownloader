@@ -423,46 +423,45 @@ func (qp *QueuePane) SetTitleLoadingNoUpdate(titleID uint64) {
 
 
 func (qp *QueuePane) Update(doUpdateFunc bool) {
-	qp.store.Clear()
-
-	var (
-		queueSnapshot []wiiudownloader.TitleEntry
-	)
+	var queueSnapshot []wiiudownloader.TitleEntry
 	qp.titleQueue.WithRLock(func(queue []wiiudownloader.TitleEntry) {
 		queueSnapshot = make([]wiiudownloader.TitleEntry, len(queue))
 		copy(queueSnapshot, queue)
 	})
 
-	for _, title := range queueSnapshot {
-		iter := qp.store.Append()
+	uiIdleAdd(func() {
+		qp.store.Clear()
 
-		sizeStr, ok := qp.titleSizes[title.TitleID]
-		if !ok {
-			sizeStr = ""
+		for _, title := range queueSnapshot {
+			iter := qp.store.Append()
+
+			sizeStr, ok := qp.titleSizes[title.TitleID]
+			if !ok {
+				sizeStr = ""
+			}
+
+			qp.store.Set(
+				iter,
+				[]int{0, 1, 2, 3, 4},
+				[]interface{}{
+					title.Name,
+					wiiudownloader.GetFormattedRegion(title.Region),
+					wiiudownloader.GetFormattedKind(title.TitleID),
+					fmt.Sprintf("%016x", title.TitleID),
+					sizeStr,
+				},
+			)
 		}
 
-		qp.store.Set(
-			iter,
-			[]int{0, 1, 2, 3, 4},
-			[]interface{}{
-				title.Name,
-				wiiudownloader.GetFormattedRegion(title.Region),
-				wiiudownloader.GetFormattedKind(title.TitleID),
-				fmt.Sprintf("%016x", title.TitleID),
-				sizeStr,
-			},
-		)
-	}
+		qp.updateTotalSizeLabel()
 
-	qp.updateTotalSizeLabel()
-
-
-	if qp.updateFunc != nil && doUpdateFunc {
-		qp.updateFunc()
-	}
-	if qp.titleTreeView != nil {
-		qp.titleTreeView.ColumnsAutosize()
-	}
+		if qp.updateFunc != nil && doUpdateFunc {
+			qp.updateFunc()
+		}
+		if qp.titleTreeView != nil {
+			qp.titleTreeView.ColumnsAutosize()
+		}
+	})
 }
 
 func (qp *QueuePane) updateTotalSizeLabel() {

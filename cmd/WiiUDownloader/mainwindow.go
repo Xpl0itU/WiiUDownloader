@@ -1470,6 +1470,7 @@ func (mw *MainWindow) showErrorsDialog(errors []DownloadError) {
 		return
 	}
 	headerLabel.SetMarginTop(DIALOG_MARGIN)
+	headerLabel.SetMarginBottom(DIALOG_MARGIN)
 	headerLabel.SetMarginStart(DIALOG_MARGIN)
 	contentArea.PackStart(headerLabel, false, false, 0)
 
@@ -1541,10 +1542,52 @@ func (mw *MainWindow) showErrorsDialog(errors []DownloadError) {
 		listBox.Add(row)
 	}
 
+	// Server status info section
+	infoBox, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 2)
+	if err == nil {
+		infoBox.SetMarginTop(DIALOG_MARGIN)
+		infoBox.SetMarginBottom(DIALOG_MARGIN)
+		infoBox.SetHAlign(gtk.ALIGN_CENTER)
+
+		serverLabel, err := gtk.LabelNew("")
+		if err == nil {
+			serverLabel.SetMarkup("<span size='small' alpha='70%'>Nintendo servers might be down.</span>")
+			serverLabel.SetHAlign(gtk.ALIGN_CENTER)
+			infoBox.PackStart(serverLabel, false, false, 0)
+		}
+
+		linkBtn, err := gtk.LinkButtonNewWithLabel("https://www.nintendo.co.jp/netinfo/en_US/index.html", "View Server Status")
+		if err == nil {
+			linkBtn.SetHAlign(gtk.ALIGN_CENTER)
+			infoBox.PackStart(linkBtn, false, false, 0)
+		}
+		contentArea.PackStart(infoBox, false, false, 0)
+	}
+
+	dialog.AddButton("Add failed to queue", gtk.RESPONSE_APPLY)
 	dialog.AddButton("Close", gtk.RESPONSE_OK)
 
 	contentArea.ShowAll()
-	dialog.Run()
+	response := dialog.Run()
+
+	if response == gtk.RESPONSE_APPLY {
+		mw.queuePane.Clear()
+		var titles []wiiudownloader.TitleEntry
+		for _, e := range errors {
+			tid, err := strconv.ParseUint(e.TidStr, PARSE_UINT_BASE_16, PARSE_UINT_BITS_64)
+			if err != nil {
+				continue
+			}
+			entry := wiiudownloader.GetTitleEntryFromTid(tid)
+			if entry.TitleID != 0 {
+				titles = append(titles, entry)
+			}
+		}
+		if len(titles) > 0 {
+			mw.addTitlesToQueue(titles)
+			mw.updateTitlesInQueue()
+		}
+	}
 }
 
 func (mw *MainWindow) onDownloadQueueClicked(selectedPath string, decryptContents, deleteEncryptedContents bool, config *Config) error {

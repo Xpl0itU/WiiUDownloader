@@ -61,23 +61,35 @@ func fetchTMDSize(titleID uint64, client *http.Client) (uint64, error) {
 
 func normalizeFilename(filename string) string {
 	var out strings.Builder
-	lastIsWash := true // Start true to prevent leading space/underscore
+	shouldAppend := true
+	firstChar := true
 
 	for _, c := range filename {
 		switch {
+		case c == '_':
+			if shouldAppend {
+				out.WriteRune('_')
+				shouldAppend = false
+			}
+			firstChar = false
+		case c == ' ':
+			if shouldAppend && !firstChar {
+				out.WriteRune(' ')
+				shouldAppend = false
+			}
 		case (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'):
 			out.WriteRune(c)
-			lastIsWash = false
-		case c == '_' || c == ' ':
-			if !lastIsWash {
-				out.WriteRune(c)
-				lastIsWash = true
-			}
+			shouldAppend = true
+			firstChar = false
 		}
 	}
 
 	result := out.String()
-	return strings.TrimRight(result, "_ ")
+	if len(result) > 0 && result[len(result)-1] == '_' {
+		result = result[:len(result)-1]
+	}
+
+	return result
 }
 
 func setDarkTheme(darkMode bool) {

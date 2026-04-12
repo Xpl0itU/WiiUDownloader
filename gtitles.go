@@ -1,5 +1,7 @@
 package wiiudownloader
 
+import "strings"
+
 const (
 	MCP_REGION_JAPAN  = 0x01
 	MCP_REGION_USA    = 0x02
@@ -58,28 +60,25 @@ func GetTitleEntries(category uint8) []TitleEntry {
 }
 
 func GetFormattedRegion(region uint8) string {
-	if region&MCP_REGION_EUROPE != 0 {
-		if region&MCP_REGION_USA != 0 {
-			if region&MCP_REGION_JAPAN != 0 {
-				return "All"
-			}
-			return "USA/Europe"
-		}
-		if region&MCP_REGION_JAPAN != 0 {
-			return "Europe/Japan"
-		}
-		return "Europe"
-	}
+	var regions []string
 	if region&MCP_REGION_USA != 0 {
-		if region&MCP_REGION_JAPAN != 0 {
-			return "USA/Japan"
-		}
-		return "USA"
+		regions = append(regions, "USA")
+	}
+	if region&MCP_REGION_EUROPE != 0 {
+		regions = append(regions, "Europe")
 	}
 	if region&MCP_REGION_JAPAN != 0 {
-		return "Japan"
+		regions = append(regions, "Japan")
 	}
-	return "Unknown"
+
+	switch len(regions) {
+	case 0:
+		return "Unknown"
+	case 3:
+		return "All"
+	default:
+		return strings.Join(regions, "/")
+	}
 }
 
 func GetFormattedKind(titleID uint64) string {

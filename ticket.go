@@ -96,9 +96,16 @@ func newTicketData() ([]byte, error) {
 			return
 		}
 
-		requiredSize := maxInt(TICKET_ENCRYPTED_KEY_OFFSET+TICKET_ENCRYPTED_KEY_SIZE, TICKET_KEY_INDEX_OFFSET+1)
-		requiredSize = maxInt(requiredSize, TICKET_TITLE_ID_OFFSET+TICKET_TITLE_ID_SIZE)
-		requiredSize = maxInt(requiredSize, TICKET_TITLE_VERSION_OFFSET+TICKET_TITLE_VERSION_SIZE)
+		requiredSize := TICKET_ENCRYPTED_KEY_OFFSET + TICKET_ENCRYPTED_KEY_SIZE
+		if TICKET_KEY_INDEX_OFFSET+1 > requiredSize {
+			requiredSize = TICKET_KEY_INDEX_OFFSET + 1
+		}
+		if TICKET_TITLE_ID_OFFSET+TICKET_TITLE_ID_SIZE > requiredSize {
+			requiredSize = TICKET_TITLE_ID_OFFSET + TICKET_TITLE_ID_SIZE
+		}
+		if TICKET_TITLE_VERSION_OFFSET+TICKET_TITLE_VERSION_SIZE > requiredSize {
+			requiredSize = TICKET_TITLE_VERSION_OFFSET + TICKET_TITLE_VERSION_SIZE
+		}
 		if len(ticketTemplateData) < requiredSize {
 			ticketTemplateErr = fmt.Errorf("ticket template too small: got %d, need at least %d", len(ticketTemplateData), requiredSize)
 		}
@@ -109,9 +116,4 @@ func newTicketData() ([]byte, error) {
 	return append([]byte(nil), ticketTemplateData...), nil
 }
 
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
+

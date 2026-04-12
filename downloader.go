@@ -13,7 +13,6 @@ import (
 
 	ctxio "github.com/jbenet/go-context/io"
 	"golang.org/x/sync/errgroup"
-	"golang.org/x/sync/semaphore"
 )
 
 const (
@@ -438,12 +437,7 @@ func downloadFileWithOptions(ctx context.Context, progressReporter ProgressRepor
 	return nil
 }
 
-func downloadFileWithSemaphoreOptions(ctx context.Context, progressReporter ProgressReporter, client *http.Client, downloadURL, dstPath string, opts downloadOptions, sem *semaphore.Weighted) error {
-	if err := sem.Acquire(ctx, 1); err != nil {
-		return err
-	}
-	defer sem.Release(1)
-
+func downloadFileWithSemaphoreOptions(ctx context.Context, progressReporter ProgressReporter, client *http.Client, downloadURL, dstPath string, opts downloadOptions) error {
 	return downloadFileWithOptions(ctx, progressReporter, client, downloadURL, dstPath, opts)
 }
 
@@ -527,12 +521,7 @@ func DownloadTitle(titleID, outputDirectory string, doDecryption bool, progressR
 		}
 	}
 
-	var titleSize uint64
-
-	for i := 0; i < int(tmd.ContentCount); i++ {
-		titleSize += uint64(expectedContentDownloadSize(tmd.Contents[i]))
-		titleSize += uint64(expectedH3DownloadSize(tmd.Contents[i]))
-	}
+	titleSize := tmd.CalculateTotalSize()
 
 	if progressReporter != nil {
 		progressReporter.SetDownloadSize(int64(titleSize))
@@ -547,7 +536,6 @@ func DownloadTitle(titleID, outputDirectory string, doDecryption bool, progressR
 
 	g, ctx := errgroup.WithContext(context.Background())
 	g.SetLimit(maxConcurrentDownloads)
-	sem := semaphore.NewWeighted(maxConcurrentDownloads)
 	if progressReporter != nil {
 		progressReporter.SetStartTime(time.Now())
 	}
@@ -565,7 +553,7 @@ func DownloadTitle(titleID, outputDirectory string, doDecryption bool, progressR
 				DoRetries:    true,
 				AllowResume:  true,
 				UserAgent:    "WiiUDownloader",
-			}, sem); err != nil {
+			}); err != nil {
 				if isCancelled(progressReporter) {
 					return errCancel
 				}
@@ -582,7 +570,7 @@ func DownloadTitle(titleID, outputDirectory string, doDecryption bool, progressR
 					Validate: func(path string) error {
 						return verifyH3File(path, content)
 					},
-				}, sem); err != nil {
+				}); err != nil {
 					if isCancelled(progressReporter) {
 						return errCancel
 					}

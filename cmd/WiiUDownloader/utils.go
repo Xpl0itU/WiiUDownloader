@@ -46,34 +46,14 @@ func fetchTMDSize(titleID uint64, client *http.Client) (uint64, error) {
 		return 0, fmt.Errorf("failed to fetch TMD: status %d", resp.StatusCode)
 	}
 
-	// Create temp file as requested
-	tmpFile, err := os.CreateTemp("", "wiiu_tmd_*.bin")
+	tmdData, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return 0, err
-	}
-	
-	tmpPath := tmpFile.Name()
-	defer func() {
-		tmpFile.Close()
-		os.Remove(tmpPath)
-	}()
-
-	if _, err := io.Copy(tmpFile, resp.Body); err != nil {
-		return 0, err
-	}
-
-	if _, err := tmpFile.Seek(0, 0); err != nil {
-		return 0, err
-	}
-
-	tmdData, err := io.ReadAll(tmpFile)
-	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to read TMD data: %w", err)
 	}
 
 	tmd, err := wiiudownloader.ParseTMD(tmdData)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to parse TMD: %w", err)
 	}
 
 	return tmd.CalculateTotalSize(), nil
@@ -81,35 +61,23 @@ func fetchTMDSize(titleID uint64, client *http.Client) (uint64, error) {
 
 func normalizeFilename(filename string) string {
 	var out strings.Builder
-	shouldAppend := true
-	firstChar := true
+	lastIsWash := true // Start true to prevent leading space/underscore
 
 	for _, c := range filename {
 		switch {
-		case c == '_':
-			if shouldAppend {
-				out.WriteRune('_')
-				shouldAppend = false
-			}
-			firstChar = false
-		case c == ' ':
-			if shouldAppend && !firstChar {
-				out.WriteRune(' ')
-				shouldAppend = false
-			}
 		case (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'):
 			out.WriteRune(c)
-			shouldAppend = true
-			firstChar = false
+			lastIsWash = false
+		case c == '_' || c == ' ':
+			if !lastIsWash {
+				out.WriteRune(c)
+				lastIsWash = true
+			}
 		}
 	}
 
 	result := out.String()
-	if len(result) > 0 && result[len(result)-1] == '_' {
-		result = result[:len(result)-1]
-	}
-
-	return result
+	return strings.TrimRight(result, "_ ")
 }
 
 func setDarkTheme(darkMode bool) {

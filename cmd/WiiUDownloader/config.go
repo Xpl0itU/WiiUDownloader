@@ -127,7 +127,7 @@ func (c *Config) Save() error {
 	}
 
 	if err := k.Load(structs.Provider(c, "koanf"), nil); err != nil {
-		return err
+		return fmt.Errorf("failed to load struct into koanf: %w", err)
 	}
 
 	userConfigDir, err := os.UserConfigDir()
@@ -136,9 +136,12 @@ func (c *Config) Save() error {
 	}
 	confBytes, err := k.Marshal(json.Parser())
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to marshal config to JSON: %w", err)
 	}
-	return os.WriteFile(configFilePath(userConfigDir), confBytes, CONFIG_FILE_PERM)
+	if err := os.WriteFile(configFilePath(userConfigDir), confBytes, CONFIG_FILE_PERM); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
+	}
+	return nil
 }
 
 func (c *Config) SetValuesFromConfig(newK *koanf.Koanf) error {

@@ -152,8 +152,9 @@ func applyStyling() {
 	}
 	.gratitude-footer {
 		border-top: 2px solid #00a2ed;
-		background: shade(@theme_bg_color, 0.92);
-		padding: 12px;
+		background: shade(@theme_bg_color, 0.94);
+		padding: 16px;
+		font-size: 1.05em;
 	}
 	button.kofi-btn {
 		background-image: none;
@@ -161,12 +162,19 @@ func applyStyling() {
 		color: white;
 		font-weight: bold;
 		border-radius: 8px;
-		padding: 6px 16px;
+		padding: 8px 20px;
+		font-size: 1.1em;
 		transition: all 0.2s ease-in-out;
 	}
 	button.kofi-btn:hover {
 		background-image: none;
 		background-color: shade(#ff813f, 1.15);
+	}
+	.donation-highlight {
+		border-top: 2px solid #00a2ed;
+		background: shade(@theme_bg_color, 0.96);
+		padding: 20px;
+		font-size: 1.1em;
 	}
 	.success-flash {
 		background-color: #00a2ed;

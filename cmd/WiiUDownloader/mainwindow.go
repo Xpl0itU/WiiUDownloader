@@ -861,7 +861,7 @@ func (mw *MainWindow) onDecryptContentsMenuItemClicked(selectedPath string) erro
 		if len(errors) > 0 && config.ContinueOnError {
 			mw.showErrorsDialog(errors)
 		} else if len(errors) == 0 {
-			mw.updateDonationBar(true)
+			mw.showSuccessDialog(1, selectedPath)
 		}
 	})
 	return err
@@ -910,29 +910,83 @@ func (mw *MainWindow) updateDonationBar(success bool) {
 	if mw.donationLabel == nil || mw.donationBar == nil {
 		return
 	}
-	text := "<span size='large'><b>Enjoying WiiUDownloader?</b> A small tip keeps the project actively maintained.</span>"
-	if success {
-		text = "<span size='large'><b>Downloads complete!</b> If this tool has been useful to you today, please consider a small tip.</span>"
-
-		styleContext, err := mw.donationBar.GetStyleContext()
-		if err == nil {
-			count := 0
-			glib.TimeoutAdd(300, func() bool {
-				if count >= 6 {
-					styleContext.RemoveClass("success-flash")
-					return false
-				}
-				if count%2 == 0 {
-					styleContext.AddClass("success-flash")
-				} else {
-					styleContext.RemoveClass("success-flash")
-				}
-				count++
-				return true
-			})
-		}
-	}
+	text := "<b>WiiUDownloader is made by one person.</b> If you find it helpful, please consider a small tip to support my work."
 	mw.donationLabel.SetMarkup(text)
+}
+
+
+func (mw *MainWindow) showSuccessDialog(count int, path string) {
+	dialog, err := gtk.DialogNew()
+	if err != nil {
+		log.Println("Unable to create success dialog:", err)
+		return
+	}
+	defer dialog.Destroy()
+
+	dialog.SetTitle("Download Complete")
+	dialog.SetModal(true)
+	dialog.SetTransientFor(mw.window)
+	dialog.SetPosition(gtk.WIN_POS_CENTER_ON_PARENT)
+	dialog.AddButton("Close", gtk.RESPONSE_CLOSE)
+
+	dialog.SetDefaultSize(400, -1)
+	contentArea, err := dialog.GetContentArea()
+	if err != nil {
+		return
+	}
+	contentArea.SetSpacing(12)
+
+	// Header
+	header, _ := gtk.LabelNew("")
+	header.SetMarkup("<span size='large' weight='bold'>Downloads Finished</span>")
+	header.SetMarginTop(12)
+	contentArea.PackStart(header, false, false, 0)
+
+	// Summary Info
+	infoLabel, _ := gtk.LabelNew("")
+	infoLabel.SetMarkup(fmt.Sprintf("Successfully processed %d items.\nSaved to: <span size='small'>%s</span>", count, path))
+	infoLabel.SetLineWrap(true)
+	infoLabel.SetEllipsize(pango.ELLIPSIZE_MIDDLE)
+	infoLabel.SetMaxWidthChars(60)
+	infoLabel.SetXAlign(0.5)
+	infoLabel.SetJustify(gtk.JUSTIFY_CENTER)
+	contentArea.PackStart(infoLabel, false, false, 6)
+
+	// Open Folder Button (Primary Utility)
+	openBtn, _ := gtk.ButtonNewWithLabel("Open Download Folder")
+	openBtn.SetHAlign(gtk.ALIGN_CENTER)
+	openBtn.SetMarginBottom(12)
+	openBtn.Connect("clicked", func() {
+		openURL(path)
+	})
+	contentArea.PackStart(openBtn, false, false, 0)
+
+	// Donation Section (Highlighted)
+	if mw.showDonationBar {
+		donationBox, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 12)
+		addStyleClass(donationBox.GetStyleContext, "donation-highlight")
+
+		nudgeLabel, _ := gtk.LabelNew("")
+		nudgeLabel.SetMarkup("<b>Downloads finished!</b> If this tool was helpful, a small tip for the developer is much appreciated.")
+		nudgeLabel.SetLineWrap(true)
+		nudgeLabel.SetLineWrapMode(pango.WRAP_WORD)
+		nudgeLabel.SetXAlign(0.5)
+		nudgeLabel.SetJustify(gtk.JUSTIFY_CENTER)
+		donationBox.PackStart(nudgeLabel, false, false, 0)
+
+		kofiBtn, _ := gtk.ButtonNewWithLabel("Support on Ko-Fi")
+		addStyleClass(kofiBtn.GetStyleContext, "kofi-btn")
+		kofiBtn.SetHAlign(gtk.ALIGN_CENTER)
+		kofiBtn.Connect("clicked", func() {
+			openURL("https://ko-fi.com/dathinkingchair")
+		})
+		donationBox.PackStart(kofiBtn, false, false, 0)
+
+		contentArea.PackStart(donationBox, false, false, 0)
+	}
+
+	contentArea.ShowAll()
+	dialog.Run()
 }
 
 func (mw *MainWindow) setDonationBarVisible(visible bool) {
@@ -1603,6 +1657,7 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string, decryptContent
 
 	mw.progressWindow.ResetTotalsAndErrors()
 
+	totalInQueue := mw.queuePane.GetTitleQueueSize()
 	mw.queuePane.ForEachRemoving(func(title wiiudownloader.TitleEntry) bool {
 		if mw.progressWindow.Cancelled() {
 			return false
@@ -1652,7 +1707,7 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string, decryptContent
 
 		errors := mw.progressWindow.GetErrors()
 		if len(errors) == 0 && !mw.progressWindow.Cancelled() {
-			mw.updateDonationBar(true)
+			mw.showSuccessDialog(totalInQueue, selectedPath)
 		}
 	})
 

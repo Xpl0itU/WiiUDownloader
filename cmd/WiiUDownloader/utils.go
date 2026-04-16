@@ -154,7 +154,7 @@ func applyStyling() {
 		border-top: 2px solid #00a2ed;
 		background: shade(@theme_bg_color, 0.94);
 		padding: 16px;
-		font-size: 1.05em;
+		font-size: 1.1em;
 	}
 	button.kofi-btn {
 		background-image: none;
@@ -162,7 +162,7 @@ func applyStyling() {
 		color: white;
 		font-weight: bold;
 		border-radius: 8px;
-		padding: 8px 20px;
+		padding: 6px 16px;
 		font-size: 1.1em;
 		transition: all 0.2s ease-in-out;
 	}
@@ -173,8 +173,8 @@ func applyStyling() {
 	.donation-highlight {
 		border-top: 2px solid #00a2ed;
 		background: shade(@theme_bg_color, 0.96);
-		padding: 20px;
-		font-size: 1.1em;
+		padding: 16px;
+		font-size: 1.2em;
 	}
 	.success-flash {
 		background-color: #00a2ed;

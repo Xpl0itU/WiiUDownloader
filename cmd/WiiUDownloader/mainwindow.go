@@ -910,7 +910,7 @@ func (mw *MainWindow) updateDonationBar(success bool) {
 	if mw.donationLabel == nil || mw.donationBar == nil {
 		return
 	}
-	text := "<b>WiiUDownloader is made by one person.</b> If you find it helpful, please consider a small tip to support my work."
+	text := "<b>WiiUDownloader is built by one person.</b> If you appreciate the work, a small tip helps keep the tool active and up to date."
 	mw.donationLabel.SetMarkup(text)
 }
 
@@ -967,7 +967,7 @@ func (mw *MainWindow) showSuccessDialog(count int, path string) {
 		addStyleClass(donationBox.GetStyleContext, "donation-highlight")
 
 		nudgeLabel, _ := gtk.LabelNew("")
-		nudgeLabel.SetMarkup("<b>Downloads finished!</b> If this tool was helpful, a small tip for the developer is much appreciated.")
+		nudgeLabel.SetMarkup("<b>Success! All tasks complete.</b> If this tool has been helpful to you today, a small tip for the developer is much appreciated.")
 		nudgeLabel.SetLineWrap(true)
 		nudgeLabel.SetLineWrapMode(pango.WRAP_WORD)
 		nudgeLabel.SetXAlign(0.5)

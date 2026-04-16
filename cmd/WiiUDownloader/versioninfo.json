@@ -2,13 +2,13 @@
     "FixedFileInfo": {
         "FileVersion": {
             "Major": 2,
-            "Minor": 89,
+            "Minor": 90,
             "Patch": 0,
             "Build": 0
         },
         "ProductVersion": {
             "Major": 2,
-            "Minor": 89,
+            "Minor": 90,
             "Patch": 0,
             "Build": 0
         },
@@ -21,12 +21,12 @@
     "StringFileInfo": {
         "CompanyName": "Xpl0itU",
         "FileDescription": "WiiUDownloader",
-        "FileVersion": "2.89",
+        "FileVersion": "2.90",
         "InternalName": "WiiUDownloader",
         "LegalCopyright": "Copyright 2022-2026 Xpl0itU",
         "OriginalFilename": "WiiUDownloader.exe",
         "ProductName": "WiiUDownloader",
-        "ProductVersion": "2.89"
+        "ProductVersion": "2.90"
     },
     "IconPath": "WiiUDownloader.ico",
     "VarFileInfo": {

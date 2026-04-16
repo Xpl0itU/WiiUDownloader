@@ -66,6 +66,23 @@ func extractWiiUContents(path string, tmd *TMD, cipherHashTree cipher.Block, pro
 			if level >= MAX_LEVELS {
 				return errors.New("level >= MAX_LEVELS")
 			}
+
+			// Create the directory immediately to support empty folders
+			currentOutputPath := path
+			for j := uint32(0); j < level; j++ {
+				directory, err := table.NameAt(table.Entries[entry[j]].NameOffset & FST_NAME_OFFSET_MASK)
+				if err != nil {
+					return fmt.Errorf("failed to read directory name: %w", err)
+				}
+				currentOutputPath, err = safeJoinUnderBase(path, currentOutputPath, directory)
+				if err != nil {
+					return err
+				}
+			}
+			if err := os.MkdirAll(currentOutputPath, 0o755); err != nil {
+				return fmt.Errorf("failed to create directory: %w", err)
+			}
+
 			continue
 		}
 

@@ -901,7 +901,7 @@ func (mw *MainWindow) setupDonationBar() {
 	bar.PackStart(label, true, true, 0)
 	mw.donationLabel = label
 
-	button, err := gtk.ButtonNewWithLabel("Support on Ko-Fi")
+	button, err := gtk.ButtonNewWithLabel("Support Me")
 	if err != nil {
 		log.Println("Unable to create button:", err)
 	} else {
@@ -921,7 +921,10 @@ func (mw *MainWindow) updateDonationBar(success bool) {
 	if mw.donationLabel == nil || mw.donationBar == nil {
 		return
 	}
-	text := "<b>WiiUDownloader is built by one person.</b> If you appreciate the work, a small tip helps keep the tool active and up to date."
+	text := "<span size='large'><b>WiiUDownloader is a personal project.</b> Support my work with a small donation.</span>"
+	if success {
+		text = "<span size='large'><b>All done!</b> If I helped you out today, please consider supporting me with a tip.</span>"
+	}
 	mw.donationLabel.SetMarkup(text)
 }
 
@@ -978,14 +981,14 @@ func (mw *MainWindow) showSuccessDialog(count int, path string) {
 		addStyleClass(donationBox.GetStyleContext, "donation-highlight")
 
 		nudgeLabel, _ := gtk.LabelNew("")
-		nudgeLabel.SetMarkup("<b>Success! All tasks complete.</b> If this tool has been helpful to you today, a small tip for the developer is much appreciated.")
+		nudgeLabel.SetMarkup("<b>All done!</b> If I helped you out today, please consider supporting me with a tip.")
 		nudgeLabel.SetLineWrap(true)
 		nudgeLabel.SetLineWrapMode(pango.WRAP_WORD)
 		nudgeLabel.SetXAlign(0.5)
 		nudgeLabel.SetJustify(gtk.JUSTIFY_CENTER)
 		donationBox.PackStart(nudgeLabel, false, false, 0)
 
-		kofiBtn, _ := gtk.ButtonNewWithLabel("Support on Ko-Fi")
+		kofiBtn, _ := gtk.ButtonNewWithLabel("Support Me")
 		addStyleClass(kofiBtn.GetStyleContext, "kofi-btn")
 		kofiBtn.SetHAlign(gtk.ALIGN_CENTER)
 		kofiBtn.Connect("clicked", func() {

@@ -1470,7 +1470,6 @@ func (mw *MainWindow) updateTitlesInQueue() {
 
 	iter, ok := storeRef.GetIterFirst()
 	if !ok {
-		log.Println("Unable to get first iter")
 		return
 	}
 	for iter != nil {

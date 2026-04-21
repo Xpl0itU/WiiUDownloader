@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 
 	wiiudownloader "github.com/Xpl0itU/WiiUDownloader"
@@ -473,6 +474,16 @@ func (mw *MainWindow) BuildUI() {
 		}()
 	})
 	toolsSubMenu.Append(generateFakeTicketCert)
+	
+	addByTitleIDMenuItem, err := gtk.MenuItemNewWithLabel("Add by Title ID")
+	if err != nil {
+		log.Fatalln("Unable to create menu item:", err)
+	}
+	addByTitleIDMenuItem.ToWidget().SetProperty("tooltip-text", "Add by Title ID - Manually add a title to the queue using its ID")
+	addByTitleIDMenuItem.Connect("activate", func() {
+		mw.showAddByTitleIDDialog()
+	})
+	toolsSubMenu.Append(addByTitleIDMenuItem)
 
 	toolsMenu.SetSubmenu(toolsSubMenu)
 	menuBar.Append(toolsMenu)
@@ -1769,6 +1780,72 @@ func (mw *MainWindow) addTitlesToQueue(titles []wiiudownloader.TitleEntry) {
 				}
 			})
 		}(entry)
+	}
+}
+
+func (mw *MainWindow) showAddByTitleIDDialog() {
+	dialog, err := gtk.DialogNew()
+	if err != nil {
+		log.Printf("Error creating dialog: %v", err)
+		return
+	}
+	defer dialog.Destroy()
+
+	dialog.SetTitle("Add by Title ID")
+	dialog.SetTransientFor(mw.window)
+	dialog.SetModal(true)
+	dialog.AddButton("Cancel", gtk.RESPONSE_CANCEL)
+	dialog.AddButton("Add", gtk.RESPONSE_ACCEPT)
+
+	contentArea, err := dialog.GetContentArea()
+	if err != nil {
+		return
+	}
+	contentArea.SetSpacing(10)
+	contentArea.SetMarginTop(10)
+	contentArea.SetMarginBottom(10)
+	contentArea.SetMarginStart(10)
+	contentArea.SetMarginEnd(10)
+
+	label, _ := gtk.LabelNew("Enter Title ID (16-character hex):")
+	contentArea.PackStart(label, false, false, 0)
+
+	entry, _ := gtk.EntryNew()
+	entry.SetWidthChars(20)
+	entry.SetActivatesDefault(true)
+	contentArea.PackStart(entry, false, false, 0)
+
+	dialog.SetDefaultResponse(gtk.RESPONSE_ACCEPT)
+	dialog.ShowAll()
+
+	response := dialog.Run()
+	if response == gtk.RESPONSE_ACCEPT {
+		tidStr, _ := entry.GetText()
+		tidStr = strings.TrimSpace(tidStr)
+		if len(tidStr) != 16 {
+			ShowErrorDialog(mw.window, fmt.Errorf("invalid Title ID length: expected 16 characters, got %d", len(tidStr)))
+			return
+		}
+
+		tid, err := strconv.ParseUint(tidStr, 16, 64)
+		if err != nil {
+			ShowErrorDialog(mw.window, fmt.Errorf("failed to parse Title ID: %v", err))
+			return
+		}
+
+		entry := wiiudownloader.GetTitleEntryFromTid(tid)
+		if entry.TitleID == 0 {
+			// Not in database, create placeholder
+			entry = wiiudownloader.TitleEntry{
+				Name:    tidStr,
+				TitleID: tid,
+				Region:  0, // Unknown
+				Key:     uint8(wiiudownloader.TITLE_KEY_mypass),
+			}
+		}
+
+		mw.addTitlesToQueue([]wiiudownloader.TitleEntry{entry})
+		mw.updateTitlesInQueue()
 	}
 }
 

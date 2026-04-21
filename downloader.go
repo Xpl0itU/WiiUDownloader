@@ -458,7 +458,11 @@ func DownloadTitle(titleID, outputDirectory string, doDecryption bool, progressR
 
 	if progressReporter != nil {
 		progressReporter.ResetTotals()
-		progressReporter.SetGameTitle(tEntry.Name)
+		name := tEntry.Name
+		if name == "" {
+			name = titleID
+		}
+		progressReporter.SetGameTitle(name)
 	}
 	if !waitUntilResumed(progressReporter) {
 		return nil

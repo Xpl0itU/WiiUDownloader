@@ -32,6 +32,13 @@ jobs:
           go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest
           export PATH=$PATH:$(cygpath -u $(go env GOPATH)/bin)
           curl -Lo db.go -H "User-Agent: NUSspliBuilder/2.1" "https://napi.v10lator.de/db?t=go"
+          if grep -q "var titleEntry =" db.go; then
+            if grep -q "type TitleEntry struct" db.go; then
+              sed -i '/type TitleEntry struct/,/}/d' db.go
+            fi
+            sed -i 's/var titleEntry =/func init() { TitleDatabase =/' db.go
+            echo "}" >> db.go
+          fi
           magick data/WiiUDownloader.png -define icon:auto-resize=256,128,64,48,32,16 cmd/WiiUDownloader/WiiUDownloader.ico
           (cd cmd/WiiUDownloader && go generate && go build -ldflags="-H=windowsgui" -o ../../main.exe .) &
           wait

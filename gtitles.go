@@ -46,9 +46,23 @@ const (
 	TID_HIGH_UPDATE          = 0x0005000E
 )
 
+type TitleEntry struct {
+	Name     string
+	TitleID  uint64
+	Region   uint8
+	Key      uint8
+	Category uint8
+}
+
+var TitleDatabase []TitleEntry
+
+func SetTitleDatabase(db []TitleEntry) {
+	TitleDatabase = db
+}
+
 func GetTitleEntries(category uint8) []TitleEntry {
-	titleEntries := make([]TitleEntry, 0, len(titleEntry))
-	for _, entry := range titleEntry {
+	titleEntries := make([]TitleEntry, 0, len(TitleDatabase))
+	for _, entry := range TitleDatabase {
 		if entry.Category == TITLE_CATEGORY_DISC {
 			continue
 		}
@@ -153,7 +167,7 @@ func FindRelatedTitleByHighAndLow(source TitleEntry, targetHigh uint32, exclude 
 	bestScore := 3
 	found := false
 
-	for _, entry := range titleEntry {
+	for _, entry := range TitleDatabase {
 		if entry.Category == TITLE_CATEGORY_DISC {
 			continue
 		}
@@ -187,7 +201,7 @@ func FindRelatedTitleByHighAndLow(source TitleEntry, targetHigh uint32, exclude 
 }
 
 func GetTitleEntryFromTid(tid uint64) TitleEntry {
-	for _, entry := range titleEntry {
+	for _, entry := range TitleDatabase {
 		if entry.Category == TITLE_CATEGORY_DISC {
 			continue
 		}

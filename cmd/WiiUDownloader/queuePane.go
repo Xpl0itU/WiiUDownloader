@@ -33,9 +33,6 @@ type QueuePane struct {
 	updateFunc            func()
 }
 
-
-
-
 func createColumn(renderer *gtk.CellRendererText, title string, id int) (*gtk.TreeViewColumn, error) {
 	return gtk.TreeViewColumnNewWithAttribute(title, renderer, "text", id)
 }
@@ -51,7 +48,6 @@ func NewQueuePane() (*QueuePane, error) {
 	if err != nil {
 		return nil, err
 	}
-
 
 	titleTreeView, err := gtk.TreeViewNew()
 	if err != nil {
@@ -101,7 +97,6 @@ func NewQueuePane() (*QueuePane, error) {
 
 	titleTreeView.SetExpanderColumn(nameColumn)
 
-
 	scrolledWindow.Add(titleTreeView)
 
 	queueVBox, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
@@ -125,7 +120,6 @@ func NewQueuePane() (*QueuePane, error) {
 	addStyleClass(removeFromQueueButton.GetStyleContext, "remove-from-queue-button")
 	addStyleClass(removeFromQueueButton.GetStyleContext, "destructive-action")
 
-
 	downloadButton, err := gtk.ButtonNewWithLabel("Download Queue")
 	if err != nil {
 		return nil, err
@@ -134,7 +128,6 @@ func NewQueuePane() (*QueuePane, error) {
 	SetupButtonAccessibility(downloadButton, "Start downloading all titles in your queue")
 	addStyleClass(downloadButton.GetStyleContext, "download-queue-button")
 	addStyleClass(downloadButton.GetStyleContext, "suggested-action")
-
 
 	totalSizeLabel, err := gtk.LabelNew("Total Size: 0 B")
 	if err != nil {
@@ -158,9 +151,6 @@ func NewQueuePane() (*QueuePane, error) {
 		titleSizes:            make(map[uint64]string),
 		titleBytes:            make(map[uint64]uint64),
 	}
-
-
-
 
 	removeFromQueueButton.Connect("clicked", func() {
 		selection, err := titleTreeView.GetSelection()
@@ -247,10 +237,8 @@ func NewQueuePane() (*QueuePane, error) {
 
 	addStyleClass(queueVBox.GetStyleContext, "queue-pane-vbox")
 
-
 	return &queuePane, nil
 }
-
 
 func (qp *QueuePane) AddTitle(title wiiudownloader.TitleEntry) {
 	qp.titleQueue.WithLock(func(queue *[]wiiudownloader.TitleEntry) {
@@ -265,7 +253,6 @@ func (qp *QueuePane) AddTitles(titles []wiiudownloader.TitleEntry) {
 	})
 	qp.Update(true)
 }
-
 
 func (qp *QueuePane) RemoveTitle(title wiiudownloader.TitleEntry) {
 	qp.titleQueue.WithLock(func(queue *[]wiiudownloader.TitleEntry) {
@@ -292,7 +279,6 @@ func (qp *QueuePane) RemoveTitles(titlesToRemove []uint64) {
 	})
 	qp.Update(true)
 }
-
 
 func (qp *QueuePane) Clear() {
 	qp.titleQueue.WithLock(func(queue *[]wiiudownloader.TitleEntry) {
@@ -421,7 +407,6 @@ func (qp *QueuePane) SetTitleLoadingNoUpdate(titleID uint64) {
 	qp.titleSizes[titleID] = "loading..."
 }
 
-
 func (qp *QueuePane) Update(doUpdateFunc bool) {
 	var queueSnapshot []wiiudownloader.TitleEntry
 	qp.titleQueue.WithRLock(func(queue []wiiudownloader.TitleEntry) {
@@ -496,5 +481,3 @@ func (qp *QueuePane) updateTotalSizeLabel() {
 	}
 	qp.totalSizeLabel.SetMarkup(fmt.Sprintf("<b>%s</b>", text))
 }
-
-

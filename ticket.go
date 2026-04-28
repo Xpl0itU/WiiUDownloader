@@ -115,5 +115,3 @@ func newTicketData() ([]byte, error) {
 	}
 	return append([]byte(nil), ticketTemplateData...), nil
 }
-
-

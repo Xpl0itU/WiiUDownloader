@@ -201,7 +201,6 @@ func applyStyling() {
 	}
 	`
 
-
 	if err := provider.LoadFromData(css); err != nil {
 		log.Printf("failed to load CSS styling: %v", err)
 	}

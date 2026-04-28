@@ -71,7 +71,6 @@ func (sa *SpeedAverager) GetAverageSpeed() float64 {
 	return SMOOTHING_FACTOR*float64(sa.speeds[len(sa.speeds)-1]) + (1-SMOOTHING_FACTOR)*float64(sa.averageSpeed)
 }
 
-
 type ProgressWindow struct {
 	Window          *gtk.Window
 	box             *gtk.Box
@@ -106,14 +105,14 @@ func (pw *ProgressWindow) UpdateDownloadProgress(downloaded int64, filename stri
 	if downloaded == 0 {
 		return
 	}
-	
+
 	pw.progressMutex.Lock()
 	if _, ok := pw.progressPerFile[filename]; !ok {
 		pw.progressMutex.Unlock()
 		return
 	}
 	pw.progressPerFile[filename] += downloaded
-	
+
 	if pw.updatePending {
 		pw.progressMutex.Unlock()
 		return
@@ -130,7 +129,7 @@ func (pw *ProgressWindow) UpdateDownloadProgress(downloaded int64, filename stri
 			total += v
 		}
 		pw.progressMutex.Unlock()
-		
+
 		pw.bar.SetFraction(float64(total) / float64(pw.totalToDownload))
 		pw.speedAverager.AddSpeed(calculateDownloadSpeed(total, pw.startTime, time.Now()))
 		pw.bar.SetText(fmt.Sprintf(
@@ -160,7 +159,7 @@ func (pw *ProgressWindow) UpdateDecryptionProgress(progress float64) {
 		prog := pw.decProgress
 		pw.decPending = false
 		pw.progressMutex.Unlock()
-		
+
 		pw.bar.SetFraction(prog)
 		pw.bar.SetText(fmt.Sprintf("Decrypting (%.2f%%)", prog*PERCENT_SCALE))
 		return false

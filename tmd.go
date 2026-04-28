@@ -30,7 +30,6 @@ func (t *TMD) CalculateTotalSize() uint64 {
 	return total
 }
 
-
 func ParseTMD(data []byte) (*TMD, error) {
 	parsed, err := tmdfmt.Parse(data)
 	if err != nil {

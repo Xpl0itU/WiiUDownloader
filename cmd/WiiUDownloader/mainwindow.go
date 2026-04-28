@@ -31,9 +31,9 @@ const (
 )
 
 const (
-	MAIN_WINDOW_WIDTH             = 870
-	MAIN_WINDOW_HEIGHT            = 460
-	SEARCH_ENTRY_WIDTH_CHARS      = 18
+	MAIN_WINDOW_WIDTH        = 870
+	MAIN_WINDOW_HEIGHT       = 460
+	SEARCH_ENTRY_WIDTH_CHARS = 18
 
 	UI_MARGIN_SMALL               = 6
 	SPLIT_PANE_MARGIN             = 2
@@ -53,7 +53,6 @@ const (
 	ERROR_ROW_MARGIN              = 5
 	MAX_CONCURRENT_SIZE_FETCHES   = 8
 )
-
 
 type MainWindow struct {
 	window                          *gtk.Window
@@ -93,7 +92,6 @@ type MainWindow struct {
 	sizeFetchSemaphore              chan struct{}
 }
 
-
 func NewMainWindow(entries []wiiudownloader.TitleEntry, client *http.Client, config *Config) *MainWindow {
 	win, err := gtk.WindowNew(gtk.WINDOW_TOPLEVEL)
 	if err != nil {
@@ -124,16 +122,15 @@ func NewMainWindow(entries []wiiudownloader.TitleEntry, client *http.Client, con
 	}
 
 	mainWindow := MainWindow{
-		window:         win,
-		queuePane:      queuePane,
-		titles:         entries,
-		searchEntry:    searchEntry,
-		currentRegion:  wiiudownloader.MCP_REGION_EUROPE | wiiudownloader.MCP_REGION_JAPAN | wiiudownloader.MCP_REGION_USA,
-		lastSearchText: "",
-		client:         client,
+		window:             win,
+		queuePane:          queuePane,
+		titles:             entries,
+		searchEntry:        searchEntry,
+		currentRegion:      wiiudownloader.MCP_REGION_EUROPE | wiiudownloader.MCP_REGION_JAPAN | wiiudownloader.MCP_REGION_USA,
+		lastSearchText:     "",
+		client:             client,
 		sizeFetchSemaphore: make(chan struct{}, MAX_CONCURRENT_SIZE_FETCHES),
 	}
-
 
 	queuePane.updateFunc = mainWindow.updateTitlesInQueue
 
@@ -146,8 +143,6 @@ func NewMainWindow(entries []wiiudownloader.TitleEntry, client *http.Client, con
 
 	return &mainWindow
 }
-
-
 
 func (mw *MainWindow) SetApplicationForGTKWindow(app *gtk.Application) {
 	mw.window.SetApplication(app)
@@ -475,7 +470,7 @@ func (mw *MainWindow) BuildUI() {
 		}()
 	})
 	toolsSubMenu.Append(generateFakeTicketCert)
-	
+
 	addByTitleIDMenuItem, err := gtk.MenuItemNewWithLabel("Add by Title ID")
 	if err != nil {
 		log.Fatalln("Unable to create menu item:", err)
@@ -588,7 +583,6 @@ func (mw *MainWindow) BuildUI() {
 	mw.downloadQueueButton.GrabDefault()
 	SetupButtonAccessibility(mw.downloadQueueButton, "Start downloading all titles in your queue")
 
-
 	mw.decryptContentsCheckbox, err = gtk.CheckButtonNewWithLabel("Decrypt contents")
 	if err != nil {
 		log.Fatalln("Unable to create button:", err)
@@ -671,7 +665,7 @@ func (mw *MainWindow) BuildUI() {
 	if err != nil {
 		log.Fatalln("Unable to create paned:", err)
 	}
-	splitPane.Pack1(mw.queuePane.GetContainer(), true, false)
+	splitPane.Pack1(mw.queuePane.GetContainer(), false, false)
 	splitPane.Pack2(mainvBox, true, true)
 
 	splitPane.SetMarginBottom(SPLIT_PANE_MARGIN)
@@ -685,7 +679,6 @@ func (mw *MainWindow) BuildUI() {
 	splitPane.ShowAll()
 }
 
-
 func (mw *MainWindow) onDownloadQueueButtonClicked() {
 	if mw.queuePane.IsQueueEmpty() {
 		return
@@ -698,50 +691,47 @@ func (mw *MainWindow) onDownloadQueueButtonClicked() {
 	dialog := dialog.Directory().Title("Select a path to save the games to")
 	config, err := loadConfig()
 
-		if err != nil {
+	if err != nil {
+		return
+	}
+
+	selectedPath, err := mw.resolveDownloadPath(config, dialog.SetStartDir, dialog.Browse)
+	if err != nil {
+		uiIdleAdd(func() {
+			mw.progressWindow.Window.Hide()
+		})
+		return
+	}
+
+	mw.progressWindow.Window.ShowAll()
+	decryptContents := mw.decryptContents
+	deleteEncryptedContents := mw.getDeleteEncryptedContents()
+
+	go func() {
+		uiIdleAdd(func() {
+			mw.setDownloadControlsSensitive(false)
+		})
+
+		defer uiIdleAdd(func() {
+			mw.setDownloadControlsSensitive(true)
+		})
+
+		runErr := mw.onDownloadQueueClicked(selectedPath, decryptContents, deleteEncryptedContents, config)
+		if runErr != nil {
+			uiIdleAdd(func() {
+				mw.showError(runErr)
+			})
 			return
 		}
 
-		selectedPath, err := mw.resolveDownloadPath(config, dialog.SetStartDir, dialog.Browse)
-		if err != nil {
+		errors := mw.progressWindow.GetErrors()
+		if shouldShowQueueErrorSummary(runErr, errors) {
 			uiIdleAdd(func() {
-				mw.progressWindow.Window.Hide()
+				mw.showErrorsDialog(errors)
 			})
-			return
 		}
-
-		mw.progressWindow.Window.ShowAll()
-		decryptContents := mw.decryptContents
-		deleteEncryptedContents := mw.getDeleteEncryptedContents()
-
-		go func() {
-			uiIdleAdd(func() {
-				mw.setDownloadControlsSensitive(false)
-			})
-
-			defer uiIdleAdd(func() {
-				mw.setDownloadControlsSensitive(true)
-			})
-
-			runErr := mw.onDownloadQueueClicked(selectedPath, decryptContents, deleteEncryptedContents, config)
-			if runErr != nil {
-				uiIdleAdd(func() {
-					mw.showError(runErr)
-				})
-				return
-			}
-
-			errors := mw.progressWindow.GetErrors()
-			if shouldShowQueueErrorSummary(runErr, errors) {
-				uiIdleAdd(func() {
-					mw.showErrorsDialog(errors)
-				})
-			}
-		}()
+	}()
 }
-
-
-
 
 func (mw *MainWindow) onRegionChange(button *gtk.CheckButton, region uint8) {
 	mw.currentRegion = updateRegionMask(mw.currentRegion, region, button.GetActive())
@@ -928,7 +918,6 @@ func (mw *MainWindow) updateDonationBar(success bool) {
 	}
 	mw.donationLabel.SetMarkup(text)
 }
-
 
 func (mw *MainWindow) showSuccessDialog(count int, path string) {
 	dialog, err := gtk.DialogNew()
@@ -1220,7 +1209,7 @@ func (mw *MainWindow) toggleQueueForSortPath(sortPath *gtk.TreePath) bool {
 		mw.queuePane.RemoveTitles(mw.collectTIDs(selectedEntries))
 	} else {
 		mw.addTitlesToQueue(selectedEntries)
-	
+
 		if mw.suggestRelatedContent {
 			candidates := mw.collectRelatedCandidates(selectedEntries)
 			if len(candidates) > 0 {
@@ -1231,7 +1220,6 @@ func (mw *MainWindow) toggleQueueForSortPath(sortPath *gtk.TreePath) bool {
 			}
 		}
 	}
-
 
 	mw.updateTitlesInQueue()
 	return true
@@ -1485,7 +1473,7 @@ func (mw *MainWindow) updateTitlesInQueue() {
 					continue
 				}
 				isInQueue := mw.queuePane.IsTitleInQueue(wiiudownloader.TitleEntry{TitleID: tidNum})
-				
+
 				if inQueueVal, err := storeRef.GetValue(iter, IN_QUEUE_COLUMN); err == nil {
 					if currentInQueue, err := inQueueVal.GoValue(); err == nil {
 						if currentInQueue.(bool) != isInQueue {
@@ -1851,4 +1839,3 @@ func (mw *MainWindow) showAddByTitleIDDialog() {
 		mw.updateTitlesInQueue()
 	}
 }
-

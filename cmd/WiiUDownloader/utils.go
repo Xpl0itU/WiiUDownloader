@@ -117,16 +117,19 @@ func applyStyling() {
 	treeview.view {
 		padding: 6px;
 	}
-	.button {
-		padding: 4px 10px;
+	.button, button {
+		padding: 5px 12px;
 	}
 	entry {
-		padding: 4px 8px;
+		padding: 5px 10px;
 	}
 	button.category-toggle {
 		border-radius: 8px;
-		padding: 4px 10px;
+		padding: 5px 12px;
 		transition: all 0.2s ease-in-out;
+	}
+	checkbutton {
+		padding: 4px 8px;
 	}
 	button.category-toggle:hover,
 	radio.category-toggle:hover {

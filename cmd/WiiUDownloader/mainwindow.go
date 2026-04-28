@@ -332,6 +332,7 @@ func (mw *MainWindow) BuildUI() {
 		log.Fatalln("Unable to create tree view column:", err)
 	}
 	column.SetResizable(true)
+	column.SetExpand(true)
 	column.SetSortColumnID(NAME_COLUMN)
 	mw.treeView.AppendColumn(column)
 
@@ -670,7 +671,7 @@ func (mw *MainWindow) BuildUI() {
 	if err != nil {
 		log.Fatalln("Unable to create paned:", err)
 	}
-	splitPane.Pack1(mw.queuePane.GetContainer(), false, false)
+	splitPane.Pack1(mw.queuePane.GetContainer(), true, false)
 	splitPane.Pack2(mainvBox, true, true)
 
 	splitPane.SetMarginBottom(SPLIT_PANE_MARGIN)
@@ -921,9 +922,9 @@ func (mw *MainWindow) updateDonationBar(success bool) {
 	if mw.donationLabel == nil || mw.donationBar == nil {
 		return
 	}
-	text := "<span size='large'><b>WiiUDownloader is a personal project.</b> Support my work with a small donation.</span>"
+	text := "<span size='large'><span foreground='#00a2ed'><b>WiiUDownloader is a solo project.</b></span> Your support helps make future updates possible.</span>"
 	if success {
-		text = "<span size='large'><b>All done!</b> If I helped you out today, please consider supporting me with a tip.</span>"
+		text = "<span size='large'><span foreground='#16a34a'><b>Downloads Finished!</b></span> If this app was helpful, please consider leaving a small tip!</span>"
 	}
 	mw.donationLabel.SetMarkup(text)
 }
@@ -952,7 +953,7 @@ func (mw *MainWindow) showSuccessDialog(count int, path string) {
 
 	// Header
 	header, _ := gtk.LabelNew("")
-	header.SetMarkup("<span size='large' weight='bold'>Downloads Finished</span>")
+	header.SetMarkup("<span size='x-large' weight='bold' foreground='#16a34a'>Downloads Finished!</span>")
 	header.SetMarginTop(12)
 	contentArea.PackStart(header, false, false, 0)
 
@@ -981,7 +982,7 @@ func (mw *MainWindow) showSuccessDialog(count int, path string) {
 		addStyleClass(donationBox.GetStyleContext, "donation-highlight")
 
 		nudgeLabel, _ := gtk.LabelNew("")
-		nudgeLabel.SetMarkup("<b>All done!</b> If I helped you out today, please consider supporting me with a tip.")
+		nudgeLabel.SetMarkup("<span size='large'><b>Success!</b> If this app was helpful, please consider leaving a small tip!</span>")
 		nudgeLabel.SetLineWrap(true)
 		nudgeLabel.SetLineWrapMode(pango.WRAP_WORD)
 		nudgeLabel.SetXAlign(0.5)

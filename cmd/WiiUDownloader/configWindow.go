@@ -102,6 +102,25 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 	SetupCheckButtonAccessibility(rememberPathCheck, "Remember and automatically use the last download location")
 	generalGrid.Attach(rememberPathCheck, 0, 2, 2, 1)
 
+	sgdbAPIKeyLabel, err := gtk.LabelNew("SGDB API Key:")
+	if err != nil {
+		return nil, err
+	}
+	sgdbAPIKeyLabel.SetHAlign(gtk.ALIGN_START)
+	generalGrid.Attach(sgdbAPIKeyLabel, 0, 3, 2, 1)
+
+	sgdbAPIKeyEntry, err := gtk.EntryNew()
+	if err != nil {
+		return nil, err
+	}
+	sgdbAPIKeyEntry.SetText(config.SGDBAPIKey)
+	sgdbAPIKeyEntry.SetWidthChars(SETTINGS_ENTRY_WIDTH_CHARS)
+	sgdbAPIKeyEntry.SetHExpand(true)
+	sgdbAPIKeyEntry.SetVisibility(false)
+	sgdbAPIKeyEntry.SetInputPurpose(gtk.INPUT_PURPOSE_PASSWORD)
+	SetupEntryAccessibility(sgdbAPIKeyEntry, "SGDB API key", "API key used for SGDB requests.")
+	generalGrid.Attach(sgdbAPIKeyEntry, 0, 4, 2, 1)
+
 	generalTabLabel, _ := gtk.LabelNew("General")
 	notebook.AppendPage(generalGrid, generalTabLabel)
 
@@ -162,13 +181,23 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 	SetupCheckButtonAccessibility(showDonationBarCheck, "Show a small bar at the bottom to support the project")
 	interfaceGrid.Attach(showDonationBarCheck, 0, 1, 1, 1)
 
+	showTilesCheck, err := gtk.CheckButtonNewWithLabel("Show tiles")
+	if err != nil {
+		return nil, err
+	}
+	hasSGDBAPIKey := config.SGDBAPIKey != ""
+	showTilesCheck.SetActive(hasSGDBAPIKey && config.ShowTiles)
+	showTilesCheck.SetSensitive(hasSGDBAPIKey)
+	SetupCheckButtonAccessibility(showTilesCheck, "Show games as artwork tiles when an SGDB API key is configured")
+	interfaceGrid.Attach(showTilesCheck, 0, 2, 1, 1)
+
 	getSizeOnQueueCheck, err := gtk.CheckButtonNewWithLabel("Fetch game size when adding to queue")
 	if err != nil {
 		return nil, err
 	}
 	getSizeOnQueueCheck.SetActive(config.GetSizeOnQueue)
 	SetupCheckButtonAccessibility(getSizeOnQueueCheck, "Automatically calculate game size using TMD file when added to queue")
-	interfaceGrid.Attach(getSizeOnQueueCheck, 0, 2, 1, 1)
+	interfaceGrid.Attach(getSizeOnQueueCheck, 0, 3, 1, 1)
 
 	interfaceTabLabel, _ := gtk.LabelNew("Interface")
 	notebook.AppendPage(interfaceGrid, interfaceTabLabel)
@@ -202,8 +231,21 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 	continueOnErrorCheck.Connect("toggled", func() { dirty = true })
 	suggestRelatedContentCheck.Connect("toggled", func() { dirty = true })
 	showDonationBarCheck.Connect("toggled", func() { dirty = true })
+	showTilesCheck.Connect("toggled", func() { dirty = true })
 	getSizeOnQueueCheck.Connect("toggled", func() { dirty = true })
 	downloadPathEntry.Connect("changed", func() { dirty = true })
+	sgdbAPIKeyEntry.Connect("changed", func() { dirty = true })
+	sgdbAPIKeyEntry.Connect("changed", func() {
+		text, err := sgdbAPIKeyEntry.GetText()
+		if err != nil {
+			return
+		}
+		hasKey := text != ""
+		showTilesCheck.SetSensitive(hasKey)
+		if !hasKey {
+			showTilesCheck.SetActive(false)
+		}
+	})
 
 	saveButton.Connect("clicked", func() {
 		config.DarkMode = darkModeCheck.GetActive()
@@ -220,9 +262,16 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 		}
 
 		config.LastSelectedPath = newPath
+		sgdbAPIKey, getAPIKeyErr := sgdbAPIKeyEntry.GetText()
+		if getAPIKeyErr != nil {
+			ShowErrorDialog(win, getAPIKeyErr)
+			return
+		}
+		config.SGDBAPIKey = sgdbAPIKey
 		config.RememberLastPath = rememberPathCheck.GetActive()
 		config.ContinueOnError = continueOnErrorCheck.GetActive()
 		config.SuggestRelatedContent = suggestRelatedContentCheck.GetActive()
+		config.ShowTiles = sgdbAPIKey != "" && showTilesCheck.GetActive()
 		config.ShowDonationBar = showDonationBarCheck.GetActive()
 		config.GetSizeOnQueue = getSizeOnQueueCheck.GetActive()
 

@@ -23,7 +23,9 @@ type Config struct {
 	SelectedRegion          uint8  `koanf:"selectedRegion"`
 	DidInitialSetup         bool   `koanf:"didInitialSetup"`
 	LastSelectedPath        string `koanf:"lastSelectedPath"`
+	SGDBAPIKey              string `koanf:"sgdbApiKey"`
 	RememberLastPath        bool   `koanf:"rememberLastPath"`
+	ShowTiles               bool   `koanf:"showTiles"`
 	ShowDonationBar         bool   `koanf:"showDonationBar"`
 	GetSizeOnQueue          bool   `koanf:"getSizeOnQueue"`
 	saveConfigCallback      func()
@@ -55,6 +57,8 @@ func getDefaultConfig() *Config {
 		SelectedRegion:          wiiudownloader.MCP_REGION_EUROPE | wiiudownloader.MCP_REGION_USA | wiiudownloader.MCP_REGION_JAPAN,
 		DidInitialSetup:         false,
 		RememberLastPath:        false,
+		SGDBAPIKey:              "",
+		ShowTiles:               false,
 		ShowDonationBar:         true,
 		GetSizeOnQueue:          true,
 		saveConfigCallback:      nil,
@@ -155,6 +159,15 @@ func (c *Config) SetValuesFromConfig(newK *koanf.Koanf) error {
 	}
 	if !newK.Exists("showDonationBar") {
 		c.ShowDonationBar = true
+	}
+	if !newK.Exists("showTiles") {
+		c.ShowTiles = false
+	}
+	if !newK.Exists("sgdbApiKey") && newK.Exists("stdbApiKey") {
+		c.SGDBAPIKey = newK.String("stdbApiKey")
+	}
+	if c.SGDBAPIKey == "" {
+		c.ShowTiles = false
 	}
 	return nil
 }

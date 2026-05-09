@@ -123,6 +123,15 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 	SetupEntryAccessibility(sgdbAPIKeyEntry, "SGDB API key", "API key used for SGDB requests.")
 	generalGrid.Attach(sgdbAPIKeyEntry, 0, 4, 2, 1)
 
+	sgdbDisclaimerLabel, err := gtk.LabelNew("SGDB Images")
+	if err != nil {
+		return nil, err
+	}
+	sgdbDisclaimerLabel.SetLineWrap(true)
+	sgdbDisclaimerLabel.SetHAlign(gtk.ALIGN_START)
+	sgdbDisclaimerLabel.SetMarkup(`<small>SGDB Images: This is an experimental feature. Coverage is incomplete and not all games may have available artwork. Some titles may display without images.</small>`)
+	generalGrid.Attach(sgdbDisclaimerLabel, 0, 5, 2, 1)
+
 	generalTabLabel, _ := gtk.LabelNew("General")
 	notebook.AppendPage(generalGrid, generalTabLabel)
 

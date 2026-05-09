@@ -35,12 +35,14 @@ const (
 	SGDB_REQUEST_TIMEOUT        = 15 * time.Second
 	SGDB_SEARCH_ENDPOINT        = "https://www.steamgriddb.com/api/v2/search/autocomplete/%s"
 	SGDB_BOXART_ENDPOINT        = "https://www.steamgriddb.com/api/v2/grids/game/%d?dimensions=342x482,600x900,660x930&types=static&nsfw=false&humor=false&epilepsy=false&limit=1"
+	SGDB_DEFAULT_TILE_IMAGE_URL = "https://cdn2.steamgriddb.com/thumb/b4379dcda061fa79353cbe9616a95117.jpg"
 )
 
 type titleTileCard struct {
 	entry       wiiudownloader.TitleEntry
 	button      *gtk.Button
 	image       *gtk.Image
+	spinner     *gtk.Spinner
 	titleLabel  *gtk.Label
 	metaLabel   *gtk.Label
 	imageLoaded bool
@@ -101,6 +103,12 @@ func (s *tileArtworkStore) get(titleID uint64) ([]byte, bool) {
 		s.touchLocked(titleID)
 	}
 	return imageData, ok
+}
+
+func (s *tileArtworkStore) isFailed(titleID uint64) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.failed[titleID]
 }
 
 func (s *tileArtworkStore) start(titleID uint64) bool {
@@ -597,12 +605,29 @@ func (mw *MainWindow) createTileCard(entry wiiudownloader.TitleEntry) (*titleTil
 	content.SetMarginStart(5)
 	content.SetMarginEnd(5)
 
-	image, err := gtk.ImageNewFromIconName("image-x-generic", gtk.ICON_SIZE_DIALOG)
+	image, err := gtk.ImageNew()
 	if err != nil {
 		return nil, err
 	}
 	image.SetSizeRequest(TITLE_TILE_IMAGE_WIDTH, TITLE_TILE_IMAGE_HEIGHT)
-	content.PackStart(image, false, false, 0)
+	image.SetHAlign(gtk.ALIGN_CENTER)
+	image.SetVAlign(gtk.ALIGN_CENTER)
+
+	spinner, err := gtk.SpinnerNew()
+	if err != nil {
+		return nil, err
+	}
+	spinner.SetHAlign(gtk.ALIGN_CENTER)
+	spinner.SetVAlign(gtk.ALIGN_CENTER)
+
+	mediaBox, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
+	if err != nil {
+		return nil, err
+	}
+	mediaBox.SetSizeRequest(TITLE_TILE_IMAGE_WIDTH, TITLE_TILE_IMAGE_HEIGHT)
+	mediaBox.PackStart(spinner, true, true, 0)
+	mediaBox.PackStart(image, true, true, 0)
+	content.PackStart(mediaBox, false, false, 0)
 
 	titleLabel, err := gtk.LabelNew(entry.Name)
 	if err != nil {
@@ -636,6 +661,7 @@ func (mw *MainWindow) createTileCard(entry wiiudownloader.TitleEntry) (*titleTil
 		entry:       entry,
 		button:      button,
 		image:       image,
+		spinner:     spinner,
 		titleLabel:  titleLabel,
 		metaLabel:   metaLabel,
 		imageLoaded: false,
@@ -643,10 +669,45 @@ func (mw *MainWindow) createTileCard(entry wiiudownloader.TitleEntry) (*titleTil
 }
 
 func (mw *MainWindow) unloadTileCardImage(card *titleTileCard) {
-	if card == nil || card.image == nil || !card.imageLoaded {
+	if card == nil {
 		return
 	}
+	if card.spinner != nil {
+		card.spinner.Stop()
+		card.spinner.Hide()
+	}
+	if card.image == nil || !card.imageLoaded {
+		return
+	}
+	card.image.SetFromPixbuf(nil)
+	card.image.Hide()
+	card.imageLoaded = false
+}
+
+func (mw *MainWindow) showTileLoading(card *titleTileCard) {
+	if card == nil {
+		return
+	}
+	if card.image != nil {
+		card.image.Hide()
+	}
+	if card.spinner != nil {
+		card.spinner.Start()
+		card.spinner.Show()
+	}
+	card.imageLoaded = false
+}
+
+func (mw *MainWindow) showTileNoImage(card *titleTileCard) {
+	if card == nil || card.image == nil {
+		return
+	}
+	if card.spinner != nil {
+		card.spinner.Stop()
+		card.spinner.Hide()
+	}
 	card.image.SetFromIconName("image-x-generic", gtk.ICON_SIZE_DIALOG)
+	card.image.Show()
 	card.imageLoaded = false
 }
 
@@ -700,11 +761,17 @@ func (mw *MainWindow) loadTileArtwork(titleID uint64, titleName string) {
 	if card.imageLoaded {
 		return
 	}
+	mw.showTileLoading(card)
 	if cachedImageData, ok := mw.tileArtwork.get(titleID); ok {
-		mw.setTileImageFromBytes(titleID, cachedImageData)
+		if !mw.setTileImageFromBytes(titleID, cachedImageData) {
+			mw.showTileNoImage(card)
+		}
 		return
 	}
 	if !mw.tileArtwork.start(titleID) {
+		if mw.tileArtwork.isFailed(titleID) {
+			mw.showTileNoImage(card)
+		}
 		return
 	}
 
@@ -721,36 +788,49 @@ func (mw *MainWindow) loadTileArtwork(titleID uint64, titleName string) {
 		uiIdleAdd(func() {
 			mw.tileArtwork.finish(titleID, imageData, err)
 			if err != nil {
+				if failedCard, ok := mw.tileCards[titleID]; ok {
+					mw.showTileNoImage(failedCard)
+				}
 				return
 			}
-			mw.setTileImageFromBytes(titleID, imageData)
+			if !mw.setTileImageFromBytes(titleID, imageData) {
+				if failedCard, ok := mw.tileCards[titleID]; ok {
+					mw.showTileNoImage(failedCard)
+				}
+			}
 		})
 	}()
 }
 
-func (mw *MainWindow) setTileImageFromBytes(titleID uint64, imageData []byte) {
+func (mw *MainWindow) setTileImageFromBytes(titleID uint64, imageData []byte) bool {
 	card, ok := mw.tileCards[titleID]
 	if !ok || card == nil || card.image == nil || len(imageData) == 0 {
-		return
+		return false
 	}
 	if card.imageLoaded {
-		return
+		return true
 	}
 
 	loader, err := gdk.PixbufLoaderNew()
 	if err != nil {
-		return
+		return false
 	}
 	pixbuf, err := loader.WriteAndReturnPixbuf(imageData)
 	if err != nil {
-		return
+		return false
 	}
 	scaledPixbuf, err := pixbuf.ScaleSimple(TITLE_TILE_IMAGE_WIDTH, TITLE_TILE_IMAGE_HEIGHT, gdk.INTERP_BILINEAR)
 	if err != nil {
-		return
+		return false
+	}
+	if card.spinner != nil {
+		card.spinner.Stop()
+		card.spinner.Hide()
 	}
 	card.image.SetFromPixbuf(scaledPixbuf)
+	card.image.Show()
 	card.imageLoaded = true
+	return true
 }
 
 func (mw *MainWindow) fetchAndCacheSGDBTile(ctx context.Context, titleID uint64, titleName string) ([]byte, error) {
@@ -767,7 +847,7 @@ func (mw *MainWindow) fetchAndCacheSGDBTile(ctx context.Context, titleID uint64,
 	gameIDs, err := mw.fetchSGDBGameIDs(ctx, titleName)
 	if err != nil || len(gameIDs) == 0 {
 		log.Printf("[SGDB] Failed to find match for: %s - %v", titleName, err)
-		return nil, err
+		return mw.downloadSGDBImage(ctx, SGDB_DEFAULT_TILE_IMAGE_URL)
 	}
 
 	for i, gameID := range gameIDs {
@@ -786,7 +866,7 @@ func (mw *MainWindow) fetchAndCacheSGDBTile(ctx context.Context, titleID uint64,
 	}
 
 	log.Printf("[SGDB] None of %d candidates had grids for: %s", len(gameIDs), titleName)
-	return nil, fmt.Errorf("no SGDB grids found for %s after trying %d candidates", titleName, len(gameIDs))
+	return mw.downloadSGDBImage(ctx, SGDB_DEFAULT_TILE_IMAGE_URL)
 }
 
 func stripSGDBPrefixes(titleName string) string {
@@ -1006,6 +1086,11 @@ func (mw *MainWindow) downloadSGDBImage(ctx context.Context, imageURL string) ([
 	if response.StatusCode != http.StatusOK {
 		log.Printf("[SGDB] Image download failed with status %d for URL: %s", response.StatusCode, imageURL)
 		return nil, fmt.Errorf("SGDB image download failed with status %d", response.StatusCode)
+	}
+
+	contentType := strings.ToLower(strings.TrimSpace(response.Header.Get("Content-Type")))
+	if contentType != "" && !strings.HasPrefix(contentType, "image/") {
+		return nil, fmt.Errorf("SGDB image download returned non-image content type %q", contentType)
 	}
 
 	return io.ReadAll(response.Body)

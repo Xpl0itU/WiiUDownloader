@@ -11,6 +11,21 @@ WiiUDownloader is a Golang program that allows you to download Wii U games from 
 - Filter titles based on name or title ID.
 - Select regions (Japan, USA, and Europe) to filter available titles.
 
+## This Fork
+
+This fork focuses on exercising UX design ideas while keeping the core Wii U downloader workflow intact. It adds a more visual browsing experience and several interface refinements around discovery, filtering, and settings.
+
+Added functionality includes:
+
+- Tile view for browsing games with SteamGridDB artwork.
+- List and tile mode toggles on the main toolbar.
+- Category-aware mode behavior so tile view is only available where artwork coverage makes sense.
+- SteamGridDB API key configuration in Settings.
+- An in-app warning for the SGDB artwork feature so users know it is experimental and may not cover every title.
+- In-memory artwork caching with a persistent SGDB ID cache to reduce repeated lookups.
+- Improved title matching and fallback logic to find artwork more reliably.
+- Filter-aware tile refreshing so search, category, and region changes stay consistent across views.
+
 ## Usage Guide
 
 Check the [WiiUDownloader Usage Guide here](https://xpl0itu.github.io/WiiUDownloaderDocs/docs/)

@@ -1087,6 +1087,10 @@ func sgdbSearchCandidates(titleName string) []string {
 	clean := strings.NewReplacer("（", "(", "）", ")", "【", "[", "】", "]").Replace(base)
 	addCandidate(clean)
 	addCandidate(base)
+	addCandidate(insertAlnumBoundaries(base))
+	addCandidate(removeAlnumBoundarySpaces(base))
+	addCandidate(insertAlnumBoundaries(clean))
+	addCandidate(removeAlnumBoundarySpaces(clean))
 
 	// Add & <-> and variants for each candidate so far.
 	existing := make([]string, len(candidates))
@@ -1106,6 +1110,57 @@ func sgdbSearchCandidates(titleName string) []string {
 	return candidates
 }
 
+func isAlphaNumBoundary(prev rune, curr rune) bool {
+	return (unicode.IsLetter(prev) && unicode.IsDigit(curr)) || (unicode.IsDigit(prev) && unicode.IsLetter(curr))
+}
+
+func insertAlnumBoundaries(s string) string {
+	runes := []rune(strings.TrimSpace(s))
+	if len(runes) < 2 {
+		return s
+	}
+
+	var b strings.Builder
+	b.Grow(len(s) + 4)
+	b.WriteRune(runes[0])
+	lastWasSpace := runes[0] == ' '
+
+	for i := 1; i < len(runes); i++ {
+		prev := runes[i-1]
+		curr := runes[i]
+		if isAlphaNumBoundary(prev, curr) {
+			if !lastWasSpace {
+				b.WriteRune(' ')
+				lastWasSpace = true
+			}
+		}
+		b.WriteRune(curr)
+		lastWasSpace = curr == ' '
+	}
+
+	return b.String()
+}
+
+func removeAlnumBoundarySpaces(s string) string {
+	runes := []rune(strings.TrimSpace(s))
+	if len(runes) < 3 {
+		return s
+	}
+
+	var b strings.Builder
+	b.Grow(len(s))
+	for i, r := range runes {
+		if r == ' ' && i > 0 && i < len(runes)-1 {
+			if isAlphaNumBoundary(runes[i-1], runes[i+1]) {
+				continue
+			}
+		}
+		b.WriteRune(r)
+	}
+
+	return b.String()
+}
+
 func normalizedSGDBTitleForMatch(name string) string {
 	trimmed := strings.TrimSpace(name)
 	if trimmed == "" {
@@ -1113,6 +1168,7 @@ func normalizedSGDBTitleForMatch(name string) string {
 	}
 	// Canonicalize symbol variants before normalization.
 	trimmed = strings.ReplaceAll(trimmed, "&", " and ")
+	trimmed = insertAlnumBoundaries(trimmed)
 	return normalizeSearchText(trimmed)
 }
 

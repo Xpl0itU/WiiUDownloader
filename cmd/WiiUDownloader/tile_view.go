@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	wiiudownloader "github.com/Xpl0itU/WiiUDownloader"
 	"github.com/gotk3/gotk3/gdk"
@@ -27,22 +28,28 @@ const (
 	TITLE_TILE_IMAGE_HEIGHT     = 240
 	TITLE_TILE_MIN_PER_LINE     = 2
 	TITLE_TILE_MAX_PER_LINE     = 6
+	TITLE_TILE_INITIAL_LOAD     = 24
+	TITLE_TILE_LOAD_AHEAD       = 24
+	TITLE_TILE_ACTIVE_WINDOW    = 72
+	MAX_TILE_ARTWORK_CACHE      = 200
 	SGDB_REQUEST_TIMEOUT        = 15 * time.Second
 	SGDB_SEARCH_ENDPOINT        = "https://www.steamgriddb.com/api/v2/search/autocomplete/%s"
 	SGDB_BOXART_ENDPOINT        = "https://www.steamgriddb.com/api/v2/grids/game/%d?dimensions=342x482,600x900,660x930&types=static&nsfw=false&humor=false&epilepsy=false&limit=1"
 )
 
 type titleTileCard struct {
-	entry      wiiudownloader.TitleEntry
-	button     *gtk.Button
-	image      *gtk.Image
-	titleLabel *gtk.Label
-	metaLabel  *gtk.Label
+	entry       wiiudownloader.TitleEntry
+	button      *gtk.Button
+	image       *gtk.Image
+	titleLabel  *gtk.Label
+	metaLabel   *gtk.Label
+	imageLoaded bool
 }
 
 type tileArtworkStore struct {
 	mu      sync.Mutex
 	images  map[uint64][]byte
+	order   []uint64
 	loading map[uint64]bool
 	failed  map[uint64]bool
 }
@@ -74,6 +81,7 @@ type sgdbGridResponse struct {
 func newTileArtworkStore() *tileArtworkStore {
 	return &tileArtworkStore{
 		images:  make(map[uint64][]byte),
+		order:   make([]uint64, 0),
 		loading: make(map[uint64]bool),
 		failed:  make(map[uint64]bool),
 	}
@@ -89,6 +97,9 @@ func (s *tileArtworkStore) get(titleID uint64) ([]byte, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	imageData, ok := s.images[titleID]
+	if ok {
+		s.touchLocked(titleID)
+	}
 	return imageData, ok
 }
 
@@ -111,7 +122,60 @@ func (s *tileArtworkStore) finish(titleID uint64, imageData []byte, err error) {
 		return
 	}
 	s.images[titleID] = imageData
+	s.touchLocked(titleID)
+	s.evictLocked(MAX_TILE_ARTWORK_CACHE)
 	delete(s.failed, titleID)
+}
+
+func (s *tileArtworkStore) retainVisible(visible map[uint64]struct{}) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for titleID := range s.images {
+		if _, ok := visible[titleID]; !ok {
+			delete(s.images, titleID)
+		}
+	}
+	for titleID := range s.failed {
+		if _, ok := visible[titleID]; !ok {
+			delete(s.failed, titleID)
+		}
+	}
+	for titleID := range s.loading {
+		if _, ok := visible[titleID]; !ok {
+			delete(s.loading, titleID)
+		}
+	}
+
+	filtered := make([]uint64, 0, len(s.order))
+	for _, titleID := range s.order {
+		if _, ok := visible[titleID]; ok {
+			filtered = append(filtered, titleID)
+		}
+	}
+	s.order = filtered
+}
+
+func (s *tileArtworkStore) touchLocked(titleID uint64) {
+	for i, existing := range s.order {
+		if existing == titleID {
+			s.order = append(s.order[:i], s.order[i+1:]...)
+			break
+		}
+	}
+	s.order = append(s.order, titleID)
+}
+
+func (s *tileArtworkStore) evictLocked(maxEntries int) {
+	if maxEntries <= 0 {
+		return
+	}
+	for len(s.images) > maxEntries && len(s.order) > 0 {
+		victim := s.order[0]
+		s.order = s.order[1:]
+		delete(s.images, victim)
+		delete(s.failed, victim)
+	}
 }
 
 func (s *sgdbIDCacheStore) Get(titleID uint64) (int, bool) {
@@ -318,6 +382,7 @@ func (mw *MainWindow) swapContentChild(widget gtk.IWidget) {
 
 func (mw *MainWindow) ensureTileView() error {
 	if mw.tileFlowBox != nil {
+		mw.ensureTileLazyLoader()
 		return nil
 	}
 	flowBox, err := gtk.FlowBoxNew()
@@ -333,7 +398,133 @@ func (mw *MainWindow) ensureTileView() error {
 	flowBox.SetHomogeneous(true)
 	addStyleClass(flowBox.GetStyleContext, "title-tiles")
 	mw.tileFlowBox = flowBox
+	mw.ensureTileLazyLoader()
 	return nil
+}
+
+func (mw *MainWindow) ensureTileLazyLoader() {
+	if mw.tileLazyLoaderConnected || mw.contentScroll == nil {
+		return
+	}
+
+	vAdjustment := mw.contentScroll.GetVAdjustment()
+	if vAdjustment == nil {
+		return
+	}
+
+	vAdjustment.Connect("value-changed", func() {
+		mw.lazyLoadTileArtworkForViewport()
+	})
+	mw.tileLazyLoaderConnected = true
+}
+
+func (mw *MainWindow) lazyLoadTileArtworkForViewport() {
+	if !mw.hasTileMode() || len(mw.tileDisplayOrder) == 0 {
+		return
+	}
+
+	loadStart, loadEnd := mw.currentTileLoadRange()
+	keepStart := loadStart - TITLE_TILE_LOAD_AHEAD
+	if keepStart < 0 {
+		keepStart = 0
+	}
+	keepEnd := loadEnd + TITLE_TILE_LOAD_AHEAD
+	if keepEnd > len(mw.tileDisplayOrder) {
+		keepEnd = len(mw.tileDisplayOrder)
+	}
+
+	keepSet := make(map[uint64]struct{}, keepEnd-keepStart)
+	for i := keepStart; i < keepEnd; i++ {
+		keepSet[mw.tileDisplayOrder[i]] = struct{}{}
+	}
+
+	for i := loadStart; i < loadEnd; i++ {
+		titleID := mw.tileDisplayOrder[i]
+		card, ok := mw.tileCards[titleID]
+		if ok && card != nil {
+			mw.loadTileArtwork(titleID, card.entry.Name)
+		}
+	}
+
+	for i, titleID := range mw.tileDisplayOrder {
+		if i >= keepStart && i < keepEnd {
+			continue
+		}
+		card, ok := mw.tileCards[titleID]
+		if ok && card != nil {
+			mw.unloadTileCardImage(card)
+		}
+	}
+
+	if mw.tileArtwork != nil {
+		mw.tileArtwork.retainVisible(keepSet)
+	}
+
+	if loadStart == 0 {
+		initialCount := TITLE_TILE_INITIAL_LOAD
+		if initialCount > len(mw.tileDisplayOrder) {
+			initialCount = len(mw.tileDisplayOrder)
+		}
+		for i := 0; i < initialCount; i++ {
+			titleID := mw.tileDisplayOrder[i]
+			card, ok := mw.tileCards[titleID]
+			if ok && card != nil {
+				mw.loadTileArtwork(titleID, card.entry.Name)
+			}
+		}
+	}
+}
+
+func (mw *MainWindow) currentTileLoadRange() (int, int) {
+	total := len(mw.tileDisplayOrder)
+	if total == 0 {
+		return 0, 0
+	}
+
+	window := TITLE_TILE_ACTIVE_WINDOW
+	if window < TITLE_TILE_INITIAL_LOAD {
+		window = TITLE_TILE_INITIAL_LOAD
+	}
+	if window > total {
+		window = total
+	}
+
+	center := window / 2
+	vAdjustment := mw.contentScroll.GetVAdjustment()
+	if vAdjustment != nil {
+		upper := vAdjustment.GetUpper()
+		pageSize := vAdjustment.GetPageSize()
+		value := vAdjustment.GetValue()
+		maxScroll := upper - pageSize
+		progress := 0.0
+		if maxScroll > 0 {
+			progress = value / maxScroll
+		}
+		if progress < 0 {
+			progress = 0
+		}
+		if progress > 1 {
+			progress = 1
+		}
+		center = int(progress * float64(total-1))
+	}
+
+	start := center - window/2
+	if start < 0 {
+		start = 0
+	}
+	if start+window > total {
+		start = total - window
+	}
+	if start < 0 {
+		start = 0
+	}
+
+	end := start + window
+	if end > total {
+		end = total
+	}
+	return start, end
 }
 
 func (mw *MainWindow) rebuildTileView() {
@@ -348,8 +539,17 @@ func (mw *MainWindow) rebuildTileView() {
 		mw.tileFlowBox.Remove(child)
 	}
 	mw.tileCards = make(map[uint64]*titleTileCard)
+	mw.tileDisplayOrder = mw.tileDisplayOrder[:0]
 
 	entries := mw.visibleTitleEntries()
+	visibleSet := make(map[uint64]struct{}, len(entries))
+	for _, entry := range entries {
+		visibleSet[entry.TitleID] = struct{}{}
+	}
+	if mw.tileArtwork != nil {
+		mw.tileArtwork.retainVisible(visibleSet)
+	}
+
 	if len(entries) == 0 {
 		emptyLabel, err := gtk.LabelNew("No titles match the current filters.")
 		if err == nil {
@@ -368,12 +568,13 @@ func (mw *MainWindow) rebuildTileView() {
 			continue
 		}
 		mw.tileCards[entry.TitleID] = card
+		mw.tileDisplayOrder = append(mw.tileDisplayOrder, entry.TitleID)
 		mw.tileFlowBox.Insert(card.button, -1)
 		mw.applyTileQueueState(card)
-		mw.loadTileArtwork(entry.TitleID, entry.Name)
 	}
 
 	mw.tileFlowBox.ShowAll()
+	mw.lazyLoadTileArtworkForViewport()
 }
 
 func (mw *MainWindow) createTileCard(entry wiiudownloader.TitleEntry) (*titleTileCard, error) {
@@ -432,12 +633,21 @@ func (mw *MainWindow) createTileCard(entry wiiudownloader.TitleEntry) (*titleTil
 	button.ToWidget().SetProperty("tooltip-text", fmt.Sprintf("%s\n%016x\n%s", entry.Name, entry.TitleID, wiiudownloader.GetFormattedRegion(entry.Region)))
 
 	return &titleTileCard{
-		entry:      entry,
-		button:     button,
-		image:      image,
-		titleLabel: titleLabel,
-		metaLabel:  metaLabel,
+		entry:       entry,
+		button:      button,
+		image:       image,
+		titleLabel:  titleLabel,
+		metaLabel:   metaLabel,
+		imageLoaded: false,
 	}, nil
+}
+
+func (mw *MainWindow) unloadTileCardImage(card *titleTileCard) {
+	if card == nil || card.image == nil || !card.imageLoaded {
+		return
+	}
+	card.image.SetFromIconName("image-x-generic", gtk.ICON_SIZE_DIALOG)
+	card.imageLoaded = false
 }
 
 func (mw *MainWindow) applyTileQueueState(card *titleTileCard) {
@@ -483,6 +693,13 @@ func (mw *MainWindow) loadTileArtwork(titleID uint64, titleName string) {
 	if !mw.hasTileMode() || mw.tileArtwork == nil {
 		return
 	}
+	card, hasCard := mw.tileCards[titleID]
+	if !hasCard || card == nil {
+		return
+	}
+	if card.imageLoaded {
+		return
+	}
 	if cachedImageData, ok := mw.tileArtwork.get(titleID); ok {
 		mw.setTileImageFromBytes(titleID, cachedImageData)
 		return
@@ -516,6 +733,9 @@ func (mw *MainWindow) setTileImageFromBytes(titleID uint64, imageData []byte) {
 	if !ok || card == nil || card.image == nil || len(imageData) == 0 {
 		return
 	}
+	if card.imageLoaded {
+		return
+	}
 
 	loader, err := gdk.PixbufLoaderNew()
 	if err != nil {
@@ -530,6 +750,7 @@ func (mw *MainWindow) setTileImageFromBytes(titleID uint64, imageData []byte) {
 		return
 	}
 	card.image.SetFromPixbuf(scaledPixbuf)
+	card.imageLoaded = true
 }
 
 func (mw *MainWindow) fetchAndCacheSGDBTile(ctx context.Context, titleID uint64, titleName string) ([]byte, error) {
@@ -589,30 +810,139 @@ func stripSGDBPrefixes(titleName string) string {
 	return result
 }
 
-func (mw *MainWindow) fetchSGDBGameIDs(ctx context.Context, titleName string) ([]int, error) {
-	searchName := stripSGDBPrefixes(titleName)
-	requestURL := fmt.Sprintf(SGDB_SEARCH_ENDPOINT, url.PathEscape(searchName))
-	var response sgdbAutocompleteResponse
-	if err := mw.doSGDBRequest(ctx, requestURL, &response); err != nil {
-		return nil, err
+func hasLatinOrDigit(s string) bool {
+	for _, r := range s {
+		if unicode.Is(unicode.Latin, r) || unicode.IsDigit(r) {
+			return true
+		}
 	}
-	if !response.Success || len(response.Data) == 0 {
-		return nil, fmt.Errorf("no SGDB match found for %s", titleName)
+	return false
+}
+
+func extractAliasesFromDelimitedText(titleName string, openDelimiter string, closeDelimiter string) []string {
+	aliases := make([]string, 0)
+	searchFrom := 0
+	for {
+		startRel := strings.Index(titleName[searchFrom:], openDelimiter)
+		if startRel < 0 {
+			break
+		}
+		start := searchFrom + startRel + len(openDelimiter)
+		endRel := strings.Index(titleName[start:], closeDelimiter)
+		if endRel < 0 {
+			break
+		}
+		end := start + endRel
+		alias := strings.TrimSpace(titleName[start:end])
+		if alias != "" && hasLatinOrDigit(alias) {
+			aliases = append(aliases, alias)
+		}
+		searchFrom = end + len(closeDelimiter)
+		if searchFrom >= len(titleName) {
+			break
+		}
+	}
+	return aliases
+}
+
+func sgdbSearchCandidates(titleName string) []string {
+	base := stripSGDBPrefixes(strings.TrimSpace(titleName))
+	if base == "" {
+		return []string{titleName}
 	}
 
-	// Find the single best match by exact or closest name similarity.
-	// Prefer exact match; otherwise use SGDB's own result ordering (first = most relevant).
-	normalizedTitle := normalizeSearchText(searchName)
-	bestID := response.Data[0].ID
-	for _, candidate := range response.Data {
-		if normalizeSearchText(candidate.Name) == normalizedTitle {
-			bestID = candidate.ID
+	candidates := make([]string, 0, 6)
+	seen := make(map[string]struct{})
+	addCandidate := func(name string) {
+		trimmed := strings.TrimSpace(name)
+		if trimmed == "" {
+			return
+		}
+		key := strings.ToLower(trimmed)
+		if _, ok := seen[key]; ok {
+			return
+		}
+		seen[key] = struct{}{}
+		candidates = append(candidates, trimmed)
+	}
+
+	// Prioritize likely English aliases in delimiters before trying the original string.
+	for _, alias := range extractAliasesFromDelimitedText(base, "(", ")") {
+		addCandidate(alias)
+	}
+	for _, alias := range extractAliasesFromDelimitedText(base, "（", "）") {
+		addCandidate(alias)
+	}
+
+	// Also try a simplified variant with delimiters removed.
+	clean := strings.NewReplacer("（", "(", "）", ")", "【", "[", "】", "]").Replace(base)
+	addCandidate(clean)
+	addCandidate(base)
+
+	if len(candidates) == 0 {
+		return []string{titleName}
+	}
+	return candidates
+}
+
+func (mw *MainWindow) fetchSGDBGameIDs(ctx context.Context, titleName string) ([]int, error) {
+	searchCandidates := sgdbSearchCandidates(titleName)
+	seenIDs := make(map[int]struct{})
+	results := make([]int, 0, 4)
+	lastErr := error(nil)
+
+	for _, searchName := range searchCandidates {
+		requestURL := fmt.Sprintf(SGDB_SEARCH_ENDPOINT, url.PathEscape(searchName))
+		var response sgdbAutocompleteResponse
+		if err := mw.doSGDBRequest(ctx, requestURL, &response); err != nil {
+			lastErr = err
+			continue
+		}
+		if !response.Success || len(response.Data) == 0 {
+			continue
+		}
+
+		normalizedTitle := normalizeSearchText(searchName)
+		bestID := response.Data[0].ID
+		bestName := response.Data[0].Name
+		for _, candidate := range response.Data {
+			if normalizeSearchText(candidate.Name) == normalizedTitle {
+				bestID = candidate.ID
+				bestName = candidate.Name
+				break
+			}
+		}
+
+		if _, exists := seenIDs[bestID]; !exists {
+			seenIDs[bestID] = struct{}{}
+			results = append(results, bestID)
+		}
+
+		for _, candidate := range response.Data {
+			if len(results) >= 4 {
+				break
+			}
+			if _, exists := seenIDs[candidate.ID]; exists {
+				continue
+			}
+			seenIDs[candidate.ID] = struct{}{}
+			results = append(results, candidate.ID)
+		}
+
+		log.Printf("[SGDB] Best match for '%s': gameID %d ('%s')", searchName, bestID, bestName)
+		if len(results) >= 4 {
 			break
 		}
 	}
 
-	log.Printf("[SGDB] Best match for '%s': gameID %d ('%s')", searchName, bestID, response.Data[0].Name)
-	return []int{bestID}, nil
+	if len(results) == 0 {
+		if lastErr != nil {
+			return nil, lastErr
+		}
+		return nil, fmt.Errorf("no SGDB match found for %s", titleName)
+	}
+
+	return results, nil
 }
 
 func (mw *MainWindow) fetchSGDBGridURL(ctx context.Context, gameID int) (string, error) {

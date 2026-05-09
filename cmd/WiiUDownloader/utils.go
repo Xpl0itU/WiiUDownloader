@@ -114,8 +114,10 @@ func applyStyling() {
 	headerbar {
 		padding: 6px;
 	}
+	treeview,
 	treeview.view {
 		padding: 6px;
+		font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", "Noto Sans CJK JP", "Noto Sans JP", sans-serif;
 	}
 	.button, button {
 		padding: 5px 12px;
@@ -212,10 +214,12 @@ func applyStyling() {
 	}
 	button.title-tile label.title-tile-name {
 		font-weight: 700;
+		font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", "Noto Sans CJK JP", "Noto Sans JP", sans-serif;
 	}
 	button.title-tile label.title-tile-meta {
 		color: alpha(@theme_fg_color, 0.75);
 		font-size: 0.9em;
+		font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", "Noto Sans CJK JP", "Noto Sans JP", sans-serif;
 	}
 	notebook {
 		padding: 0;

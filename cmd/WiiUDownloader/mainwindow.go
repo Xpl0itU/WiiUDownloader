@@ -99,6 +99,8 @@ type MainWindow struct {
 	sizeFetchSemaphore              chan struct{}
 	tileImageSemaphore              chan struct{}
 	tileCards                       map[uint64]*titleTileCard
+	tileDisplayOrder                []uint64
+	tileLazyLoaderConnected         bool
 	tileArtwork                     *tileArtworkStore
 	sgdbIDCache                     *sgdbIDCacheStore
 	updatingViewModeToggle          bool
@@ -144,6 +146,7 @@ func NewMainWindow(entries []wiiudownloader.TitleEntry, client *http.Client, con
 		sizeFetchSemaphore: make(chan struct{}, MAX_CONCURRENT_SIZE_FETCHES),
 		tileImageSemaphore: make(chan struct{}, MAX_CONCURRENT_TILE_FETCHES),
 		tileCards:          make(map[uint64]*titleTileCard),
+		tileDisplayOrder:   make([]uint64, 0),
 		tileArtwork:        newTileArtworkStore(),
 		sgdbIDCache:        newSGDBIDCacheStore(),
 	}

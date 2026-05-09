@@ -35,6 +35,25 @@ func main() {
 	runtime.LockOSThread()
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	configureMacOSEnvironment()
+	
+	// Check for --clearcache flag and remove it from os.Args before GTK sees it
+	shouldClearCache := false
+	var filteredArgs []string
+	filteredArgs = append(filteredArgs, os.Args[0]) // Keep program name
+	for _, arg := range os.Args[1:] {
+		if arg == "--clearcache" {
+			shouldClearCache = true
+			log.Println("--clearcache flag detected, clearing SGDB cache on startup")
+		} else {
+			filteredArgs = append(filteredArgs, arg)
+		}
+	}
+	os.Args = filteredArgs
+	
+	if shouldClearCache {
+		clearSGDBCache()
+	}
+	
 	gtk.Init(nil)
 
 	app, err := gtk.ApplicationNew("io.github.xpl0itu.wiiudownloader", glib.APPLICATION_FLAGS_NONE)
@@ -208,4 +227,16 @@ func showFatalDialogAndLog(prefix string, err error) {
 	d := gtk.MessageDialogNew(nil, 0, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, "%s: %v", prefix, err)
 	d.Run()
 	d.Destroy()
+}
+
+func clearSGDBCache() {
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		log.Printf("Warning: could not get user cache dir: %v", err)
+		return
+	}
+	sgdbCachePath := filepath.Join(cacheDir, "WiiUDownloader", "sgdb")
+	if err := os.RemoveAll(sgdbCachePath); err != nil {
+		log.Printf("Warning: could not clear SGDB cache: %v", err)
+	}
 }

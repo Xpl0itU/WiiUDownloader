@@ -192,6 +192,31 @@ func applyStyling() {
 	.queue-pane-vbox {
 		background: @theme_bg_color;
 	}
+	flowbox.title-tiles {
+		padding: 4px;
+	}
+	button.title-tile {
+		background-image: none;
+		background: shade(@theme_bg_color, 1.02);
+		border: 1px solid alpha(@theme_fg_color, 0.12);
+		border-radius: 12px;
+		padding: 0;
+	}
+	button.title-tile:hover {
+		background-image: none;
+		background: shade(@theme_bg_color, 0.97);
+	}
+	button.title-tile.in-queue {
+		border-color: #3584e4;
+		box-shadow: inset 0 0 0 2px alpha(#3584e4, 0.35);
+	}
+	button.title-tile label.title-tile-name {
+		font-weight: 700;
+	}
+	button.title-tile label.title-tile-meta {
+		color: alpha(@theme_fg_color, 0.75);
+		font-size: 0.9em;
+	}
 	notebook {
 		padding: 0;
 	}

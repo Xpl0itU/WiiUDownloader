@@ -58,7 +58,10 @@ type MainWindow struct {
 	window                          *gtk.Window
 	queuePane                       *QueuePane
 	treeView                        *gtk.TreeView
+	contentScroll                   *gtk.ScrolledWindow
+	tileFlowBox                     *gtk.FlowBox
 	searchEntry                     *gtk.Entry
+	viewModeToggle                  *gtk.ToggleButton
 	downloadQueueButton             *gtk.Button
 	decryptContentsCheckbox         *gtk.CheckButton
 	deleteEncryptedContentsCheckbox *gtk.CheckButton
@@ -89,7 +92,13 @@ type MainWindow struct {
 	donationBar                     *gtk.Box
 	donationLabel                   *gtk.Label
 	showDonationBar                 bool
+	showTiles                       bool
+	sgdbAPIKey                      string
 	sizeFetchSemaphore              chan struct{}
+	tileImageSemaphore              chan struct{}
+	tileCards                       map[uint64]*titleTileCard
+	tileArtwork                     *tileArtworkStore
+	updatingViewModeToggle          bool
 }
 
 func NewMainWindow(entries []wiiudownloader.TitleEntry, client *http.Client, config *Config) *MainWindow {
@@ -130,6 +139,9 @@ func NewMainWindow(entries []wiiudownloader.TitleEntry, client *http.Client, con
 		lastSearchText:     "",
 		client:             client,
 		sizeFetchSemaphore: make(chan struct{}, MAX_CONCURRENT_SIZE_FETCHES),
+		tileImageSemaphore: make(chan struct{}, MAX_CONCURRENT_TILE_FETCHES),
+		tileCards:          make(map[uint64]*titleTileCard),
+		tileArtwork:        newTileArtworkStore(),
 	}
 
 	queuePane.updateFunc = mainWindow.updateTitlesInQueue
@@ -162,6 +174,7 @@ func (mw *MainWindow) applyConfig(config *Config) {
 	mw.applyDownloadOptionState(config.DecryptContents, config.DeleteEncryptedContents)
 	mw.suggestRelatedContent = config.SuggestRelatedContent
 	mw.applyRegionSelection(config.SelectedRegion)
+	mw.applyTileSettings(config.ShowTiles, config.SGDBAPIKey)
 	mw.setDonationBarVisible(config.ShowDonationBar)
 }
 
@@ -208,49 +221,12 @@ func (mw *MainWindow) BuildUI() {
 			return true
 		}
 
-		nameVal, err := model.GetValue(iter, NAME_COLUMN)
-		if err != nil {
-			return true
-		}
-		nameStr, err := nameVal.GetString()
-		if err != nil {
+		entry := wiiudownloader.GetTitleEntryFromTid(tid)
+		if entry.TitleID == 0 {
 			return true
 		}
 
-		if mw.currentCategory != wiiudownloader.TITLE_CATEGORY_ALL {
-			kindVal, err := model.GetValue(iter, KIND_COLUMN)
-			if err != nil {
-				return true
-			}
-			kindStr, err := kindVal.GetString()
-			if err != nil {
-				return true
-			}
-			if kindStr != wiiudownloader.GetFormattedKind(tid) {
-				return false
-			}
-			cat := wiiudownloader.GetCategoryFromFormattedCategory(kindStr)
-			if cat != mw.currentCategory {
-				return false
-			}
-		}
-
-		for _, t := range allTitles {
-			if t.TitleID == tid {
-				if (mw.currentRegion & t.Region) == 0 {
-					return false
-				}
-				break
-			}
-		}
-
-		if mw.lastSearchText != "" {
-			if !titleMatchesSearch(mw.lastSearchText, nameStr, tidStr) {
-				return false
-			}
-		}
-
-		return true
+		return mw.titleEntryMatchesCurrentFilters(entry)
 	})
 
 	sortModel, err := gtk.TreeModelSortNew(mw.filterModel.ToTreeModel())
@@ -561,6 +537,24 @@ func (mw *MainWindow) BuildUI() {
 	dummy, _ := gtk.LabelNew("")
 	dummy.SetHExpand(true)
 	tophBox.PackStart(dummy, true, true, 0)
+
+	viewModeToggle, err := gtk.ToggleButtonNew()
+	if err != nil {
+		log.Fatalln("Unable to create view mode toggle:", err)
+	}
+	mw.viewModeToggle = viewModeToggle
+	SetupToggleButtonAccessibility(mw.viewModeToggle, "Toggle between list and tile view")
+	mw.viewModeToggle.Connect("toggled", func() {
+		if mw.updatingViewModeToggle {
+			return
+		}
+		showTiles := mw.viewModeToggle.GetActive()
+		mw.applyTileSettings(showTiles, mw.sgdbAPIKey)
+		mw.persistTileModePreference(showTiles)
+	})
+	tophBox.PackEnd(mw.viewModeToggle, false, false, 0)
+	mw.syncViewModeToggle()
+
 	tophBox.PackEnd(mw.searchEntry, false, false, 0)
 	mainvBox.PackStart(tophBox, false, false, 0)
 
@@ -569,7 +563,8 @@ func (mw *MainWindow) BuildUI() {
 		log.Fatalln("Unable to create scrolled window:", err)
 	}
 	scrollable.SetPolicy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
-	scrollable.Add(mw.treeView)
+	mw.contentScroll = scrollable
+	mw.refreshContentView()
 
 	mainvBox.PackStart(scrollable, true, true, 0)
 
@@ -738,6 +733,7 @@ func (mw *MainWindow) onRegionChange(button *gtk.CheckButton, region uint8) {
 	if mw.filterModel != nil {
 		mw.filterModel.Refilter()
 	}
+	mw.refreshTileViewIfNeeded()
 	config, err := loadConfig()
 	if err != nil {
 		return
@@ -768,6 +764,7 @@ func (mw *MainWindow) applyRegionSelection(regionMask uint8) {
 	if mw.filterModel != nil {
 		mw.filterModel.Refilter()
 	}
+	mw.refreshTileViewIfNeeded()
 }
 
 func (mw *MainWindow) syncRegionCheckboxes() {
@@ -794,6 +791,7 @@ func (mw *MainWindow) onSearchEntryChanged() {
 			}
 			mw.lastSearchText = text
 			mw.filterModel.Refilter()
+			mw.refreshTileViewIfNeeded()
 		})
 	})
 }
@@ -810,11 +808,17 @@ func (mw *MainWindow) onCategoryToggled(button *gtk.ToggleButton) {
 	mw.currentCategory = wiiudownloader.GetCategoryFromFormattedCategory(category)
 	uiIdleAdd(func() {
 		mw.filterModel.Refilter()
+		mw.refreshTileViewIfNeeded()
 	})
 }
 
 func (mw *MainWindow) setDownloadControlsSensitive(sensitive bool) {
-	mw.treeView.SetSensitive(sensitive)
+	if mw.treeView != nil {
+		mw.treeView.SetSensitive(sensitive)
+	}
+	if mw.contentScroll != nil {
+		mw.contentScroll.SetSensitive(sensitive)
+	}
 	for _, button := range mw.categoryButtons {
 		button.SetSensitive(sensitive)
 	}
@@ -1490,6 +1494,7 @@ func (mw *MainWindow) updateTitlesInQueue() {
 			break
 		}
 	}
+	mw.updateTileCardsQueueState()
 	mw.queuePane.Update(false)
 }
 

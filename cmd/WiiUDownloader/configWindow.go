@@ -8,9 +8,9 @@ import (
 )
 
 type ConfigWindow struct {
-	Window   *gtk.Window
-	Config   *Config
-	onSaved  func()
+	Window  *gtk.Window
+	Config  *Config
+	onSaved func()
 }
 
 const (

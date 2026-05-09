@@ -64,6 +64,10 @@ type MainWindow struct {
 	viewModeToggleBox               *gtk.Box
 	viewModeListToggle              *gtk.ToggleButton
 	viewModeTileToggle              *gtk.ToggleButton
+	tileSortBar                     *gtk.Box
+	tileSortCombo                   *gtk.ComboBoxText
+	tileSortDirButton               *gtk.Button
+	tileSortAscending               bool
 	downloadQueueButton             *gtk.Button
 	decryptContentsCheckbox         *gtk.CheckButton
 	deleteEncryptedContentsCheckbox *gtk.CheckButton
@@ -105,6 +109,7 @@ type MainWindow struct {
 	sgdbIDCache                     *sgdbIDCacheStore
 	tileLoaderCtx                   context.Context
 	tileLoaderCancel                context.CancelFunc
+	scrollDebounceTimer             *time.Timer
 	updatingViewModeToggle          bool
 }
 
@@ -250,9 +255,20 @@ func (mw *MainWindow) BuildUI() {
 	}
 	mw.sortModel = sortModel
 
-	sortModel.SetSortColumnId(KIND_COLUMN, gtk.SORT_ASCENDING)
-	sortModel.SetSortColumnId(TITLE_ID_COLUMN, gtk.SORT_ASCENDING)
-	sortModel.SetSortColumnId(REGION_COLUMN, gtk.SORT_ASCENDING)
+	sortModel.SetSortFunc(NAME_COLUMN, func(model *gtk.TreeModel, a, b *gtk.TreeIter) int {
+		naVal, _ := model.GetValue(a, NAME_COLUMN)
+		nbVal, _ := model.GetValue(b, NAME_COLUMN)
+		naStr, _ := naVal.GetString()
+		nbStr, _ := nbVal.GetString()
+		naStr = strings.ToLower(naStr)
+		nbStr = strings.ToLower(nbStr)
+		if naStr < nbStr {
+			return -1
+		} else if naStr > nbStr {
+			return 1
+		}
+		return 0
+	})
 	sortModel.SetSortColumnId(NAME_COLUMN, gtk.SORT_ASCENDING)
 
 	mw.treeView, err = gtk.TreeViewNewWithModel(sortModel)
@@ -609,6 +625,61 @@ func (mw *MainWindow) BuildUI() {
 	mw.syncViewModeToggle()
 
 	tophBox.PackEnd(mw.searchEntry, false, false, 0)
+
+	// Tile sort controls (shown inline with category buttons, only in tile mode)
+	mw.tileSortAscending = true
+
+	tileSortBar, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 4)
+	if err != nil {
+		log.Fatalln("Unable to create tile sort bar:", err)
+	}
+	mw.tileSortBar = tileSortBar
+
+	sortLabel, err := gtk.LabelNew("Sort by:")
+	if err != nil {
+		log.Fatalln("Unable to create sort label:", err)
+	}
+	tileSortBar.PackStart(sortLabel, false, false, 0)
+
+	sortCombo, err := gtk.ComboBoxTextNew()
+	if err != nil {
+		log.Fatalln("Unable to create sort combo:", err)
+	}
+	sortCombo.AppendText("Name")
+	sortCombo.AppendText("Title ID")
+	sortCombo.AppendText("Region")
+	sortCombo.SetActive(0)
+	mw.tileSortCombo = sortCombo
+	tileSortBar.PackStart(sortCombo, false, false, 0)
+
+	sortDirButton, err := gtk.ButtonNew()
+	if err != nil {
+		log.Fatalln("Unable to create sort direction button:", err)
+	}
+	mw.tileSortDirButton = sortDirButton
+	if icon, err := gtk.ImageNewFromIconName("view-sort-ascending-symbolic", gtk.ICON_SIZE_BUTTON); err == nil {
+		sortDirButton.SetImage(icon)
+		sortDirButton.SetAlwaysShowImage(true)
+	}
+	sortDirButton.ToWidget().SetProperty("tooltip-text", "Ascending")
+	tileSortBar.PackStart(sortDirButton, false, false, 0)
+
+	sortCombo.Connect("changed", func() {
+		if mw.hasTileMode() {
+			mw.rebuildTileView()
+		}
+	})
+	sortDirButton.Connect("clicked", func() {
+		mw.tileSortAscending = !mw.tileSortAscending
+		mw.updateSortDirButton()
+		if mw.hasTileMode() {
+			mw.rebuildTileView()
+		}
+	})
+
+	tileSortBar.ToWidget().SetVisible(false)
+	tophBox.PackStart(tileSortBar, false, false, 0)
+
 	mainvBox.PackStart(tophBox, false, false, 0)
 
 	scrollable, err := gtk.ScrolledWindowNew(nil, nil)

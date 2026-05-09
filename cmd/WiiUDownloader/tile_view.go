@@ -295,7 +295,7 @@ func (mw *MainWindow) applyTileSettings(showTiles bool, apiKey string) {
 	trimmedAPIKey := strings.TrimSpace(apiKey)
 	normalizedShowTiles := showTiles && trimmedAPIKey != ""
 	changed := mw.showTiles != normalizedShowTiles || mw.sgdbAPIKey != trimmedAPIKey
-	
+
 	// If API key is being removed, cancel pending tile loads and clear caches
 	if mw.sgdbAPIKey != "" && trimmedAPIKey == "" {
 		if mw.tileLoaderCancel != nil {
@@ -311,7 +311,7 @@ func (mw *MainWindow) applyTileSettings(showTiles bool, apiKey string) {
 			}
 		}
 	}
-	
+
 	mw.showTiles = normalizedShowTiles
 	mw.sgdbAPIKey = trimmedAPIKey
 	mw.syncViewModeToggle()
@@ -390,11 +390,45 @@ func (mw *MainWindow) titleEntryMatchesCurrentFilters(entry wiiudownloader.Title
 	return titleMatchesSearch(mw.lastSearchText, entry.Name, tidStr)
 }
 
+func (mw *MainWindow) updateSortDirButton() {
+	if mw.tileSortDirButton == nil {
+		return
+	}
+	iconName := "view-sort-ascending-symbolic"
+	tooltip := "Ascending"
+	if !mw.tileSortAscending {
+		iconName = "view-sort-descending-symbolic"
+		tooltip = "Descending"
+	}
+	if icon, err := gtk.ImageNewFromIconName(iconName, gtk.ICON_SIZE_BUTTON); err == nil {
+		mw.tileSortDirButton.SetImage(icon)
+		mw.tileSortDirButton.SetAlwaysShowImage(true)
+	}
+	mw.tileSortDirButton.ToWidget().SetProperty("tooltip-text", tooltip)
+}
+
 func (mw *MainWindow) sortTitleEntries(entries []wiiudownloader.TitleEntry) {
+	sortIdx := 0
+	if mw.tileSortCombo != nil {
+		sortIdx = mw.tileSortCombo.GetActive()
+	}
+	asc := mw.tileSortAscending
 	sort.Slice(entries, func(i, j int) bool {
-		nameI := stripSGDBPrefixes(entries[i].Name)
-		nameJ := stripSGDBPrefixes(entries[j].Name)
-		return nameI < nameJ
+		var less bool
+		switch sortIdx {
+		case 1: // Title ID
+			less = entries[i].TitleID < entries[j].TitleID
+		case 2: // Region
+			less = strings.ToLower(wiiudownloader.GetFormattedRegion(entries[i].Region)) < strings.ToLower(wiiudownloader.GetFormattedRegion(entries[j].Region))
+		default: // Name
+			nameI := strings.ToLower(stripSGDBPrefixes(entries[i].Name))
+			nameJ := strings.ToLower(stripSGDBPrefixes(entries[j].Name))
+			less = nameI < nameJ
+		}
+		if asc {
+			return less
+		}
+		return !less
 	})
 }
 
@@ -415,6 +449,9 @@ func (mw *MainWindow) refreshContentView() {
 		return
 	}
 	if mw.hasTileMode() {
+		if mw.tileSortBar != nil {
+			mw.tileSortBar.ToWidget().SetVisible(true)
+		}
 		if err := mw.ensureTileView(); err != nil {
 			ShowErrorDialog(mw.window, err)
 			return
@@ -422,6 +459,9 @@ func (mw *MainWindow) refreshContentView() {
 		mw.swapContentChild(mw.tileFlowBox)
 		mw.rebuildTileView()
 		return
+	}
+	if mw.tileSortBar != nil {
+		mw.tileSortBar.ToWidget().SetVisible(false)
 	}
 	mw.swapContentChild(mw.treeView)
 	if mw.filterModel != nil {
@@ -464,6 +504,10 @@ func (mw *MainWindow) ensureTileView() error {
 	return nil
 }
 
+const (
+	SCROLL_DEBOUNCE_DELAY = 150 * time.Millisecond
+)
+
 func (mw *MainWindow) ensureTileLazyLoader() {
 	if mw.tileLazyLoaderConnected || mw.contentScroll == nil {
 		return
@@ -475,7 +519,14 @@ func (mw *MainWindow) ensureTileLazyLoader() {
 	}
 
 	vAdjustment.Connect("value-changed", func() {
-		mw.lazyLoadTileArtworkForViewport()
+		if mw.scrollDebounceTimer != nil {
+			mw.scrollDebounceTimer.Stop()
+		}
+		mw.scrollDebounceTimer = time.AfterFunc(SCROLL_DEBOUNCE_DELAY, func() {
+			uiIdleAdd(func() {
+				mw.lazyLoadTileArtworkForViewport()
+			})
+		})
 	})
 	mw.tileLazyLoaderConnected = true
 }

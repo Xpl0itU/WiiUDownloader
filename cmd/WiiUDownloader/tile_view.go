@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -164,6 +165,15 @@ func (s *tileArtworkStore) retainVisible(visible map[uint64]struct{}) {
 	s.order = filtered
 }
 
+func (s *tileArtworkStore) clear() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.images = make(map[uint64][]byte)
+	s.order = make([]uint64, 0)
+	s.loading = make(map[uint64]bool)
+	s.failed = make(map[uint64]bool)
+}
+
 func (s *tileArtworkStore) touchLocked(titleID uint64) {
 	for i, existing := range s.order {
 		if existing == titleID {
@@ -197,6 +207,24 @@ func (s *sgdbIDCacheStore) Set(titleID uint64, gameID int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.gameIDs[titleID] = gameID
+}
+
+func (s *sgdbIDCacheStore) Clear() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.gameIDs = make(map[uint64]int)
+
+	cachePath, err := sgdbIDCachePath()
+	if err != nil {
+		return err
+	}
+
+	// Delete the cache file if it exists
+	if err := os.Remove(cachePath); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+
+	return nil
 }
 
 func (s *sgdbIDCacheStore) Load() error {
@@ -267,6 +295,23 @@ func (mw *MainWindow) applyTileSettings(showTiles bool, apiKey string) {
 	trimmedAPIKey := strings.TrimSpace(apiKey)
 	normalizedShowTiles := showTiles && trimmedAPIKey != ""
 	changed := mw.showTiles != normalizedShowTiles || mw.sgdbAPIKey != trimmedAPIKey
+	
+	// If API key is being removed, cancel pending tile loads and clear caches
+	if mw.sgdbAPIKey != "" && trimmedAPIKey == "" {
+		if mw.tileLoaderCancel != nil {
+			mw.tileLoaderCancel()
+			mw.tileLoaderCtx, mw.tileLoaderCancel = context.WithCancel(context.Background())
+		}
+		if mw.tileArtwork != nil {
+			mw.tileArtwork.clear()
+		}
+		if mw.sgdbIDCache != nil {
+			if err := mw.sgdbIDCache.Clear(); err != nil {
+				log.Printf("[SGDB] Failed to clear SGDB ID cache: %v", err)
+			}
+		}
+	}
+	
 	mw.showTiles = normalizedShowTiles
 	mw.sgdbAPIKey = trimmedAPIKey
 	mw.syncViewModeToggle()
@@ -345,6 +390,14 @@ func (mw *MainWindow) titleEntryMatchesCurrentFilters(entry wiiudownloader.Title
 	return titleMatchesSearch(mw.lastSearchText, entry.Name, tidStr)
 }
 
+func (mw *MainWindow) sortTitleEntries(entries []wiiudownloader.TitleEntry) {
+	sort.Slice(entries, func(i, j int) bool {
+		nameI := stripSGDBPrefixes(entries[i].Name)
+		nameJ := stripSGDBPrefixes(entries[j].Name)
+		return nameI < nameJ
+	})
+}
+
 func (mw *MainWindow) visibleTitleEntries() []wiiudownloader.TitleEntry {
 	entries := wiiudownloader.GetTitleEntries(wiiudownloader.TITLE_CATEGORY_ALL)
 	visible := make([]wiiudownloader.TitleEntry, 0, len(entries))
@@ -353,6 +406,7 @@ func (mw *MainWindow) visibleTitleEntries() []wiiudownloader.TitleEntry {
 			visible = append(visible, entry)
 		}
 	}
+	mw.sortTitleEntries(visible)
 	return visible
 }
 
@@ -781,7 +835,7 @@ func (mw *MainWindow) loadTileArtwork(titleID uint64, titleName string) {
 			<-mw.tileImageSemaphore
 		}()
 
-		ctx, cancel := context.WithTimeout(context.Background(), SGDB_REQUEST_TIMEOUT)
+		ctx, cancel := context.WithTimeout(mw.tileLoaderCtx, SGDB_REQUEST_TIMEOUT)
 		defer cancel()
 
 		imageData, err := mw.fetchAndCacheSGDBTile(ctx, titleID, titleName)

@@ -8,8 +8,9 @@ import (
 )
 
 type ConfigWindow struct {
-	Window *gtk.Window
-	Config *Config
+	Window   *gtk.Window
+	Config   *Config
+	onSaved  func()
 }
 
 const (
@@ -24,7 +25,7 @@ const (
 	INVALID_DOWNLOAD_PATH_ERROR_MESSAGE = "Invalid download path. Please select a valid directory."
 )
 
-func NewConfigWindow(config *Config) (*ConfigWindow, error) {
+func NewConfigWindow(config *Config, onSaved func()) (*ConfigWindow, error) {
 	win, err := gtk.WindowNew(gtk.WINDOW_TOPLEVEL)
 	if err != nil {
 		return nil, err
@@ -278,6 +279,11 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 				}
 
 				dirty = false
+
+				// Notify main window to re-apply settings
+				if onSaved != nil {
+					onSaved()
+				}
 			})
 		}()
 	})
@@ -292,8 +298,9 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 	})
 
 	configWindow := ConfigWindow{
-		Window: win,
-		Config: config,
+		Window:  win,
+		Config:  config,
+		onSaved: onSaved,
 	}
 
 	return &configWindow, nil

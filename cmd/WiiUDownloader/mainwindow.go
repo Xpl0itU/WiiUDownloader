@@ -103,6 +103,8 @@ type MainWindow struct {
 	tileLazyLoaderConnected         bool
 	tileArtwork                     *tileArtworkStore
 	sgdbIDCache                     *sgdbIDCacheStore
+	tileLoaderCtx                   context.Context
+	tileLoaderCancel                context.CancelFunc
 	updatingViewModeToggle          bool
 }
 
@@ -150,6 +152,7 @@ func NewMainWindow(entries []wiiudownloader.TitleEntry, client *http.Client, con
 		tileArtwork:        newTileArtworkStore(),
 		sgdbIDCache:        newSGDBIDCacheStore(),
 	}
+	mainWindow.tileLoaderCtx, mainWindow.tileLoaderCancel = context.WithCancel(context.Background())
 	if err := mainWindow.sgdbIDCache.Load(); err != nil {
 		log.Printf("[SGDB] Could not load SGDB ID cache: %v", err)
 	}
@@ -171,7 +174,9 @@ func (mw *MainWindow) SetApplicationForGTKWindow(app *gtk.Application) {
 }
 
 func (mw *MainWindow) createConfigWindow(config *Config) error {
-	configWindow, err := NewConfigWindow(config)
+	configWindow, err := NewConfigWindow(config, func() {
+		mw.applyConfig(config)
+	})
 	if err != nil {
 		return err
 	}

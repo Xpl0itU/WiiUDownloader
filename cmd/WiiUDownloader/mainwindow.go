@@ -61,7 +61,9 @@ type MainWindow struct {
 	contentScroll                   *gtk.ScrolledWindow
 	tileFlowBox                     *gtk.FlowBox
 	searchEntry                     *gtk.Entry
-	viewModeToggle                  *gtk.ToggleButton
+	viewModeToggleBox               *gtk.Box
+	viewModeListToggle              *gtk.ToggleButton
+	viewModeTileToggle              *gtk.ToggleButton
 	downloadQueueButton             *gtk.Button
 	decryptContentsCheckbox         *gtk.CheckButton
 	deleteEncryptedContentsCheckbox *gtk.CheckButton
@@ -98,6 +100,7 @@ type MainWindow struct {
 	tileImageSemaphore              chan struct{}
 	tileCards                       map[uint64]*titleTileCard
 	tileArtwork                     *tileArtworkStore
+	sgdbIDCache                     *sgdbIDCacheStore
 	updatingViewModeToggle          bool
 }
 
@@ -142,6 +145,10 @@ func NewMainWindow(entries []wiiudownloader.TitleEntry, client *http.Client, con
 		tileImageSemaphore: make(chan struct{}, MAX_CONCURRENT_TILE_FETCHES),
 		tileCards:          make(map[uint64]*titleTileCard),
 		tileArtwork:        newTileArtworkStore(),
+		sgdbIDCache:        newSGDBIDCacheStore(),
+	}
+	if err := mainWindow.sgdbIDCache.Load(); err != nil {
+		log.Printf("[SGDB] Could not load SGDB ID cache: %v", err)
 	}
 
 	queuePane.updateFunc = mainWindow.updateTitlesInQueue
@@ -538,21 +545,59 @@ func (mw *MainWindow) BuildUI() {
 	dummy.SetHExpand(true)
 	tophBox.PackStart(dummy, true, true, 0)
 
-	viewModeToggle, err := gtk.ToggleButtonNew()
+	viewModeBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 4)
 	if err != nil {
-		log.Fatalln("Unable to create view mode toggle:", err)
+		log.Fatalln("Unable to create view mode box:", err)
 	}
-	mw.viewModeToggle = viewModeToggle
-	SetupToggleButtonAccessibility(mw.viewModeToggle, "Toggle between list and tile view")
-	mw.viewModeToggle.Connect("toggled", func() {
+	mw.viewModeToggleBox = viewModeBox
+
+	viewModeListToggle, err := gtk.ToggleButtonNew()
+	if err != nil {
+		log.Fatalln("Unable to create list mode toggle:", err)
+	}
+	mw.viewModeListToggle = viewModeListToggle
+	SetupToggleButtonAccessibility(mw.viewModeListToggle, "Switch to list mode")
+	mw.viewModeListToggle.Connect("toggled", func() {
 		if mw.updatingViewModeToggle {
 			return
 		}
-		showTiles := mw.viewModeToggle.GetActive()
-		mw.applyTileSettings(showTiles, mw.sgdbAPIKey)
-		mw.persistTileModePreference(showTiles)
+		if !mw.viewModeListToggle.GetActive() {
+			if mw.viewModeTileToggle != nil && !mw.viewModeTileToggle.GetActive() {
+				mw.updatingViewModeToggle = true
+				mw.viewModeListToggle.SetActive(true)
+				mw.updatingViewModeToggle = false
+			}
+			return
+		}
+		mw.applyTileSettings(false, mw.sgdbAPIKey)
+		mw.persistTileModePreference(false)
 	})
-	tophBox.PackEnd(mw.viewModeToggle, false, false, 0)
+
+	viewModeTileToggle, err := gtk.ToggleButtonNew()
+	if err != nil {
+		log.Fatalln("Unable to create tile mode toggle:", err)
+	}
+	mw.viewModeTileToggle = viewModeTileToggle
+	SetupToggleButtonAccessibility(mw.viewModeTileToggle, "Switch to tile mode")
+	mw.viewModeTileToggle.Connect("toggled", func() {
+		if mw.updatingViewModeToggle {
+			return
+		}
+		if !mw.viewModeTileToggle.GetActive() {
+			if mw.viewModeListToggle != nil && !mw.viewModeListToggle.GetActive() {
+				mw.updatingViewModeToggle = true
+				mw.viewModeTileToggle.SetActive(true)
+				mw.updatingViewModeToggle = false
+			}
+			return
+		}
+		mw.applyTileSettings(true, mw.sgdbAPIKey)
+		mw.persistTileModePreference(true)
+	})
+
+	viewModeBox.PackStart(mw.viewModeListToggle, false, false, 0)
+	viewModeBox.PackStart(mw.viewModeTileToggle, false, false, 0)
+	tophBox.PackEnd(mw.viewModeToggleBox, false, false, 0)
 	mw.syncViewModeToggle()
 
 	tophBox.PackEnd(mw.searchEntry, false, false, 0)
@@ -807,6 +852,7 @@ func (mw *MainWindow) onCategoryToggled(button *gtk.ToggleButton) {
 	}
 	mw.currentCategory = wiiudownloader.GetCategoryFromFormattedCategory(category)
 	uiIdleAdd(func() {
+		mw.syncViewModeToggle()
 		mw.filterModel.Refilter()
 		mw.refreshTileViewIfNeeded()
 	})

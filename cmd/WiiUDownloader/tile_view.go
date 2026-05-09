@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -30,7 +30,6 @@ const (
 	SGDB_REQUEST_TIMEOUT        = 15 * time.Second
 	SGDB_SEARCH_ENDPOINT        = "https://www.steamgriddb.com/api/v2/search/autocomplete/%s"
 	SGDB_BOXART_ENDPOINT        = "https://www.steamgriddb.com/api/v2/grids/game/%d?dimensions=342x482,600x900,660x930&types=static&nsfw=false&humor=false&epilepsy=false&limit=1"
-	SGDB_TILE_CACHE_VERSION     = "boxart-v1"
 )
 
 type titleTileCard struct {
@@ -43,9 +42,14 @@ type titleTileCard struct {
 
 type tileArtworkStore struct {
 	mu      sync.Mutex
-	paths   map[uint64]string
+	images  map[uint64][]byte
 	loading map[uint64]bool
 	failed  map[uint64]bool
+}
+
+type sgdbIDCacheStore struct {
+	mu      sync.Mutex
+	gameIDs map[uint64]int
 }
 
 type sgdbAutocompleteResponse struct {
@@ -69,17 +73,23 @@ type sgdbGridResponse struct {
 
 func newTileArtworkStore() *tileArtworkStore {
 	return &tileArtworkStore{
-		paths:   make(map[uint64]string),
+		images:  make(map[uint64][]byte),
 		loading: make(map[uint64]bool),
 		failed:  make(map[uint64]bool),
 	}
 }
 
-func (s *tileArtworkStore) get(titleID uint64) (string, bool) {
+func newSGDBIDCacheStore() *sgdbIDCacheStore {
+	return &sgdbIDCacheStore{
+		gameIDs: make(map[uint64]int),
+	}
+}
+
+func (s *tileArtworkStore) get(titleID uint64) ([]byte, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	path, ok := s.paths[titleID]
-	return path, ok
+	imageData, ok := s.images[titleID]
+	return imageData, ok
 }
 
 func (s *tileArtworkStore) start(titleID uint64) bool {
@@ -92,7 +102,7 @@ func (s *tileArtworkStore) start(titleID uint64) bool {
 	return true
 }
 
-func (s *tileArtworkStore) finish(titleID uint64, imagePath string, err error) {
+func (s *tileArtworkStore) finish(titleID uint64, imageData []byte, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.loading, titleID)
@@ -100,8 +110,85 @@ func (s *tileArtworkStore) finish(titleID uint64, imagePath string, err error) {
 		s.failed[titleID] = true
 		return
 	}
-	s.paths[titleID] = imagePath
+	s.images[titleID] = imageData
 	delete(s.failed, titleID)
+}
+
+func (s *sgdbIDCacheStore) Get(titleID uint64) (int, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	gameID, ok := s.gameIDs[titleID]
+	return gameID, ok
+}
+
+func (s *sgdbIDCacheStore) Set(titleID uint64, gameID int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.gameIDs[titleID] = gameID
+}
+
+func (s *sgdbIDCacheStore) Load() error {
+	cachePath, err := sgdbIDCachePath()
+	if err != nil {
+		return err
+	}
+
+	data, err := os.ReadFile(cachePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+
+	var raw map[string]int
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for key, gameID := range raw {
+		titleID, err := strconv.ParseUint(key, 16, 64)
+		if err != nil {
+			continue
+		}
+		s.gameIDs[titleID] = gameID
+	}
+	return nil
+}
+
+func (s *sgdbIDCacheStore) Save() error {
+	cachePath, err := sgdbIDCachePath()
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(filepath.Dir(cachePath), CONFIG_DIR_PERM); err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	raw := make(map[string]int, len(s.gameIDs))
+	for titleID, gameID := range s.gameIDs {
+		raw[fmt.Sprintf("%016x", titleID)] = gameID
+	}
+	s.mu.Unlock()
+
+	content, err := json.MarshalIndent(raw, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(cachePath, content, CONFIG_FILE_PERM)
+}
+
+func sgdbIDCachePath() (string, error) {
+	userConfigDir, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(configDirPath(userConfigDir), "sgdb_ids.json"), nil
 }
 
 func (mw *MainWindow) applyTileSettings(showTiles bool, apiKey string) {
@@ -117,34 +204,35 @@ func (mw *MainWindow) applyTileSettings(showTiles bool, apiKey string) {
 }
 
 func (mw *MainWindow) syncViewModeToggle() {
-	if mw.viewModeToggle == nil {
+	if mw.viewModeToggleBox == nil || mw.viewModeListToggle == nil || mw.viewModeTileToggle == nil {
 		return
 	}
 
 	hasAPIKey := strings.TrimSpace(mw.sgdbAPIKey) != ""
-	mw.viewModeToggle.ToWidget().SetVisible(hasAPIKey)
-	mw.viewModeToggle.SetSensitive(hasAPIKey)
+	tileModeAvailable := mw.currentCategory == wiiudownloader.TITLE_CATEGORY_GAME || mw.currentCategory == wiiudownloader.TITLE_CATEGORY_ALL
+	mw.viewModeToggleBox.ToWidget().SetVisible(hasAPIKey)
+	mw.viewModeListToggle.SetSensitive(hasAPIKey)
+	mw.viewModeTileToggle.SetSensitive(hasAPIKey && tileModeAvailable)
 
 	mw.updatingViewModeToggle = true
-	mw.viewModeToggle.SetActive(mw.showTiles)
+	mw.viewModeListToggle.SetActive(!mw.hasTileMode())
+	mw.viewModeTileToggle.SetActive(mw.hasTileMode())
 	mw.updatingViewModeToggle = false
 
 	if !hasAPIKey {
 		return
 	}
 
-	iconName := "view-list-symbolic"
-	tooltip := "Switch to list mode"
-	if !mw.showTiles {
-		iconName = "view-grid-symbolic"
-		tooltip = "Switch to tile mode"
+	if listIcon, err := gtk.ImageNewFromIconName("view-list-symbolic", gtk.ICON_SIZE_BUTTON); err == nil {
+		mw.viewModeListToggle.SetImage(listIcon)
+		mw.viewModeListToggle.SetAlwaysShowImage(true)
 	}
-
-	if icon, err := gtk.ImageNewFromIconName(iconName, gtk.ICON_SIZE_BUTTON); err == nil {
-		mw.viewModeToggle.SetImage(icon)
-		mw.viewModeToggle.SetAlwaysShowImage(true)
+	if tileIcon, err := gtk.ImageNewFromIconName("view-grid-symbolic", gtk.ICON_SIZE_BUTTON); err == nil {
+		mw.viewModeTileToggle.SetImage(tileIcon)
+		mw.viewModeTileToggle.SetAlwaysShowImage(true)
 	}
-	mw.viewModeToggle.ToWidget().SetProperty("tooltip-text", tooltip)
+	mw.viewModeListToggle.ToWidget().SetProperty("tooltip-text", "List mode")
+	mw.viewModeTileToggle.ToWidget().SetProperty("tooltip-text", "Tile mode")
 }
 
 func (mw *MainWindow) persistTileModePreference(showTiles bool) {
@@ -161,13 +249,17 @@ func (mw *MainWindow) persistTileModePreference(showTiles bool) {
 }
 
 func (mw *MainWindow) hasTileMode() bool {
-	return mw.showTiles && mw.sgdbAPIKey != ""
+	if !mw.showTiles || mw.sgdbAPIKey == "" {
+		return false
+	}
+	return mw.currentCategory == wiiudownloader.TITLE_CATEGORY_GAME || mw.currentCategory == wiiudownloader.TITLE_CATEGORY_ALL
 }
 
 func (mw *MainWindow) refreshTileViewIfNeeded() {
-	if mw.hasTileMode() {
-		mw.refreshContentView()
+	if mw.contentScroll == nil {
+		return
 	}
+	mw.refreshContentView()
 }
 
 func (mw *MainWindow) titleEntryMatchesCurrentFilters(entry wiiudownloader.TitleEntry) bool {
@@ -391,14 +483,8 @@ func (mw *MainWindow) loadTileArtwork(titleID uint64, titleName string) {
 	if !mw.hasTileMode() || mw.tileArtwork == nil {
 		return
 	}
-	if cachedPath, ok := mw.tileArtwork.get(titleID); ok {
-		mw.setTileImageFromPath(titleID, cachedPath)
-		return
-	}
-	cachePath := sgdbTileCachePath(titleID)
-	if info, err := os.Stat(cachePath); err == nil && info.Size() > 0 {
-		mw.tileArtwork.finish(titleID, cachePath, nil)
-		mw.setTileImageFromPath(titleID, cachePath)
+	if cachedImageData, ok := mw.tileArtwork.get(titleID); ok {
+		mw.setTileImageFromBytes(titleID, cachedImageData)
 		return
 	}
 	if !mw.tileArtwork.start(titleID) {
@@ -414,42 +500,64 @@ func (mw *MainWindow) loadTileArtwork(titleID uint64, titleName string) {
 		ctx, cancel := context.WithTimeout(context.Background(), SGDB_REQUEST_TIMEOUT)
 		defer cancel()
 
-		imagePath, err := mw.fetchAndCacheSGDBTile(ctx, titleID, titleName)
-		mw.tileArtwork.finish(titleID, imagePath, err)
-		if err != nil {
-			return
-		}
+		imageData, err := mw.fetchAndCacheSGDBTile(ctx, titleID, titleName)
 		uiIdleAdd(func() {
-			mw.setTileImageFromPath(titleID, imagePath)
+			mw.tileArtwork.finish(titleID, imageData, err)
+			if err != nil {
+				return
+			}
+			mw.setTileImageFromBytes(titleID, imageData)
 		})
 	}()
 }
 
-func (mw *MainWindow) setTileImageFromPath(titleID uint64, imagePath string) {
+func (mw *MainWindow) setTileImageFromBytes(titleID uint64, imageData []byte) {
 	card, ok := mw.tileCards[titleID]
-	if !ok || card == nil || card.image == nil {
+	if !ok || card == nil || card.image == nil || len(imageData) == 0 {
 		return
 	}
-	pixbuf, err := gdk.PixbufNewFromFileAtScale(imagePath, TITLE_TILE_IMAGE_WIDTH, TITLE_TILE_IMAGE_HEIGHT, false)
+
+	loader, err := gdk.PixbufLoaderNew()
 	if err != nil {
 		return
 	}
-	card.image.SetFromPixbuf(pixbuf)
+	pixbuf, err := loader.WriteAndReturnPixbuf(imageData)
+	if err != nil {
+		return
+	}
+	scaledPixbuf, err := pixbuf.ScaleSimple(TITLE_TILE_IMAGE_WIDTH, TITLE_TILE_IMAGE_HEIGHT, gdk.INTERP_BILINEAR)
+	if err != nil {
+		return
+	}
+	card.image.SetFromPixbuf(scaledPixbuf)
 }
 
-func (mw *MainWindow) fetchAndCacheSGDBTile(ctx context.Context, titleID uint64, titleName string) (string, error) {
+func (mw *MainWindow) fetchAndCacheSGDBTile(ctx context.Context, titleID uint64, titleName string) ([]byte, error) {
 	// Search SGDB by name to get the SGDB game ID, then fetch grids for that game.
+	if cachedGameID, ok := mw.sgdbIDCache.Get(titleID); ok {
+		imageURL, err := mw.fetchSGDBGridURL(ctx, cachedGameID)
+		if err == nil {
+			log.Printf("[SGDB] Reusing cached SGDB game ID %d for '%s'", cachedGameID, titleName)
+			return mw.downloadSGDBImage(ctx, imageURL)
+		}
+		log.Printf("[SGDB] Cached SGDB game ID %d had no grids for '%s', searching again", cachedGameID, titleName)
+	}
+
 	gameIDs, err := mw.fetchSGDBGameIDs(ctx, titleName)
 	if err != nil || len(gameIDs) == 0 {
 		log.Printf("[SGDB] Failed to find match for: %s - %v", titleName, err)
-		return "", err
+		return nil, err
 	}
 
 	for i, gameID := range gameIDs {
 		imageURL, err := mw.fetchSGDBGridURL(ctx, gameID)
 		if err == nil {
 			log.Printf("[SGDB] Found grids for '%s' via gameID %d (candidate %d)", titleName, gameID, i+1)
-			return mw.downloadSGDBImage(ctx, titleID, imageURL)
+			mw.sgdbIDCache.Set(titleID, gameID)
+			if err := mw.sgdbIDCache.Save(); err != nil {
+				log.Printf("[SGDB] Warning: failed to persist SGDB ID cache: %v", err)
+			}
+			return mw.downloadSGDBImage(ctx, imageURL)
 		}
 		if i < len(gameIDs)-1 {
 			log.Printf("[SGDB] Candidate %d (gameID %d) has no grids, trying next...", i+1, gameID)
@@ -457,7 +565,7 @@ func (mw *MainWindow) fetchAndCacheSGDBTile(ctx context.Context, titleID uint64,
 	}
 
 	log.Printf("[SGDB] None of %d candidates had grids for: %s", len(gameIDs), titleName)
-	return "", fmt.Errorf("no SGDB grids found for %s after trying %d candidates", titleName, len(gameIDs))
+	return nil, fmt.Errorf("no SGDB grids found for %s after trying %d candidates", titleName, len(gameIDs))
 }
 
 func stripSGDBPrefixes(titleName string) string {
@@ -553,69 +661,22 @@ func (mw *MainWindow) doSGDBRequest(ctx context.Context, requestURL string, targ
 	return json.NewDecoder(response.Body).Decode(target)
 }
 
-func (mw *MainWindow) downloadSGDBImage(ctx context.Context, titleID uint64, imageURL string) (string, error) {
+func (mw *MainWindow) downloadSGDBImage(ctx context.Context, imageURL string) ([]byte, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, imageURL, nil)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	response, err := mw.client.Do(request)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
 		log.Printf("[SGDB] Image download failed with status %d for URL: %s", response.StatusCode, imageURL)
-		return "", fmt.Errorf("SGDB image download failed with status %d", response.StatusCode)
+		return nil, fmt.Errorf("SGDB image download failed with status %d", response.StatusCode)
 	}
 
-	cachePath := sgdbTileCachePathWithURL(titleID, imageURL)
-	if err := os.MkdirAll(filepath.Dir(cachePath), 0o755); err != nil {
-		return "", err
-	}
-
-	file, err := os.Create(cachePath)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-
-	if _, err := io.Copy(file, response.Body); err != nil {
-		return "", err
-	}
-
-	log.Printf("[SGDB] Successfully downloaded image to: %s", cachePath)
-	return cachePath, nil
-}
-
-func sgdbTileCacheDir() string {
-	userCacheDir, err := os.UserCacheDir()
-	if err != nil || userCacheDir == "" {
-		return filepath.Join(os.TempDir(), "WiiUDownloader", "sgdb")
-	}
-	return filepath.Join(userCacheDir, "WiiUDownloader", "sgdb")
-}
-
-func sgdbTileCachePath(titleID uint64) string {
-	baseDir := sgdbTileCacheDir()
-	for _, extension := range []string{".png", ".jpg", ".jpeg", ".webp"} {
-		candidate := filepath.Join(baseDir, fmt.Sprintf("%016x-%s%s", titleID, SGDB_TILE_CACHE_VERSION, extension))
-		if info, err := os.Stat(candidate); err == nil && info.Size() > 0 {
-			return candidate
-		}
-	}
-	return filepath.Join(baseDir, fmt.Sprintf("%016x-%s.jpg", titleID, SGDB_TILE_CACHE_VERSION))
-}
-
-func sgdbTileCachePathWithURL(titleID uint64, imageURL string) string {
-	parsedURL, err := url.Parse(imageURL)
-	extension := ".jpg"
-	if err == nil {
-		parsedExtension := strings.ToLower(path.Ext(parsedURL.Path))
-		if parsedExtension != "" {
-			extension = parsedExtension
-		}
-	}
-	return filepath.Join(sgdbTileCacheDir(), fmt.Sprintf("%016x-%s%s", titleID, SGDB_TILE_CACHE_VERSION, extension))
+	return io.ReadAll(response.Body)
 }

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"strings"
+
 	"github.com/Xpl0itU/dialog"
 	"github.com/gotk3/gotk3/gtk"
 )
@@ -181,23 +183,13 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 	SetupCheckButtonAccessibility(showDonationBarCheck, "Show a small bar at the bottom to support the project")
 	interfaceGrid.Attach(showDonationBarCheck, 0, 1, 1, 1)
 
-	showTilesCheck, err := gtk.CheckButtonNewWithLabel("Show tiles")
-	if err != nil {
-		return nil, err
-	}
-	hasSGDBAPIKey := config.SGDBAPIKey != ""
-	showTilesCheck.SetActive(hasSGDBAPIKey && config.ShowTiles)
-	showTilesCheck.SetSensitive(hasSGDBAPIKey)
-	SetupCheckButtonAccessibility(showTilesCheck, "Show games as artwork tiles when an SGDB API key is configured")
-	interfaceGrid.Attach(showTilesCheck, 0, 2, 1, 1)
-
 	getSizeOnQueueCheck, err := gtk.CheckButtonNewWithLabel("Fetch game size when adding to queue")
 	if err != nil {
 		return nil, err
 	}
 	getSizeOnQueueCheck.SetActive(config.GetSizeOnQueue)
 	SetupCheckButtonAccessibility(getSizeOnQueueCheck, "Automatically calculate game size using TMD file when added to queue")
-	interfaceGrid.Attach(getSizeOnQueueCheck, 0, 3, 1, 1)
+	interfaceGrid.Attach(getSizeOnQueueCheck, 0, 2, 1, 1)
 
 	interfaceTabLabel, _ := gtk.LabelNew("Interface")
 	notebook.AppendPage(interfaceGrid, interfaceTabLabel)
@@ -231,21 +223,9 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 	continueOnErrorCheck.Connect("toggled", func() { dirty = true })
 	suggestRelatedContentCheck.Connect("toggled", func() { dirty = true })
 	showDonationBarCheck.Connect("toggled", func() { dirty = true })
-	showTilesCheck.Connect("toggled", func() { dirty = true })
 	getSizeOnQueueCheck.Connect("toggled", func() { dirty = true })
 	downloadPathEntry.Connect("changed", func() { dirty = true })
 	sgdbAPIKeyEntry.Connect("changed", func() { dirty = true })
-	sgdbAPIKeyEntry.Connect("changed", func() {
-		text, err := sgdbAPIKeyEntry.GetText()
-		if err != nil {
-			return
-		}
-		hasKey := text != ""
-		showTilesCheck.SetSensitive(hasKey)
-		if !hasKey {
-			showTilesCheck.SetActive(false)
-		}
-	})
 
 	saveButton.Connect("clicked", func() {
 		config.DarkMode = darkModeCheck.GetActive()
@@ -271,7 +251,7 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 		config.RememberLastPath = rememberPathCheck.GetActive()
 		config.ContinueOnError = continueOnErrorCheck.GetActive()
 		config.SuggestRelatedContent = suggestRelatedContentCheck.GetActive()
-		config.ShowTiles = sgdbAPIKey != "" && showTilesCheck.GetActive()
+		config.ShowTiles = config.ShowTiles && strings.TrimSpace(sgdbAPIKey) != ""
 		config.ShowDonationBar = showDonationBarCheck.GetActive()
 		config.GetSizeOnQueue = getSizeOnQueueCheck.GetActive()
 

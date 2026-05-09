@@ -35,7 +35,7 @@ func main() {
 	runtime.LockOSThread()
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	configureMacOSEnvironment()
-	
+
 	// Check for --clearcache flag and remove it from os.Args before GTK sees it
 	shouldClearCache := false
 	var filteredArgs []string
@@ -49,11 +49,11 @@ func main() {
 		}
 	}
 	os.Args = filteredArgs
-	
+
 	if shouldClearCache {
 		clearSGDBCache()
 	}
-	
+
 	gtk.Init(nil)
 
 	app, err := gtk.ApplicationNew("io.github.xpl0itu.wiiudownloader", glib.APPLICATION_FLAGS_NONE)
@@ -233,10 +233,19 @@ func clearSGDBCache() {
 	cacheDir, err := os.UserCacheDir()
 	if err != nil {
 		log.Printf("Warning: could not get user cache dir: %v", err)
+	} else {
+		sgdbCachePath := filepath.Join(cacheDir, "WiiUDownloader", "sgdb")
+		if err := os.RemoveAll(sgdbCachePath); err != nil {
+			log.Printf("Warning: could not clear SGDB image cache: %v", err)
+		}
+	}
+
+	sgdbIDPath, err := sgdbIDCachePath()
+	if err != nil {
+		log.Printf("Warning: could not resolve SGDB ID cache path: %v", err)
 		return
 	}
-	sgdbCachePath := filepath.Join(cacheDir, "WiiUDownloader", "sgdb")
-	if err := os.RemoveAll(sgdbCachePath); err != nil {
-		log.Printf("Warning: could not clear SGDB cache: %v", err)
+	if err := os.Remove(sgdbIDPath); err != nil && !os.IsNotExist(err) {
+		log.Printf("Warning: could not clear SGDB ID cache: %v", err)
 	}
 }

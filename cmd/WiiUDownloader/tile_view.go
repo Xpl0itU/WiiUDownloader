@@ -1004,6 +1004,27 @@ func hasLatinOrDigit(s string) bool {
 	return false
 }
 
+// containsWordAnd returns true if s contains " and " as a whole word (case-insensitive).
+func containsWordAnd(s string) bool {
+	lower := strings.ToLower(s)
+	return strings.Contains(lower, " and ")
+}
+
+// replaceWordAnd replaces all " and " occurrences (case-insensitive) with replacement.
+func replaceWordAnd(s string, replacement string) string {
+	lower := strings.ToLower(s)
+	result := s
+	for {
+		idx := strings.Index(strings.ToLower(result), " and ")
+		if idx == -1 {
+			break
+		}
+		result = result[:idx] + replacement + result[idx+5:]
+		_ = lower
+	}
+	return result
+}
+
 func extractAliasesFromDelimitedText(titleName string, openDelimiter string, closeDelimiter string) []string {
 	aliases := make([]string, 0)
 	searchFrom := 0
@@ -1036,6 +1057,9 @@ func sgdbSearchCandidates(titleName string) []string {
 		return []string{titleName}
 	}
 
+	// Canonicalize & -> and so both "Kick & Fennick" and "Kick and Fennick" start from the same base.
+	base = strings.ReplaceAll(base, " & ", " and ")
+
 	candidates := make([]string, 0, 6)
 	seen := make(map[string]struct{})
 	addCandidate := func(name string) {
@@ -1064,10 +1088,85 @@ func sgdbSearchCandidates(titleName string) []string {
 	addCandidate(clean)
 	addCandidate(base)
 
+	// Add & <-> and variants for each candidate so far.
+	existing := make([]string, len(candidates))
+	copy(existing, candidates)
+	for _, c := range existing {
+		if strings.Contains(c, " & ") {
+			addCandidate(strings.ReplaceAll(c, " & ", " and "))
+		}
+		if containsWordAnd(c) {
+			addCandidate(replaceWordAnd(c, " & "))
+		}
+	}
+
 	if len(candidates) == 0 {
 		return []string{titleName}
 	}
 	return candidates
+}
+
+func normalizedSGDBTitleForMatch(name string) string {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return ""
+	}
+	// Canonicalize symbol variants before normalization.
+	trimmed = strings.ReplaceAll(trimmed, "&", " and ")
+	return normalizeSearchText(trimmed)
+}
+
+func hasWiiUType(types []string) bool {
+	for _, t := range types {
+		if strings.EqualFold(t, "wiiu") {
+			return true
+		}
+	}
+	return false
+}
+
+func sgdbCandidateScore(searchName string, candidateName string, candidateTypes []string) int {
+	normalizedSearch := normalizedSGDBTitleForMatch(searchName)
+	normalizedCandidate := normalizedSGDBTitleForMatch(candidateName)
+	if normalizedSearch == "" || normalizedCandidate == "" {
+		return -1
+	}
+
+	searchTokens := strings.Fields(normalizedSearch)
+	candidateTokens := strings.Fields(normalizedCandidate)
+	if len(searchTokens) == 0 || len(candidateTokens) == 0 {
+		return -1
+	}
+
+	searchSet := make(map[string]struct{}, len(searchTokens))
+	for _, token := range searchTokens {
+		searchSet[token] = struct{}{}
+	}
+
+	overlap := 0
+	seenCandidate := make(map[string]struct{}, len(candidateTokens))
+	for _, token := range candidateTokens {
+		if _, ok := seenCandidate[token]; ok {
+			continue
+		}
+		seenCandidate[token] = struct{}{}
+		if _, ok := searchSet[token]; ok {
+			overlap++
+		}
+	}
+
+	// Strongly prefer close textual matches; use platform as a tie-breaker boost.
+	score := overlap * 100
+	if normalizedCandidate == normalizedSearch {
+		score += 600
+	}
+	if overlap == len(searchSet) {
+		score += 200
+	}
+	if hasWiiUType(candidateTypes) {
+		score += 30
+	}
+	return score
 }
 
 func (mw *MainWindow) fetchSGDBGameIDs(ctx context.Context, titleName string) ([]int, error) {
@@ -1087,14 +1186,15 @@ func (mw *MainWindow) fetchSGDBGameIDs(ctx context.Context, titleName string) ([
 			continue
 		}
 
-		normalizedTitle := normalizeSearchText(searchName)
 		bestID := response.Data[0].ID
 		bestName := response.Data[0].Name
-		for _, candidate := range response.Data {
-			if normalizeSearchText(candidate.Name) == normalizedTitle {
+		bestScore := sgdbCandidateScore(searchName, response.Data[0].Name, response.Data[0].Types)
+		for _, candidate := range response.Data[1:] {
+			score := sgdbCandidateScore(searchName, candidate.Name, candidate.Types)
+			if score > bestScore {
+				bestScore = score
 				bestID = candidate.ID
 				bestName = candidate.Name
-				break
 			}
 		}
 
@@ -1114,7 +1214,7 @@ func (mw *MainWindow) fetchSGDBGameIDs(ctx context.Context, titleName string) ([
 			results = append(results, candidate.ID)
 		}
 
-		log.Printf("[SGDB] Best match for '%s': gameID %d ('%s')", searchName, bestID, bestName)
+		log.Printf("[SGDB] Best match for '%s': gameID %d ('%s') score=%d", searchName, bestID, bestName, bestScore)
 		if len(results) >= 4 {
 			break
 		}

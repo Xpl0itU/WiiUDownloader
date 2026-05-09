@@ -25,7 +25,7 @@ Added functionality includes:
 - In-memory artwork caching with a persistent SGDB ID cache to reduce repeated lookups.
 - Improved title matching and fallback logic to find artwork more reliably.
 - Filter-aware tile refreshing so search, category, and region changes stay consistent across views.
-
+<!-- 
 ## Usage Guide
 
 Check the [WiiUDownloader Usage Guide here](https://xpl0itu.github.io/WiiUDownloaderDocs/docs/)
@@ -69,4 +69,4 @@ This program is distributed under the GPLv3 License. For more information, see t
 
 WiiUDownloader uses several open-source libraries and dependencies to provide its functionality:
 
-- [github.com/gotk3/gotk3](https://github.com/gotk3/gotk3): Go bindings for GTK+3.
+- [github.com/gotk3/gotk3](https://github.com/gotk3/gotk3): Go bindings for GTK+3. -->

@@ -929,6 +929,14 @@ func (mw *MainWindow) onCategoryToggled(button *gtk.ToggleButton) {
 		log.Println("Unable to get label:", err)
 		return
 	}
+	if mw.tileLoaderCancel != nil {
+		mw.tileLoaderCancel()
+		mw.tileLoaderCtx, mw.tileLoaderCancel = context.WithCancel(context.Background())
+	}
+	if mw.scrollDebounceTimer != nil {
+		mw.scrollDebounceTimer.Stop()
+		mw.scrollDebounceTimer = nil
+	}
 	mw.currentCategory = wiiudownloader.GetCategoryFromFormattedCategory(category)
 	uiIdleAdd(func() {
 		mw.syncViewModeToggle()

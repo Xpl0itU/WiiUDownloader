@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -115,9 +116,11 @@ func (s *tileArtworkStore) isFailed(titleID uint64) bool {
 func (s *tileArtworkStore) start(titleID uint64) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.failed[titleID] || s.loading[titleID] {
+	if s.loading[titleID] {
 		return false
 	}
+	// Allow retries for previously failed entries; failures are not permanent.
+	delete(s.failed, titleID)
 	s.loading[titleID] = true
 	return true
 }
@@ -127,6 +130,10 @@ func (s *tileArtworkStore) finish(titleID uint64, imageData []byte, err error) {
 	defer s.mu.Unlock()
 	delete(s.loading, titleID)
 	if err != nil {
+		if isTransientTileError(err) {
+			delete(s.failed, titleID)
+			return
+		}
 		s.failed[titleID] = true
 		return
 	}
@@ -134,6 +141,13 @@ func (s *tileArtworkStore) finish(titleID uint64, imageData []byte, err error) {
 	s.touchLocked(titleID)
 	s.evictLocked(MAX_TILE_ARTWORK_CACHE)
 	delete(s.failed, titleID)
+}
+
+func isTransientTileError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
 
 func (s *tileArtworkStore) retainVisible(visible map[uint64]struct{}) {
@@ -326,7 +340,7 @@ func (mw *MainWindow) syncViewModeToggle() {
 	}
 
 	hasAPIKey := strings.TrimSpace(mw.sgdbAPIKey) != ""
-	tileModeAvailable := mw.currentCategory == wiiudownloader.TITLE_CATEGORY_GAME || mw.currentCategory == wiiudownloader.TITLE_CATEGORY_ALL
+	tileModeAvailable := mw.currentCategory == wiiudownloader.TITLE_CATEGORY_GAME || mw.currentCategory == wiiudownloader.TITLE_CATEGORY_UPDATE || mw.currentCategory == wiiudownloader.TITLE_CATEGORY_DLC || mw.currentCategory == wiiudownloader.TITLE_CATEGORY_DEMO || mw.currentCategory == wiiudownloader.TITLE_CATEGORY_ALL
 	mw.viewModeToggleBox.ToWidget().SetVisible(hasAPIKey)
 	mw.viewModeListToggle.SetSensitive(hasAPIKey)
 	mw.viewModeTileToggle.SetSensitive(hasAPIKey && tileModeAvailable)
@@ -369,7 +383,7 @@ func (mw *MainWindow) hasTileMode() bool {
 	if !mw.showTiles || mw.sgdbAPIKey == "" {
 		return false
 	}
-	return mw.currentCategory == wiiudownloader.TITLE_CATEGORY_GAME || mw.currentCategory == wiiudownloader.TITLE_CATEGORY_ALL
+	return mw.currentCategory == wiiudownloader.TITLE_CATEGORY_GAME || mw.currentCategory == wiiudownloader.TITLE_CATEGORY_UPDATE || mw.currentCategory == wiiudownloader.TITLE_CATEGORY_DLC || mw.currentCategory == wiiudownloader.TITLE_CATEGORY_DEMO || mw.currentCategory == wiiudownloader.TITLE_CATEGORY_ALL
 }
 
 func (mw *MainWindow) refreshTileViewIfNeeded() {
@@ -452,11 +466,6 @@ func (mw *MainWindow) refreshContentView() {
 		if mw.tileSortBar != nil {
 			mw.tileSortBar.ToWidget().SetVisible(true)
 		}
-		if err := mw.ensureTileView(); err != nil {
-			ShowErrorDialog(mw.window, err)
-			return
-		}
-		mw.swapContentChild(mw.tileFlowBox)
 		mw.rebuildTileView()
 		return
 	}
@@ -475,11 +484,17 @@ func (mw *MainWindow) swapContentChild(widget gtk.IWidget) {
 		return
 	}
 	if existing, err := mw.contentScroll.GetChild(); err == nil && existing != nil {
+		target := widget.ToWidget()
+		if target != nil && existing == target {
+			target.Show()
+			mw.contentScroll.Show()
+			return
+		}
 		mw.contentScroll.Remove(existing)
 	}
 	mw.contentScroll.Add(widget)
-	widget.ToWidget().ShowAll()
-	mw.contentScroll.ShowAll()
+	widget.ToWidget().Show()
+	mw.contentScroll.Show()
 }
 
 func (mw *MainWindow) ensureTileView() error {
@@ -487,9 +502,19 @@ func (mw *MainWindow) ensureTileView() error {
 		mw.ensureTileLazyLoader()
 		return nil
 	}
-	flowBox, err := gtk.FlowBoxNew()
+	flowBox, err := mw.newTileFlowBox()
 	if err != nil {
 		return err
+	}
+	mw.tileFlowBox = flowBox
+	mw.ensureTileLazyLoader()
+	return nil
+}
+
+func (mw *MainWindow) newTileFlowBox() (*gtk.FlowBox, error) {
+	flowBox, err := gtk.FlowBoxNew()
+	if err != nil {
+		return nil, err
 	}
 	flowBox.SetSelectionMode(gtk.SELECTION_NONE)
 	flowBox.SetActivateOnSingleClick(false)
@@ -499,9 +524,7 @@ func (mw *MainWindow) ensureTileView() error {
 	flowBox.SetMaxChildrenPerLine(TITLE_TILE_MAX_PER_LINE)
 	flowBox.SetHomogeneous(true)
 	addStyleClass(flowBox.GetStyleContext, "title-tiles")
-	mw.tileFlowBox = flowBox
-	mw.ensureTileLazyLoader()
-	return nil
+	return flowBox, nil
 }
 
 const (
@@ -641,16 +664,14 @@ func (mw *MainWindow) currentTileLoadRange() (int, int) {
 }
 
 func (mw *MainWindow) rebuildTileView() {
-	if mw.tileFlowBox == nil {
+	flowBox, err := mw.newTileFlowBox()
+	if err != nil {
+		ShowErrorDialog(mw.window, err)
 		return
 	}
-	for {
-		child := mw.tileFlowBox.GetChildAtIndex(0)
-		if child == nil {
-			break
-		}
-		mw.tileFlowBox.Remove(child)
-	}
+	mw.tileFlowBox = flowBox
+	mw.swapContentChild(flowBox)
+	mw.ensureTileLazyLoader()
 	mw.tileCards = make(map[uint64]*titleTileCard)
 	mw.tileDisplayOrder = mw.tileDisplayOrder[:0]
 
@@ -669,9 +690,10 @@ func (mw *MainWindow) rebuildTileView() {
 			emptyLabel.SetHAlign(gtk.ALIGN_CENTER)
 			emptyLabel.SetMarginTop(24)
 			emptyLabel.SetMarginBottom(24)
-			mw.tileFlowBox.Insert(emptyLabel, -1)
+			flowBox.Insert(emptyLabel, -1)
+			emptyLabel.Show()
 		}
-		mw.tileFlowBox.ShowAll()
+		flowBox.Show()
 		return
 	}
 
@@ -682,11 +704,12 @@ func (mw *MainWindow) rebuildTileView() {
 		}
 		mw.tileCards[entry.TitleID] = card
 		mw.tileDisplayOrder = append(mw.tileDisplayOrder, entry.TitleID)
-		mw.tileFlowBox.Insert(card.button, -1)
+		flowBox.Insert(card.button, -1)
+		card.button.ShowAll()
 		mw.applyTileQueueState(card)
 	}
 
-	mw.tileFlowBox.ShowAll()
+	flowBox.Show()
 	mw.lazyLoadTileArtworkForViewport()
 }
 
@@ -880,19 +903,51 @@ func (mw *MainWindow) loadTileArtwork(titleID uint64, titleName string) {
 		return
 	}
 
+	parentCtx := mw.tileLoaderCtx
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[SGDB] Recovered panic in tile artwork loader for %016x: %v", titleID, r)
+				uiIdleAdd(func() {
+					if mw.tileArtwork != nil {
+						mw.tileArtwork.finish(titleID, nil, fmt.Errorf("tile loader panic: %v", r))
+					}
+				})
+			}
+		}()
+
 		mw.tileImageSemaphore <- struct{}{}
 		defer func() {
 			<-mw.tileImageSemaphore
 		}()
 
-		ctx, cancel := context.WithTimeout(mw.tileLoaderCtx, SGDB_REQUEST_TIMEOUT)
+		if parentCtx == nil {
+			parentCtx = context.Background()
+		}
+		ctx, cancel := context.WithTimeout(parentCtx, SGDB_REQUEST_TIMEOUT)
 		defer cancel()
 
 		imageData, err := mw.fetchAndCacheSGDBTile(ctx, titleID, titleName)
 		uiIdleAdd(func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("[SGDB] Recovered panic in tile artwork UI update for %016x: %v", titleID, r)
+				}
+			}()
+			if mw.tileArtwork == nil {
+				return
+			}
 			mw.tileArtwork.finish(titleID, imageData, err)
+			if !mw.hasTileMode() {
+				return
+			}
 			if err != nil {
+				if isTransientTileError(err) {
+					if transientCard, ok := mw.tileCards[titleID]; ok {
+						mw.unloadTileCardImage(transientCard)
+					}
+					return
+				}
 				if failedCard, ok := mw.tileCards[titleID]; ok {
 					mw.showTileNoImage(failedCard)
 				}
@@ -981,8 +1036,13 @@ func stripSGDBPrefixes(titleName string) string {
 		"[Demo] ",
 		"(Virtual Console) ",
 		"[Virtual Console] ",
+		"(Demo) ",
 		"(demo) ",
+		"(DEMO) ",
 		"[demo] ",
+		"DEMO",
+		"demo",
+		"Demo",
 	}
 	result := titleName
 	for _, prefix := range prefixes {
@@ -992,7 +1052,25 @@ func stripSGDBPrefixes(titleName string) string {
 			break
 		}
 	}
-	return result
+
+	// Also strip demo markers from anywhere in the title (prepend/append/anywhere)
+	// This prevents matching demo versions when we want the full game
+	demoMarkers := []string{
+		" (Demo)", " (demo)", " (DEMO)",
+		"(Demo) ", "(demo) ", "(DEMO) ",
+		"(Demo)", "(demo)", "(DEMO)",
+		"DEMO", "demo", "Demo",
+	}
+	for _, marker := range demoMarkers {
+		if strings.Contains(result, marker) {
+			newResult := strings.ReplaceAll(result, marker, "")
+			log.Printf("[SGDB] Stripped demo marker from '%s' -> '%s'", result, newResult)
+			result = newResult
+			break
+		}
+	}
+
+	return strings.TrimSpace(result)
 }
 
 func hasLatinOrDigit(s string) bool {

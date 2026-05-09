@@ -122,7 +122,34 @@ func NewConfigWindow(config *Config, onSaved func()) (*ConfigWindow, error) {
 	sgdbAPIKeyEntry.SetVisibility(false)
 	sgdbAPIKeyEntry.SetInputPurpose(gtk.INPUT_PURPOSE_PASSWORD)
 	SetupEntryAccessibility(sgdbAPIKeyEntry, "SGDB API key", "API key used for SGDB requests.")
-	generalGrid.Attach(sgdbAPIKeyEntry, 0, 4, 2, 1)
+	generalGrid.Attach(sgdbAPIKeyEntry, 0, 4, 1, 1)
+
+	showAPIKeyButton, err := gtk.ButtonNew()
+	if err != nil {
+		return nil, err
+	}
+	showAPIKeyVisible := false
+	updateAPIKeyButtonIcon := func() {
+		iconName := "view-conceal-symbolic"
+		tooltip := "Show API key"
+		if showAPIKeyVisible {
+			iconName = "view-reveal-symbolic"
+			tooltip = "Hide API key"
+		}
+		if icon, err := gtk.ImageNewFromIconName(iconName, gtk.ICON_SIZE_BUTTON); err == nil {
+			showAPIKeyButton.SetImage(icon)
+			showAPIKeyButton.SetAlwaysShowImage(true)
+		}
+		showAPIKeyButton.ToWidget().SetProperty("tooltip-text", tooltip)
+	}
+	updateAPIKeyButtonIcon()
+	showAPIKeyButton.Connect("clicked", func() {
+		showAPIKeyVisible = !showAPIKeyVisible
+		sgdbAPIKeyEntry.SetVisibility(showAPIKeyVisible)
+		updateAPIKeyButtonIcon()
+	})
+	generalGrid.Attach(showAPIKeyButton, 1, 4, 1, 1)
+	showAPIKeyButton.SetVAlign(gtk.ALIGN_CENTER)
 
 	sgdbDisclaimerLabel, err := gtk.LabelNew("SGDB Images")
 	if err != nil {

@@ -1125,6 +1125,64 @@ func hasWiiUType(types []string) bool {
 	return false
 }
 
+func sgdbIsStopword(token string) bool {
+	switch token {
+	case "a", "an", "and", "the", "of", "to", "for", "in", "on", "at", "by", "with", "game":
+		return true
+	default:
+		return false
+	}
+}
+
+func sgdbMeaningfulTokenSet(name string) map[string]struct{} {
+	normalized := normalizedSGDBTitleForMatch(name)
+	tokens := strings.Fields(normalized)
+	set := make(map[string]struct{}, len(tokens))
+	for _, token := range tokens {
+		if sgdbIsStopword(token) {
+			continue
+		}
+		set[token] = struct{}{}
+	}
+	return set
+}
+
+func sgdbMeaningfulOverlapCount(searchName string, candidateName string) int {
+	searchSet := sgdbMeaningfulTokenSet(searchName)
+	if len(searchSet) == 0 {
+		return 0
+	}
+	candidateSet := sgdbMeaningfulTokenSet(candidateName)
+	overlap := 0
+	for token := range candidateSet {
+		if _, ok := searchSet[token]; ok {
+			overlap++
+		}
+	}
+	return overlap
+}
+
+func sgdbCandidateIsRelevant(searchName string, candidateName string) bool {
+	searchSet := sgdbMeaningfulTokenSet(searchName)
+	if len(searchSet) == 0 {
+		// If everything was stripped as stopwords, be permissive.
+		return true
+	}
+
+	overlap := sgdbMeaningfulOverlapCount(searchName, candidateName)
+	if overlap == 0 {
+		return false
+	}
+
+	// For short names, require all meaningful terms to match.
+	if len(searchSet) <= 2 {
+		return overlap == len(searchSet)
+	}
+
+	// For longer names, require at least half of meaningful terms.
+	return overlap*2 >= len(searchSet)
+}
+
 func sgdbCandidateScore(searchName string, candidateName string, candidateTypes []string) int {
 	normalizedSearch := normalizedSGDBTitleForMatch(searchName)
 	normalizedCandidate := normalizedSGDBTitleForMatch(candidateName)
@@ -1155,8 +1213,11 @@ func sgdbCandidateScore(searchName string, candidateName string, candidateTypes 
 		}
 	}
 
+	meaningfulOverlap := sgdbMeaningfulOverlapCount(searchName, candidateName)
+
 	// Strongly prefer close textual matches; use platform as a tie-breaker boost.
 	score := overlap * 100
+	score += meaningfulOverlap * 250
 	if normalizedCandidate == normalizedSearch {
 		score += 600
 	}
@@ -1186,32 +1247,46 @@ func (mw *MainWindow) fetchSGDBGameIDs(ctx context.Context, titleName string) ([
 			continue
 		}
 
-		bestID := response.Data[0].ID
-		bestName := response.Data[0].Name
-		bestScore := sgdbCandidateScore(searchName, response.Data[0].Name, response.Data[0].Types)
-		for _, candidate := range response.Data[1:] {
-			score := sgdbCandidateScore(searchName, candidate.Name, candidate.Types)
-			if score > bestScore {
-				bestScore = score
-				bestID = candidate.ID
-				bestName = candidate.Name
-			}
+		type scoredCandidate struct {
+			id    int
+			name  string
+			score int
 		}
-
-		if _, exists := seenIDs[bestID]; !exists {
-			seenIDs[bestID] = struct{}{}
-			results = append(results, bestID)
-		}
-
+		scored := make([]scoredCandidate, 0, len(response.Data))
 		for _, candidate := range response.Data {
+			if !sgdbCandidateIsRelevant(searchName, candidate.Name) {
+				continue
+			}
+			scored = append(scored, scoredCandidate{
+				id:    candidate.ID,
+				name:  candidate.Name,
+				score: sgdbCandidateScore(searchName, candidate.Name, candidate.Types),
+			})
+		}
+		if len(scored) == 0 {
+			log.Printf("[SGDB] No relevant matches for '%s'", searchName)
+			continue
+		}
+
+		sort.Slice(scored, func(i, j int) bool {
+			if scored[i].score == scored[j].score {
+				return scored[i].id < scored[j].id
+			}
+			return scored[i].score > scored[j].score
+		})
+
+		bestID := scored[0].id
+		bestName := scored[0].name
+		bestScore := scored[0].score
+		for _, candidate := range scored {
 			if len(results) >= 4 {
 				break
 			}
-			if _, exists := seenIDs[candidate.ID]; exists {
+			if _, exists := seenIDs[candidate.id]; exists {
 				continue
 			}
-			seenIDs[candidate.ID] = struct{}{}
-			results = append(results, candidate.ID)
+			seenIDs[candidate.id] = struct{}{}
+			results = append(results, candidate.id)
 		}
 
 		log.Printf("[SGDB] Best match for '%s': gameID %d ('%s') score=%d", searchName, bestID, bestName, bestScore)

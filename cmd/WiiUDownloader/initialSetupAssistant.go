@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	wiiudownloader "github.com/Xpl0itU/WiiUDownloader"
 	"github.com/gotk3/gotk3/gdk"
@@ -437,35 +438,140 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 		return nil, err
 	}
 	page4.SetBorderWidth(SETUP_PAGE_BORDER_WIDTH)
-	page4.SetSpacing(SETUP_PAGE_SPACING_LARGE)
-
-	assistant.AppendPage(page1)
-	assistant.AppendPage(page2)
-	assistant.AppendPage(page3)
-	assistant.AppendPage(page4)
+	page4.SetSpacing(SETUP_PAGE_SPACING)
 
 	page4Label, err := gtk.LabelNew("")
 	if err != nil {
 		return nil, err
 	}
-	page4Label.SetMarkup("<span font='18' weight='bold'>All Set!</span>")
+	page4Label.SetMarkup("<span font='14' weight='bold'>SteamGridDB API Key (Optional)</span>")
 	page4Label.SetHAlign(gtk.ALIGN_START)
 	page4.PackStart(page4Label, false, false, 0)
 
-	page4SubLabel, err := gtk.LabelNew("")
+	page4Desc, err := gtk.LabelNew("")
 	if err != nil {
 		return nil, err
 	}
-	page4SubLabel.SetMarkup("<span font='11' alpha='80%'>WiiUDownloader is now configured and ready to use. You can start downloading games immediately or adjust settings in the preferences menu.</span>")
-	page4SubLabel.SetLineWrap(true)
-	page4SubLabel.SetHAlign(gtk.ALIGN_START)
-	page4.PackStart(page4SubLabel, false, false, 0)
+	page4Desc.SetMarkup("<span font='11' alpha='80%'>Add your SteamGridDB API key to enable tile artwork mode. Without this key, WiiUDownloader will still work in list mode.</span>")
+	page4Desc.SetHAlign(gtk.ALIGN_START)
+	page4Desc.SetLineWrap(true)
+	page4.PackStart(page4Desc, false, false, 0)
+
+	sgdbAPIKeyEntry, err := gtk.EntryNew()
+	if err != nil {
+		return nil, err
+	}
+	sgdbAPIKeyEntry.SetText(config.SGDBAPIKey)
+	sgdbAPIKeyEntry.SetVisibility(false)
+	sgdbAPIKeyEntry.SetInputPurpose(gtk.INPUT_PURPOSE_PASSWORD)
+	sgdbAPIKeyEntry.SetHExpand(true)
+	SetupEntryAccessibility(sgdbAPIKeyEntry, "SGDB API key", "Optional SteamGridDB API key to enable tile artwork mode.")
+
+	sgdbAPIKeyRow, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 8)
+	if err != nil {
+		return nil, err
+	}
+	sgdbAPIKeyRow.SetHExpand(true)
+	sgdbAPIKeyRow.PackStart(sgdbAPIKeyEntry, true, true, 0)
+
+	showAPIKeyButton, err := gtk.ButtonNew()
+	if err != nil {
+		return nil, err
+	}
+	showAPIKeyVisible := false
+	updateAPIKeyButtonIcon := func() {
+		iconName := "view-conceal-symbolic"
+		tooltip := "Show API key"
+		if showAPIKeyVisible {
+			iconName = "view-reveal-symbolic"
+			tooltip = "Hide API key"
+		}
+		if icon, err := gtk.ImageNewFromIconName(iconName, gtk.ICON_SIZE_BUTTON); err == nil {
+			showAPIKeyButton.SetImage(icon)
+			showAPIKeyButton.SetAlwaysShowImage(true)
+		}
+		showAPIKeyButton.ToWidget().SetProperty("tooltip-text", tooltip)
+	}
+	updateAPIKeyButtonIcon()
+	showAPIKeyButton.Connect("clicked", func() {
+		showAPIKeyVisible = !showAPIKeyVisible
+		sgdbAPIKeyEntry.SetVisibility(showAPIKeyVisible)
+		updateAPIKeyButtonIcon()
+	})
+	showAPIKeyButton.SetVAlign(gtk.ALIGN_CENTER)
+	sgdbAPIKeyRow.PackStart(showAPIKeyButton, false, false, 0)
+
+	page4.PackStart(sgdbAPIKeyRow, false, false, 6)
+
+	sgdbDisclaimerLabel, err := gtk.LabelNew("")
+	if err != nil {
+		return nil, err
+	}
+	sgdbDisclaimerLabel.SetLineWrap(true)
+	sgdbDisclaimerLabel.SetHAlign(gtk.ALIGN_START)
+	sgdbDisclaimerLabel.SetMarkup("<small>SGDB Images: This is an experimental feature. Coverage is incomplete and not all games may have available artwork. Some titles may display an incorrect or a default image.</small>")
+	page4.PackStart(sgdbDisclaimerLabel, false, false, 0)
+
+	sgdbFAQExpander, err := gtk.ExpanderNew("How do I get an SGDB API key?")
+	if err != nil {
+		return nil, err
+	}
+	sgdbFAQExpander.SetExpanded(false)
+
+	sgdbFAQLabel, err := gtk.LabelNew("")
+	if err != nil {
+		return nil, err
+	}
+	sgdbFAQLabel.SetHAlign(gtk.ALIGN_START)
+	sgdbFAQLabel.SetXAlign(0)
+	sgdbFAQLabel.SetLineWrap(true)
+	sgdbFAQLabel.SetSelectable(true)
+	sgdbFAQLabel.SetMarkup("<span font='10' alpha='85%'>" +
+		"- Log In: Visit <a href='https://www.steamgriddb.com/'>SteamGridDB</a> and sign in with your Steam credentials.\n" +
+		"- Access Preferences: Go to your user profile and select Preferences.\n" +
+		"- Navigate to API: Click on the API section within the preferences menu.\n" +
+		"- Generate Key: Click the Generate API Key button.\n" +
+		"- Copy the key and paste it on the SGDBAPI key field above.\n" +
+		"- All set! you can enable artwork tile mode." +
+		"</span>")
+	sgdbFAQExpander.Add(sgdbFAQLabel)
+	page4.PackStart(sgdbFAQExpander, false, false, 8)
+
+	page5, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
+	if err != nil {
+		return nil, err
+	}
+	page5.SetBorderWidth(SETUP_PAGE_BORDER_WIDTH)
+	page5.SetSpacing(SETUP_PAGE_SPACING_LARGE)
+
+	assistant.AppendPage(page1)
+	assistant.AppendPage(page2)
+	assistant.AppendPage(page3)
+	assistant.AppendPage(page4)
+	assistant.AppendPage(page5)
+
+	page5Label, err := gtk.LabelNew("")
+	if err != nil {
+		return nil, err
+	}
+	page5Label.SetMarkup("<span font='18' weight='bold'>All Set!</span>")
+	page5Label.SetHAlign(gtk.ALIGN_START)
+	page5.PackStart(page5Label, false, false, 0)
+
+	page5SubLabel, err := gtk.LabelNew("")
+	if err != nil {
+		return nil, err
+	}
+	page5SubLabel.SetMarkup("<span font='11' alpha='80%'>WiiUDownloader is now configured and ready to use. You can start downloading games immediately or adjust settings in the preferences menu.</span>")
+	page5SubLabel.SetLineWrap(true)
+	page5SubLabel.SetHAlign(gtk.ALIGN_START)
+	page5.PackStart(page5SubLabel, false, false, 0)
 
 	spacer4, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
 	if err != nil {
 		return nil, err
 	}
-	page4.PackStart(spacer4, true, true, 0)
+	page5.PackStart(spacer4, true, true, 0)
 
 	summaryLabel, err := gtk.LabelNew("")
 	if err != nil {
@@ -473,7 +579,7 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	}
 	summaryLabel.SetMarkup("<span font='10' weight='600'>Configuration Summary:</span>")
 	summaryLabel.SetHAlign(gtk.ALIGN_START)
-	page4.PackStart(summaryLabel, false, false, 0)
+	page5.PackStart(summaryLabel, false, false, 0)
 
 	summaryBox, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
 	if err != nil {
@@ -482,7 +588,7 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	summaryBox.SetSpacing(SETUP_SUMMARY_SPACING)
 	summaryBox.SetMarginTop(SETUP_SUMMARY_MARGIN)
 	summaryBox.SetMarginStart(SETUP_SUMMARY_MARGIN)
-	page4.PackStart(summaryBox, false, false, 0)
+	page5.PackStart(summaryBox, false, false, 0)
 
 	summaryRegions, err := gtk.LabelNew("")
 	if err != nil {
@@ -507,7 +613,8 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 		{widget: page1, title: "Welcome"},
 		{widget: page2, title: "Regions"},
 		{widget: page3, title: "Platforms"},
-		{widget: page4, title: "Finish"},
+		{widget: page4, title: "SteamGridDB"},
+		{widget: page5, title: "Finish"},
 	}
 
 	lastPageIndex := len(pages) - 1
@@ -523,6 +630,11 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 		selectedRegions := selectedRegionMask(europeCheck.GetActive(), usaCheck.GetActive(), japanCheck.GetActive())
 		config.SelectedRegion = selectedRegions
 		config.DecryptContents, config.DeleteEncryptedContents = platformSelectionToConfig(cemuCheck.GetActive(), wiiUCheck.GetActive())
+		sgdbAPIKeyText, err := sgdbAPIKeyEntry.GetText()
+		if err != nil {
+			sgdbAPIKeyText = ""
+		}
+		config.SGDBAPIKey = strings.TrimSpace(sgdbAPIKeyText)
 
 		if err := config.Save(); err != nil {
 			ShowErrorDialog(nil, fmt.Errorf("Failed to save config: %w", err))
@@ -559,7 +671,7 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 
 		setSetupButtonsVisible(skipButton, backButton, nextButton, finishButton, false, false, false, false)
 
-		isFinishPage := pageNum == 3
+		isFinishPage := pageNum == lastPageIndex
 
 		if pageNum == 0 {
 			setSetupButtonsVisible(skipButton, backButton, nextButton, finishButton, true, false, true, false)
@@ -573,6 +685,10 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 			setSetupButtonsVisible(skipButton, backButton, nextButton, finishButton, false, true, true, false)
 			nextButton.SetSensitive(true)
 			focusSetupOptionList(platformList)
+		} else if pageNum == 3 {
+			setSetupButtonsVisible(skipButton, backButton, nextButton, finishButton, false, true, true, false)
+			nextButton.SetSensitive(true)
+			sgdbAPIKeyEntry.GrabFocus()
 		} else if isFinishPage {
 			setSetupButtonsVisible(skipButton, backButton, nextButton, finishButton, false, true, false, true)
 			summaryRegions.SetMarkup("<span font='10' alpha='85%'>✓ Regions: " + selectedRegionsSummary(europeCheck.GetActive(), usaCheck.GetActive(), japanCheck.GetActive()) + "</span>")

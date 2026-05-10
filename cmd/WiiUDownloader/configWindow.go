@@ -157,8 +157,33 @@ func NewConfigWindow(config *Config, onSaved func()) (*ConfigWindow, error) {
 	}
 	sgdbDisclaimerLabel.SetLineWrap(true)
 	sgdbDisclaimerLabel.SetHAlign(gtk.ALIGN_START)
-	sgdbDisclaimerLabel.SetMarkup(`<small>SGDB Images: This is an experimental feature. Coverage is incomplete and not all games may have available artwork. Some titles may display without images.</small>`)
+	sgdbDisclaimerLabel.SetMarkup(`<small>SGDB Images: This is an experimental feature. Coverage is incomplete and not all games may have available artwork. Some titles may display an incorrect or a default image.</small>`)
 	generalGrid.Attach(sgdbDisclaimerLabel, 0, 5, 2, 1)
+
+	sgdbFAQExpander, err := gtk.ExpanderNew("How do I get an SGDB API key?")
+	if err != nil {
+		return nil, err
+	}
+	sgdbFAQExpander.SetExpanded(false)
+
+	sgdbFAQLabel, err := gtk.LabelNew("")
+	if err != nil {
+		return nil, err
+	}
+	sgdbFAQLabel.SetHAlign(gtk.ALIGN_START)
+	sgdbFAQLabel.SetXAlign(0)
+	sgdbFAQLabel.SetLineWrap(true)
+	sgdbFAQLabel.SetSelectable(true)
+	sgdbFAQLabel.SetMarkup("<span font='10' alpha='85%'>" +
+		"- Log In: Visit <a href='https://www.steamgriddb.com/'>SteamGridDB</a> and sign in with your Steam credentials.\n" +
+		"- Access Preferences: Go to your user profile and select Preferences.\n" +
+		"- Navigate to API: Click on the API section within the preferences menu.\n" +
+		"- Generate Key: Click the Generate API Key button.\n" +
+		"- Copy the key and paste it on the SGDBAPI key field above.\n" +
+		"- All set! you can enable artwork tile mode." +
+		"</span>")
+	sgdbFAQExpander.Add(sgdbFAQLabel)
+	generalGrid.Attach(sgdbFAQExpander, 0, 6, 2, 1)
 
 	generalTabLabel, _ := gtk.LabelNew("General")
 	notebook.AppendPage(generalGrid, generalTabLabel)

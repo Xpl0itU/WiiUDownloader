@@ -38,12 +38,16 @@ func main() {
 
 	// Check for --clearcache flag and remove it from os.Args before GTK sees it
 	shouldClearCache := false
+	shouldClearConfig := false
 	var filteredArgs []string
 	filteredArgs = append(filteredArgs, os.Args[0]) // Keep program name
 	for _, arg := range os.Args[1:] {
 		if arg == "--clearcache" {
 			shouldClearCache = true
 			log.Println("--clearcache flag detected, clearing SGDB cache on startup")
+		} else if arg == "--clearconfig" {
+			shouldClearConfig = true
+			log.Println("--clearconfig flag detected, clearing app config on startup")
 		} else {
 			filteredArgs = append(filteredArgs, arg)
 		}
@@ -52,6 +56,9 @@ func main() {
 
 	if shouldClearCache {
 		clearSGDBCache()
+	}
+	if shouldClearConfig {
+		clearAppConfig()
 	}
 
 	gtk.Init(nil)
@@ -247,5 +254,18 @@ func clearSGDBCache() {
 	}
 	if err := os.Remove(sgdbIDPath); err != nil && !os.IsNotExist(err) {
 		log.Printf("Warning: could not clear SGDB ID cache: %v", err)
+	}
+}
+
+func clearAppConfig() {
+	userConfigDir, err := os.UserConfigDir()
+	if err != nil {
+		log.Printf("Warning: could not get user config dir: %v", err)
+		return
+	}
+
+	configPath := configFilePath(userConfigDir)
+	if err := os.Remove(configPath); err != nil && !os.IsNotExist(err) {
+		log.Printf("Warning: could not clear config file: %v", err)
 	}
 }

@@ -28,7 +28,7 @@ const (
 	MAX_CONCURRENT_TILE_FETCHES = 6
 	TITLE_TILE_IMAGE_WIDTH      = 170
 	TITLE_TILE_IMAGE_HEIGHT     = 240
-	TITLE_TILE_MIN_PER_LINE     = 2
+	TITLE_TILE_MIN_PER_LINE     = 1
 	TITLE_TILE_MAX_PER_LINE     = 6
 	TITLE_TILE_INITIAL_LOAD     = 24
 	TITLE_TILE_LOAD_AHEAD       = 24
@@ -522,7 +522,7 @@ func (mw *MainWindow) newTileFlowBox() (*gtk.FlowBox, error) {
 	flowBox.SetColumnSpacing(10)
 	flowBox.SetMinChildrenPerLine(TITLE_TILE_MIN_PER_LINE)
 	flowBox.SetMaxChildrenPerLine(TITLE_TILE_MAX_PER_LINE)
-	flowBox.SetHomogeneous(true)
+	flowBox.SetHomogeneous(false)
 	addStyleClass(flowBox.GetStyleContext, "title-tiles")
 	return flowBox, nil
 }
@@ -724,12 +724,12 @@ func (mw *MainWindow) createTileCard(entry wiiudownloader.TitleEntry) (*titleTil
 	addStyleClass(button.GetStyleContext, "title-tile")
 	SetupButtonAccessibility(button, fmt.Sprintf("Toggle %s in queue", entry.Name))
 
-	content, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 8)
+	content, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 6)
 	if err != nil {
 		return nil, err
 	}
-	content.SetMarginTop(8)
-	content.SetMarginBottom(8)
+	content.SetMarginTop(6)
+	content.SetMarginBottom(4)
 	content.SetMarginStart(5)
 	content.SetMarginEnd(5)
 
@@ -748,36 +748,59 @@ func (mw *MainWindow) createTileCard(entry wiiudownloader.TitleEntry) (*titleTil
 	spinner.SetHAlign(gtk.ALIGN_CENTER)
 	spinner.SetVAlign(gtk.ALIGN_CENTER)
 
+	regionRibbon, err := gtk.LabelNew("")
+	if err != nil {
+		return nil, err
+	}
+	regionRibbon.SetText(tileRegionRibbonText(entry.Region))
+	regionRibbon.SetHAlign(gtk.ALIGN_CENTER)
+	regionRibbon.SetXAlign(0.5)
+	regionRibbon.SetMarginTop(5)
+	addStyleClass(regionRibbon.GetStyleContext, "region-ribbon")
+	addStyleClass(regionRibbon.GetStyleContext, tileRegionClass(entry.Region))
+
+	mediaOverlay, err := gtk.OverlayNew()
+	if err != nil {
+		return nil, err
+	}
+	mediaOverlay.SetSizeRequest(TITLE_TILE_IMAGE_WIDTH, TITLE_TILE_IMAGE_HEIGHT)
+	mediaOverlay.Add(image)
+	mediaOverlay.AddOverlay(spinner)
+
 	mediaBox, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
 	if err != nil {
 		return nil, err
 	}
 	mediaBox.SetSizeRequest(TITLE_TILE_IMAGE_WIDTH, TITLE_TILE_IMAGE_HEIGHT)
-	mediaBox.PackStart(spinner, true, true, 0)
-	mediaBox.PackStart(image, true, true, 0)
+	mediaBox.PackStart(mediaOverlay, true, true, 0)
 	content.PackStart(mediaBox, false, false, 0)
 
 	titleLabel, err := gtk.LabelNew(entry.Name)
 	if err != nil {
 		return nil, err
 	}
+	titleLabel.SetMarkup(fmt.Sprintf("<span weight='bold'>%s</span>", escapeMarkupText(entry.Name)))
 	titleLabel.SetLineWrap(true)
 	titleLabel.SetLineWrapMode(pango.WRAP_WORD_CHAR)
 	titleLabel.SetMaxWidthChars(24)
-	titleLabel.SetHAlign(gtk.ALIGN_START)
-	titleLabel.SetXAlign(0)
+	titleLabel.SetHAlign(gtk.ALIGN_CENTER)
+	titleLabel.SetXAlign(0.5)
+	titleLabel.SetJustify(gtk.JUSTIFY_CENTER)
 	addStyleClass(titleLabel.GetStyleContext, "title-tile-name")
 	content.PackStart(titleLabel, false, false, 0)
 
-	metaLabel, err := gtk.LabelNew(fmt.Sprintf("%016x\n%s", entry.TitleID, wiiudownloader.GetFormattedRegion(entry.Region)))
+	metaLabel, err := gtk.LabelNew(fmt.Sprintf("%016x", entry.TitleID))
 	if err != nil {
 		return nil, err
 	}
+	metaLabel.SetMarkup(tileMetaMarkup(entry.TitleID))
 	metaLabel.SetLineWrap(true)
-	metaLabel.SetHAlign(gtk.ALIGN_START)
-	metaLabel.SetXAlign(0)
+	metaLabel.SetHAlign(gtk.ALIGN_CENTER)
+	metaLabel.SetXAlign(0.5)
+	metaLabel.SetJustify(gtk.JUSTIFY_CENTER)
 	addStyleClass(metaLabel.GetStyleContext, "title-tile-meta")
 	content.PackStart(metaLabel, false, false, 0)
+	content.PackStart(regionRibbon, false, false, 0)
 
 	button.Add(content)
 	button.Connect("clicked", func() {
@@ -810,6 +833,57 @@ func (mw *MainWindow) unloadTileCardImage(card *titleTileCard) {
 	card.image.SetFromPixbuf(nil)
 	card.image.Hide()
 	card.imageLoaded = false
+}
+
+func escapeMarkupText(value string) string {
+	replacer := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
+	return replacer.Replace(value)
+}
+
+func tileRegionColor(region uint8) string {
+	regionText := strings.ToLower(wiiudownloader.GetFormattedRegion(region))
+	switch {
+	case strings.Contains(regionText, "japan"):
+		return "#b71c1c"
+	case strings.Contains(regionText, "usa"):
+		return "#1565c0"
+	case strings.Contains(regionText, "europe"):
+		return "#2e7d32"
+	default:
+		return "#4a4a4a"
+	}
+}
+
+func tileRegionClass(region uint8) string {
+	regionText := strings.ToLower(wiiudownloader.GetFormattedRegion(region))
+	switch {
+	case strings.Contains(regionText, "japan"):
+		return "region-ribbon-japan"
+	case strings.Contains(regionText, "usa"):
+		return "region-ribbon-usa"
+	case strings.Contains(regionText, "europe"):
+		return "region-ribbon-europe"
+	default:
+		return "region-ribbon-default"
+	}
+}
+
+func tileMetaMarkup(titleID uint64) string {
+	return fmt.Sprintf("<span weight='bold'>%016x</span>", titleID)
+}
+
+func tileRegionRibbonText(region uint8) string {
+	regionText := strings.ToLower(wiiudownloader.GetFormattedRegion(region))
+	switch {
+	case strings.Contains(regionText, "japan"):
+		return "JPN"
+	case strings.Contains(regionText, "usa"):
+		return "USA"
+	case strings.Contains(regionText, "europe"):
+		return "EUR"
+	default:
+		return strings.ToUpper(wiiudownloader.GetFormattedRegion(region))
+	}
 }
 
 func (mw *MainWindow) showTileLoading(card *titleTileCard) {

@@ -8,7 +8,7 @@ package main
 // extern void goIdleDestroy(gpointer data);
 //
 // static inline guint go_idle_add_full(gpointer data) {
-//   return g_idle_add_full(G_PRIORITY_DEFAULT_IDLE, goIdleCallback, data, goIdleDestroy);
+//   return g_idle_add_full(G_PRIORITY_DEFAULT, goIdleCallback, data, goIdleDestroy);
 // }
 import "C"
 

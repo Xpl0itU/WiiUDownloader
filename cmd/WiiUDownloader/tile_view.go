@@ -695,8 +695,75 @@ func (mw *MainWindow) rebuildTileView() {
 		mw.applyTileQueueState(card)
 	}
 
+	mw.prepareInitialTileBypass()
 	flowBox.Show()
+	mw.preloadInitialTileArtwork()
 	mw.lazyLoadTileArtworkForViewport()
+}
+
+func (mw *MainWindow) prepareInitialTileBypass() {
+	mw.tileInitialBypassActive = false
+	mw.tileInitialBypassPending = nil
+
+	if len(mw.tileDisplayOrder) == 0 {
+		return
+	}
+
+	initialCount := TITLE_TILE_INITIAL_LOAD
+	if initialCount > len(mw.tileDisplayOrder) {
+		initialCount = len(mw.tileDisplayOrder)
+	}
+	if initialCount <= 0 {
+		return
+	}
+
+	mw.tileInitialBypassPending = make(map[uint64]struct{}, initialCount)
+	for i := 0; i < initialCount; i++ {
+		mw.tileInitialBypassPending[mw.tileDisplayOrder[i]] = struct{}{}
+	}
+	mw.tileInitialBypassActive = len(mw.tileInitialBypassPending) > 0
+}
+
+func (mw *MainWindow) shouldBypassTileLoaderCtx(titleID uint64) bool {
+	if !mw.tileInitialBypassActive || len(mw.tileInitialBypassPending) == 0 {
+		return false
+	}
+	_, ok := mw.tileInitialBypassPending[titleID]
+	return ok
+}
+
+func (mw *MainWindow) completeInitialTileBypass(titleID uint64) {
+	if !mw.tileInitialBypassActive || len(mw.tileInitialBypassPending) == 0 {
+		return
+	}
+	if _, ok := mw.tileInitialBypassPending[titleID]; !ok {
+		return
+	}
+	delete(mw.tileInitialBypassPending, titleID)
+	if len(mw.tileInitialBypassPending) == 0 {
+		mw.tileInitialBypassActive = false
+		mw.tileInitialBypassPending = nil
+	}
+}
+
+func (mw *MainWindow) preloadInitialTileArtwork() {
+	if !mw.hasTileMode() || len(mw.tileDisplayOrder) == 0 {
+		return
+	}
+
+	initialCount := TITLE_TILE_INITIAL_LOAD
+	if initialCount > len(mw.tileDisplayOrder) {
+		initialCount = len(mw.tileDisplayOrder)
+	}
+
+	for i := 0; i < initialCount; i++ {
+		titleID := mw.tileDisplayOrder[i]
+		card, ok := mw.tileCards[titleID]
+		if !ok || card == nil {
+			continue
+		}
+		mw.loadTileArtwork(titleID, card.entry.Name)
+	}
 }
 
 func (mw *MainWindow) createTileCard(entry wiiudownloader.TitleEntry) (*titleTileCard, error) {
@@ -716,8 +783,8 @@ func (mw *MainWindow) createTileCard(entry wiiudownloader.TitleEntry) (*titleTil
 	}
 	content.SetMarginTop(6)
 	content.SetMarginBottom(4)
-	content.SetMarginStart(5)
-	content.SetMarginEnd(5)
+	content.SetMarginStart(6)
+	content.SetMarginEnd(6)
 
 	image, err := gtk.ImageNew()
 	if err != nil {
@@ -938,6 +1005,7 @@ func (mw *MainWindow) loadTileArtwork(titleID uint64, titleName string) {
 	mw.showTileLoading(card)
 	if cachedImageData, ok := mw.tileArtwork.get(titleID); ok {
 		if !mw.setTileImageFromBytes(titleID, cachedImageData) {
+			mw.completeInitialTileBypass(titleID)
 			mw.showTileNoImage(card)
 		}
 		return
@@ -950,6 +1018,9 @@ func (mw *MainWindow) loadTileArtwork(titleID uint64, titleName string) {
 	}
 
 	parentCtx := mw.tileLoaderCtx
+	if mw.shouldBypassTileLoaderCtx(titleID) {
+		parentCtx = context.Background()
+	}
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -991,9 +1062,23 @@ func (mw *MainWindow) loadTileArtwork(titleID uint64, titleName string) {
 				if isTransientTileError(err) {
 					if transientCard, ok := mw.tileCards[titleID]; ok {
 						mw.unloadTileCardImage(transientCard)
+						retryName := transientCard.entry.Name
+						time.AfterFunc(180*time.Millisecond, func() {
+							uiIdleAdd(func() {
+								if !mw.hasTileMode() {
+									return
+								}
+								retryCard, exists := mw.tileCards[titleID]
+								if !exists || retryCard == nil || retryCard.imageLoaded {
+									return
+								}
+								mw.loadTileArtwork(titleID, retryName)
+							})
+						})
 					}
 					return
 				}
+				mw.completeInitialTileBypass(titleID)
 				if failedCard, ok := mw.tileCards[titleID]; ok {
 					mw.showTileNoImage(failedCard)
 				}
@@ -1036,6 +1121,7 @@ func (mw *MainWindow) setTileImageFromBytes(titleID uint64, imageData []byte) bo
 	card.image.SetFromPixbuf(scaledPixbuf)
 	card.image.Show()
 	card.imageLoaded = true
+	mw.completeInitialTileBypass(titleID)
 	return true
 }
 

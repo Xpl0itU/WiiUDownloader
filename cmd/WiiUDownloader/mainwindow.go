@@ -107,6 +107,8 @@ type MainWindow struct {
 	tileLazyLoaderConnected         bool
 	tileArtwork                     *tileArtworkStore
 	sgdbIDCache                     *sgdbIDCacheStore
+	tileInitialBypassActive         bool
+	tileInitialBypassPending        map[uint64]struct{}
 	tileLoaderCtx                   context.Context
 	tileLoaderCancel                context.CancelFunc
 	scrollDebounceTimer             *time.Timer

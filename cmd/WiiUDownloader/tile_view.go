@@ -840,20 +840,6 @@ func escapeMarkupText(value string) string {
 	return replacer.Replace(value)
 }
 
-func tileRegionColor(region uint8) string {
-	regionText := strings.ToLower(wiiudownloader.GetFormattedRegion(region))
-	switch {
-	case strings.Contains(regionText, "japan"):
-		return "#b71c1c"
-	case strings.Contains(regionText, "usa"):
-		return "#1565c0"
-	case strings.Contains(regionText, "europe"):
-		return "#2e7d32"
-	default:
-		return "#4a4a4a"
-	}
-}
-
 func tileRegionClass(region uint8) string {
 	regionText := strings.ToLower(wiiudownloader.GetFormattedRegion(region))
 	switch {
@@ -1164,7 +1150,6 @@ func containsWordAnd(s string) bool {
 
 // replaceWordAnd replaces all " and " occurrences (case-insensitive) with replacement.
 func replaceWordAnd(s string, replacement string) string {
-	lower := strings.ToLower(s)
 	result := s
 	for {
 		idx := strings.Index(strings.ToLower(result), " and ")
@@ -1172,7 +1157,6 @@ func replaceWordAnd(s string, replacement string) string {
 			break
 		}
 		result = result[:idx] + replacement + result[idx+5:]
-		_ = lower
 	}
 	return result
 }

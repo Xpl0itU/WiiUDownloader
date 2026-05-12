@@ -497,20 +497,6 @@ func (mw *MainWindow) swapContentChild(widget gtk.IWidget) {
 	mw.contentScroll.Show()
 }
 
-func (mw *MainWindow) ensureTileView() error {
-	if mw.tileFlowBox != nil {
-		mw.ensureTileLazyLoader()
-		return nil
-	}
-	flowBox, err := mw.newTileFlowBox()
-	if err != nil {
-		return err
-	}
-	mw.tileFlowBox = flowBox
-	mw.ensureTileLazyLoader()
-	return nil
-}
-
 func (mw *MainWindow) newTileFlowBox() (*gtk.FlowBox, error) {
 	flowBox, err := gtk.FlowBoxNew()
 	if err != nil {

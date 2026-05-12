@@ -876,11 +876,11 @@ func tileRegionRibbonText(region uint8) string {
 	regionText := strings.ToLower(wiiudownloader.GetFormattedRegion(region))
 	switch {
 	case strings.Contains(regionText, "japan"):
-		return "JPN"
+		return "Japan"
 	case strings.Contains(regionText, "usa"):
 		return "USA"
 	case strings.Contains(regionText, "europe"):
-		return "EUR"
+		return "Europe"
 	default:
 		return strings.ToUpper(wiiudownloader.GetFormattedRegion(region))
 	}

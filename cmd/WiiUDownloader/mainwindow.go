@@ -215,7 +215,7 @@ func (mw *MainWindow) BuildUI() {
 		iter := mw.childStore.Append()
 		err = mw.childStore.Set(iter,
 			[]int{IN_QUEUE_COLUMN, KIND_COLUMN, TITLE_ID_COLUMN, REGION_COLUMN, NAME_COLUMN},
-			[]interface{}{mw.queuePane.IsTitleInQueue(entry), wiiudownloader.GetFormattedKind(entry.TitleID), fmt.Sprintf("%016x", entry.TitleID), listRegionMarkup(wiiudownloader.GetFormattedRegion(entry.Region)), entry.Name},
+			[]interface{}{mw.queuePane.IsTitleInQueue(entry), wiiudownloader.GetFormattedKind(entry.TitleID), fmt.Sprintf("%016x", entry.TitleID), wiiudownloader.GetFormattedRegion(entry.Region), entry.Name},
 		)
 		if err != nil {
 			log.Fatalln("Unable to set values:", err)
@@ -325,13 +325,6 @@ func (mw *MainWindow) BuildUI() {
 	if err != nil {
 		log.Fatalln("Unable to create tree view column:", err)
 	}
-	regionRenderer, err := gtk.CellRendererTextNew()
-	if err != nil {
-		log.Fatalln("Unable to create region cell renderer:", err)
-	}
-	column.Clear()
-	column.PackStart(regionRenderer, true)
-	column.AddAttribute(regionRenderer, "markup", REGION_COLUMN)
 	column.SetResizable(true)
 	column.SetSortColumnID(REGION_COLUMN)
 	mw.treeView.AppendColumn(column)
@@ -745,35 +738,35 @@ func (mw *MainWindow) BuildUI() {
 
 	bottomhBox.PackStart(checkboxvBox, false, false, 0)
 
-	japanControl, japanButton, err := createRegionFilterControl("Japan", wiiudownloader.MCP_REGION_JAPAN)
+	japanButton, err := gtk.CheckButtonNewWithLabel("Japan")
 	if err != nil {
-		log.Fatalln("Unable to create Japan region control:", err)
+		log.Fatalln("Unable to create button:", err)
 	}
 	mw.japanRegionCheckbox = japanButton
 	mw.japanRegionToggleHandle = japanButton.Connect("toggled", func() {
 		mw.onRegionChange(japanButton, wiiudownloader.MCP_REGION_JAPAN)
 	})
-	bottomhBox.PackEnd(japanControl, false, false, 0)
+	bottomhBox.PackEnd(japanButton, false, false, 0)
 
-	usaControl, usaButton, err := createRegionFilterControl("USA", wiiudownloader.MCP_REGION_USA)
+	usaButton, err := gtk.CheckButtonNewWithLabel("USA")
 	if err != nil {
-		log.Fatalln("Unable to create USA region control:", err)
+		log.Fatalln("Unable to create button:", err)
 	}
 	mw.usaRegionCheckbox = usaButton
 	mw.usaRegionToggleHandle = usaButton.Connect("toggled", func() {
 		mw.onRegionChange(usaButton, wiiudownloader.MCP_REGION_USA)
 	})
-	bottomhBox.PackEnd(usaControl, false, false, 0)
+	bottomhBox.PackEnd(usaButton, false, false, 0)
 
-	europeControl, europeButton, err := createRegionFilterControl("Europe", wiiudownloader.MCP_REGION_EUROPE)
+	europeButton, err := gtk.CheckButtonNewWithLabel("Europe")
 	if err != nil {
-		log.Fatalln("Unable to create Europe region control:", err)
+		log.Fatalln("Unable to create button:", err)
 	}
 	mw.europeRegionCheckbox = europeButton
 	mw.europeRegionToggleHandle = europeButton.Connect("toggled", func() {
 		mw.onRegionChange(europeButton, wiiudownloader.MCP_REGION_EUROPE)
 	})
-	bottomhBox.PackEnd(europeControl, false, false, 0)
+	bottomhBox.PackEnd(europeButton, false, false, 0)
 	mw.syncRegionCheckboxes()
 
 	mainvBox.PackEnd(bottomhBox, false, false, 0)
@@ -907,48 +900,6 @@ func (mw *MainWindow) syncRegionCheckboxes() {
 	setCheckButtonActiveWithoutSignal(mw.europeRegionCheckbox, mw.europeRegionToggleHandle, europeActive)
 	setCheckButtonActiveWithoutSignal(mw.usaRegionCheckbox, mw.usaRegionToggleHandle, usaActive)
 	setCheckButtonActiveWithoutSignal(mw.japanRegionCheckbox, mw.japanRegionToggleHandle, japanActive)
-}
-
-func listRegionMarkup(regionText string) string {
-	regionLower := strings.ToLower(regionText)
-	color := "#d9d9d9"
-	switch {
-	case strings.Contains(regionLower, "japan"):
-		color = tileRegionColor(wiiudownloader.MCP_REGION_JAPAN)
-	case strings.Contains(regionLower, "usa"):
-		color = tileRegionColor(wiiudownloader.MCP_REGION_USA)
-	case strings.Contains(regionLower, "europe"):
-		color = tileRegionColor(wiiudownloader.MCP_REGION_EUROPE)
-	}
-	return fmt.Sprintf("<span weight='bold' foreground='%s'>%s</span>", color, escapeMarkupText(regionText))
-}
-
-func createRegionFilterControl(name string, region uint8) (*gtk.Box, *gtk.CheckButton, error) {
-	container, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 4)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	check, err := gtk.CheckButtonNewWithLabel("")
-	if err != nil {
-		return nil, nil, err
-	}
-	check.SetVAlign(gtk.ALIGN_CENTER)
-	SetupCheckButtonAccessibility(check, "Toggle "+name+" region filter")
-	container.PackStart(check, false, false, 0)
-
-	ribbon, err := gtk.LabelNew("")
-	if err != nil {
-		return nil, nil, err
-	}
-	ribbon.SetText(name)
-	ribbon.SetHAlign(gtk.ALIGN_START)
-	ribbon.SetVAlign(gtk.ALIGN_CENTER)
-	addStyleClass(ribbon.GetStyleContext, "region-ribbon")
-	addStyleClass(ribbon.GetStyleContext, tileRegionClass(region))
-	container.PackStart(ribbon, false, false, 0)
-
-	return container, check, nil
 }
 
 func (mw *MainWindow) onSearchEntryChanged() {

@@ -221,25 +221,6 @@ func applyStyling() {
 		font-size: 0.9em;
 		font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", "Noto Sans CJK JP", "Noto Sans JP", sans-serif;
 	}
-	label.region-ribbon {
-		color: #ffffff;
-		font-weight: 700;
-		font-size: 0.85em;
-		padding: 2px 8px;
-		border-radius: 6px;
-	}
-	label.region-ribbon-europe {
-		background-color: #2e7d32;
-	}
-	label.region-ribbon-usa {
-		background-color: #1565c0;
-	}
-	label.region-ribbon-japan {
-		background-color: #b71c1c;
-	}
-	label.region-ribbon-default {
-		background-color: #4a4a4a;
-	}
 	notebook {
 		padding: 0;
 	}

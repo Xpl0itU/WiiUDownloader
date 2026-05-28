@@ -7,13 +7,16 @@ on:
 permissions:
   contents: write
 
+env:
+  MACOSX_DEPLOYMENT_TARGET: "11.0"
+
 jobs:
   build:
     name: Build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-15-intel, macos-15]
+        os: [macos-15-intel, macos-14]
     steps:
       - name: Check out repository code
         uses: actions/checkout@v6
@@ -52,7 +55,7 @@ jobs:
 
   release:
     name: Release Universal Binary
-    runs-on: macos-15
+    runs-on: macos-14
     needs: build
     steps:
       - name: Check out repository code
@@ -69,7 +72,7 @@ jobs:
       - name: Download ARM Artifact
         uses: actions/download-artifact@v7
         with:
-          name: WiiUDownloader-App-macos-15
+          name: WiiUDownloader-App-macos-14
           path: arm_dist
       - name: Merge Universal Binary
         run: |

@@ -8,6 +8,9 @@ import re
 import glob
 
 
+MIN_MACOS_VERSION = os.environ.get("MACOSX_DEPLOYMENT_TARGET", "11.0")
+
+
 def run(cmd):
     print(f"$ {cmd}")
     result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
@@ -15,6 +18,18 @@ def run(cmd):
         print(f"STDOUT: {result.stdout}")
         print(f"STDERR: {result.stderr}")
     return result
+
+
+def set_minimum_macos_version(path):
+    parts = MIN_MACOS_VERSION.split(".")
+    minos = ".".join((parts + ["0", "0"])[:2])
+    tmp_path = f"{path}.vtool.tmp"
+    result = run(
+        f'vtool -set-build-version macos {minos} {minos} -replace '
+        f'-output "{tmp_path}" "{path}" && mv "{tmp_path}" "{path}"'
+    )
+    if result.returncode != 0:
+        print(f"Warning: could not set minimum macOS version for {path}")
 
 
 def get_deps(path):
@@ -79,7 +94,11 @@ else:
     if not executable_path:
         try:
             build_dir = os.path.join("cmd", "WiiUDownloader")
-            subprocess.check_call(["go", "build", "-o", "main"], cwd=build_dir)
+            build_env = os.environ.copy()
+            build_env.setdefault("MACOSX_DEPLOYMENT_TARGET", MIN_MACOS_VERSION)
+            subprocess.check_call(
+                ["go", "build", "-o", "main"], cwd=build_dir, env=build_env
+            )
             executable_path = os.path.join(build_dir, "main")
         except subprocess.CalledProcessError as e:
             print(f"Error building executable: {e}")
@@ -213,6 +232,7 @@ for root, dirs, files in os.walk(macos_path):
                     new_path = f"@rpath/{os.path.basename(old_path)}"
                     run(f'install_name_tool -change "{old_path}" "{new_path}" "{p}"')
 
+            set_minimum_macos_version(p)
             run(f'codesign --force --sign - "{p}"')
 
 # 4. Resources

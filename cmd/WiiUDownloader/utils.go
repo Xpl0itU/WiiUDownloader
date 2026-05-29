@@ -199,6 +199,34 @@ func applyStyling() {
 		background: @theme_bg_color;
 		padding: 12px;
 	}
+	.title {
+		font-size: 1.2em;
+		font-weight: 500;
+	}
+	.subtitle {
+		font-size: 0.95em;
+		color: @theme_unfocused_fg_color;
+	}
+	.dim-label {
+		color: @theme_unfocused_fg_color;
+		opacity: 0.7;
+	}
+	.sidebar {
+		background-color: @theme_bg_color;
+		border-right: 1px solid shade(@theme_bg_color, 0.9);
+	}
+	.linked button {
+		border-radius: 0;
+	}
+	.linked button:first-child {
+		border-top-left-radius: 6px;
+		border-bottom-left-radius: 6px;
+	}
+	.linked button:last-child {
+		border-top-right-radius: 6px;
+		border-bottom-right-radius: 6px;
+		border-left: none;
+	}
 	`
 
 	if err := provider.LoadFromData(css); err != nil {

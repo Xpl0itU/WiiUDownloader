@@ -43,11 +43,22 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 	mainBox.SetMarginEnd(SETTINGS_GRID_MARGIN)
 	win.Add(mainBox)
 
-	notebook, err := gtk.NotebookNew()
+	stack, err := gtk.StackNew()
 	if err != nil {
 		return nil, err
 	}
-	mainBox.PackStart(notebook, true, true, 0)
+	stack.SetTransitionType(gtk.STACK_TRANSITION_TYPE_SLIDE_LEFT_RIGHT)
+	stack.SetTransitionDuration(200)
+
+	switcher, err := gtk.StackSwitcherNew()
+	if err != nil {
+		return nil, err
+	}
+	switcher.SetStack(stack)
+	switcher.SetHAlign(gtk.ALIGN_CENTER)
+
+	mainBox.PackStart(switcher, false, false, 0)
+	mainBox.PackStart(stack, true, true, 0)
 
 	// --- General Tab ---
 	generalGrid, err := gtk.GridNew()
@@ -102,8 +113,7 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 	SetupCheckButtonAccessibility(rememberPathCheck, "Remember and automatically use the last download location")
 	generalGrid.Attach(rememberPathCheck, 0, 2, 2, 1)
 
-	generalTabLabel, _ := gtk.LabelNew("General")
-	notebook.AppendPage(generalGrid, generalTabLabel)
+	stack.AddTitled(generalGrid, "general", "General")
 
 	// --- Downloads Tab ---
 	downloadsGrid, err := gtk.GridNew()
@@ -132,8 +142,7 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 	SetupCheckButtonAccessibility(suggestRelatedContentCheck, "Offer related content that matches the same title ID")
 	downloadsGrid.Attach(suggestRelatedContentCheck, 0, 1, 1, 1)
 
-	downloadsTabLabel, _ := gtk.LabelNew("Downloads")
-	notebook.AppendPage(downloadsGrid, downloadsTabLabel)
+	stack.AddTitled(downloadsGrid, "downloads", "Downloads")
 
 	// --- Interface Tab ---
 	interfaceGrid, err := gtk.GridNew()
@@ -170,8 +179,7 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 	SetupCheckButtonAccessibility(getSizeOnQueueCheck, "Automatically calculate game size using TMD file when added to queue")
 	interfaceGrid.Attach(getSizeOnQueueCheck, 0, 2, 1, 1)
 
-	interfaceTabLabel, _ := gtk.LabelNew("Interface")
-	notebook.AppendPage(interfaceGrid, interfaceTabLabel)
+	stack.AddTitled(interfaceGrid, "interface", "Interface")
 
 	// --- Action Buttons ---
 	buttonBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 6)

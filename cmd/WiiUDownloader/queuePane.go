@@ -109,22 +109,35 @@ func NewQueuePane() (*QueuePane, error) {
 	if err != nil {
 		return nil, err
 	}
-	removeLabel, err := gtk.LabelNew("Remove Selected\nfrom Queue")
+	removeLabel, err := gtk.LabelNew("Remove Selected")
+	removeIcon, err := gtk.ImageNewFromIconName("list-remove-symbolic", gtk.ICON_SIZE_BUTTON)
 	if err == nil {
 		removeLabel.SetJustify(gtk.JUSTIFY_CENTER)
-		removeFromQueueButton.Add(removeLabel)
+		removeBtnBox, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 6)
+		removeBtnBox.PackStart(removeIcon, false, false, 0)
+		removeBtnBox.PackStart(removeLabel, false, false, 0)
+		removeBtnBox.SetHAlign(gtk.ALIGN_CENTER)
+		removeFromQueueButton.Add(removeBtnBox)
 	}
-	removeFromQueueButton.SetSizeRequest(-1, QUEUE_BUTTON_HEIGHT)
 
 	SetupButtonAccessibility(removeFromQueueButton, "Remove selected titles from the download queue")
 	addStyleClass(removeFromQueueButton.GetStyleContext, "remove-from-queue-button")
 	addStyleClass(removeFromQueueButton.GetStyleContext, "destructive-action")
 
-	downloadButton, err := gtk.ButtonNewWithLabel("Download Queue")
+	downloadButton, err := gtk.ButtonNew()
 	if err != nil {
 		return nil, err
 	}
-	downloadButton.SetSizeRequest(-1, QUEUE_BUTTON_HEIGHT)
+	downloadLabel, err := gtk.LabelNew("Download Queue")
+	downloadIcon, err := gtk.ImageNewFromIconName("folder-download-symbolic", gtk.ICON_SIZE_BUTTON)
+	if err == nil {
+		downloadLabel.SetJustify(gtk.JUSTIFY_CENTER)
+		downloadBtnBox, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 6)
+		downloadBtnBox.PackStart(downloadIcon, false, false, 0)
+		downloadBtnBox.PackStart(downloadLabel, false, false, 0)
+		downloadBtnBox.SetHAlign(gtk.ALIGN_CENTER)
+		downloadButton.Add(downloadBtnBox)
+	}
 	SetupButtonAccessibility(downloadButton, "Start downloading all titles in your queue")
 	addStyleClass(downloadButton.GetStyleContext, "download-queue-button")
 	addStyleClass(downloadButton.GetStyleContext, "suggested-action")
@@ -225,10 +238,11 @@ func NewQueuePane() (*QueuePane, error) {
 		queuePane.Update(true)
 	})
 
-	buttonBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 6)
+	buttonBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
 	if err != nil {
 		return nil, err
 	}
+	addStyleClass(buttonBox.GetStyleContext, "linked")
 	buttonBox.PackStart(removeFromQueueButton, true, true, 0)
 	buttonBox.PackStart(downloadButton, true, true, 0)
 
@@ -236,6 +250,7 @@ func NewQueuePane() (*QueuePane, error) {
 	queueVBox.PackEnd(totalSizeLabel, false, false, 0)
 
 	addStyleClass(queueVBox.GetStyleContext, "queue-pane-vbox")
+	addStyleClass(queueVBox.GetStyleContext, "sidebar")
 
 	return &queuePane, nil
 }

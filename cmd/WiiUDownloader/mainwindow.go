@@ -114,6 +114,7 @@ func NewMainWindow(entries []wiiudownloader.TitleEntry, client *http.Client, con
 	searchEntry.SetHExpand(false)
 	searchEntry.SetHAlign(gtk.ALIGN_END)
 	searchEntry.SetWidthChars(SEARCH_ENTRY_WIDTH_CHARS)
+	searchEntry.SetIconFromIconName(gtk.ENTRY_ICON_PRIMARY, "edit-find-symbolic")
 	SetupEntryAccessibility(searchEntry, "Search titles", "Enter a game title or title ID to search. You can use the category buttons above to filter by type.")
 
 	queuePane, err := NewQueuePane()
@@ -573,9 +574,9 @@ func (mw *MainWindow) BuildUI() {
 
 	mainvBox.PackStart(scrollable, true, true, 0)
 
-	bottomhBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 6)
+	bottomhBox, err := gtk.ActionBarNew()
 	if err != nil {
-		log.Fatalln("Unable to create box:", err)
+		log.Fatalln("Unable to create action bar:", err)
 	}
 
 	mw.downloadQueueButton = mw.queuePane.downloadButton
@@ -617,7 +618,7 @@ func (mw *MainWindow) BuildUI() {
 	checkboxvBox.PackStart(mw.decryptContentsCheckbox, false, false, 0)
 	checkboxvBox.PackEnd(mw.deleteEncryptedContentsCheckbox, false, false, 0)
 
-	bottomhBox.PackStart(checkboxvBox, false, false, 0)
+	bottomhBox.PackStart(checkboxvBox)
 
 	japanButton, err := gtk.CheckButtonNewWithLabel("Japan")
 	if err != nil {
@@ -627,7 +628,7 @@ func (mw *MainWindow) BuildUI() {
 	mw.japanRegionToggleHandle = japanButton.Connect("toggled", func() {
 		mw.onRegionChange(japanButton, wiiudownloader.MCP_REGION_JAPAN)
 	})
-	bottomhBox.PackEnd(japanButton, false, false, 0)
+	bottomhBox.PackEnd(japanButton)
 
 	usaButton, err := gtk.CheckButtonNewWithLabel("USA")
 	if err != nil {
@@ -637,7 +638,7 @@ func (mw *MainWindow) BuildUI() {
 	mw.usaRegionToggleHandle = usaButton.Connect("toggled", func() {
 		mw.onRegionChange(usaButton, wiiudownloader.MCP_REGION_USA)
 	})
-	bottomhBox.PackEnd(usaButton, false, false, 0)
+	bottomhBox.PackEnd(usaButton)
 
 	europeButton, err := gtk.CheckButtonNewWithLabel("Europe")
 	if err != nil {
@@ -647,7 +648,7 @@ func (mw *MainWindow) BuildUI() {
 	mw.europeRegionToggleHandle = europeButton.Connect("toggled", func() {
 		mw.onRegionChange(europeButton, wiiudownloader.MCP_REGION_EUROPE)
 	})
-	bottomhBox.PackEnd(europeButton, false, false, 0)
+	bottomhBox.PackEnd(europeButton)
 	mw.syncRegionCheckboxes()
 
 	mainvBox.PackEnd(bottomhBox, false, false, 0)
@@ -656,10 +657,6 @@ func (mw *MainWindow) BuildUI() {
 	if mw.donationBar != nil {
 		mainvBox.PackEnd(mw.donationBar, false, false, 0)
 	}
-
-	bottomhBox.SetSizeRequest(DOWNLOAD_PANE_MIN_WIDTH, -1)
-
-	mw.queuePane.GetContainer().SetSizeRequest(QUEUE_PANE_MIN_WIDTH, -1)
 
 	splitPane, err := gtk.PanedNew(gtk.ORIENTATION_HORIZONTAL)
 	if err != nil {
@@ -892,11 +889,19 @@ func (mw *MainWindow) setupDonationBar() {
 	bar.PackStart(label, true, true, 0)
 	mw.donationLabel = label
 
-	button, err := gtk.ButtonNewWithLabel("Support Me")
+	button, err := gtk.ButtonNew()
 	if err != nil {
 		log.Println("Unable to create button:", err)
 	} else {
 		addStyleClass(button.GetStyleContext, "kofi-btn")
+
+		kofiIcon, _ := gtk.ImageNewFromIconName("starred-symbolic", gtk.ICON_SIZE_BUTTON)
+		kofiLabel, _ := gtk.LabelNew("Support Me")
+		kofiBtnBox, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 6)
+		kofiBtnBox.PackStart(kofiIcon, false, false, 0)
+		kofiBtnBox.PackStart(kofiLabel, false, false, 0)
+		button.Add(kofiBtnBox)
+
 		button.Connect("clicked", func() {
 			openURL("https://ko-fi.com/dathinkingchair")
 		})
@@ -927,18 +932,22 @@ func (mw *MainWindow) showSuccessDialog(count int, path string) {
 	}
 	defer dialog.Destroy()
 
-	dialog.SetTitle("Download Complete")
+	dialog.SetTitle("WiiUDownloader - Download Complete")
 	dialog.SetModal(true)
 	dialog.SetTransientFor(mw.window)
 	dialog.SetPosition(gtk.WIN_POS_CENTER_ON_PARENT)
 	dialog.AddButton("Close", gtk.RESPONSE_CLOSE)
 
-	dialog.SetDefaultSize(400, -1)
+	dialog.SetDefaultSize(420, -1)
 	contentArea, err := dialog.GetContentArea()
 	if err != nil {
 		return
 	}
 	contentArea.SetSpacing(12)
+	contentArea.SetMarginStart(18)
+	contentArea.SetMarginEnd(18)
+	contentArea.SetMarginTop(12)
+	contentArea.SetMarginBottom(12)
 
 	// Header
 	header, _ := gtk.LabelNew("")
@@ -957,9 +966,17 @@ func (mw *MainWindow) showSuccessDialog(count int, path string) {
 	contentArea.PackStart(infoLabel, false, false, 6)
 
 	// Open Folder Button (Primary Utility)
-	openBtn, _ := gtk.ButtonNewWithLabel("Open Download Folder")
+	openBtn, _ := gtk.ButtonNew()
 	openBtn.SetHAlign(gtk.ALIGN_CENTER)
 	openBtn.SetMarginBottom(12)
+	addStyleClass(openBtn.GetStyleContext, "suggested-action")
+
+	folderIcon, _ := gtk.ImageNewFromIconName("folder-open-symbolic", gtk.ICON_SIZE_BUTTON)
+	folderLabel, _ := gtk.LabelNew("Open Download Folder")
+	openBtnBox, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 6)
+	openBtnBox.PackStart(folderIcon, false, false, 0)
+	openBtnBox.PackStart(folderLabel, false, false, 0)
+	openBtn.Add(openBtnBox)
 	openBtn.Connect("clicked", func() {
 		openURL(path)
 	})
@@ -967,24 +984,36 @@ func (mw *MainWindow) showSuccessDialog(count int, path string) {
 
 	// Donation Section (Highlighted)
 	if mw.showDonationBar {
-		donationBox, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 12)
+		donationBox, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 8)
 		addStyleClass(donationBox.GetStyleContext, "donation-highlight")
+		donationBox.SetMarginStart(12)
+		donationBox.SetMarginEnd(12)
+		donationBox.SetMarginBottom(12)
+		donationBox.SetMarginTop(6)
 
 		nudgeLabel, _ := gtk.LabelNew("")
-		nudgeLabel.SetMarkup("<span size='large'><b>Success!</b> If this app was helpful, please consider leaving a small tip!</span>")
+		nudgeLabel.SetMarkup("<span size='medium'><b>Support the Project!</b>\nWiiUDownloader is free, open-source, and developed entirely in my free time. If it saved you time and made your life easier, please consider leaving a small tip to support future updates and maintenance!</span>")
 		nudgeLabel.SetLineWrap(true)
 		nudgeLabel.SetLineWrapMode(pango.WRAP_WORD)
 		nudgeLabel.SetXAlign(0.5)
 		nudgeLabel.SetJustify(gtk.JUSTIFY_CENTER)
-		donationBox.PackStart(nudgeLabel, false, false, 0)
+		donationBox.PackStart(nudgeLabel, false, false, 6)
 
-		kofiBtn, _ := gtk.ButtonNewWithLabel("Support Me")
+		kofiBtn, _ := gtk.ButtonNew()
 		addStyleClass(kofiBtn.GetStyleContext, "kofi-btn")
 		kofiBtn.SetHAlign(gtk.ALIGN_CENTER)
+
+		kofiIcon, _ := gtk.ImageNewFromIconName("starred-symbolic", gtk.ICON_SIZE_BUTTON)
+		kofiLabel, _ := gtk.LabelNew("Buy Me a Coffee")
+		kofiBtnBox, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 6)
+		kofiBtnBox.PackStart(kofiIcon, false, false, 0)
+		kofiBtnBox.PackStart(kofiLabel, false, false, 0)
+		kofiBtn.Add(kofiBtnBox)
+
 		kofiBtn.Connect("clicked", func() {
 			openURL("https://ko-fi.com/dathinkingchair")
 		})
-		donationBox.PackStart(kofiBtn, false, false, 0)
+		donationBox.PackStart(kofiBtn, false, false, 6)
 
 		contentArea.PackStart(donationBox, false, false, 0)
 	}

@@ -173,6 +173,14 @@ func applyStyling() {
 		background-image: none;
 		background-color: shade(#ff813f, 1.15);
 	}
+	.kofi-btn {
+		box-shadow: 0 1px 2px rgba(0,0,0,0.12);
+	}
+	.supporter-count {
+		font-size: 0.9em;
+		color: @theme_unfocused_fg_color;
+		margin-left: 8px;
+	}
 	.donation-highlight {
 		border-top: 2px solid #00a2ed;
 		background: shade(@theme_bg_color, 0.96);

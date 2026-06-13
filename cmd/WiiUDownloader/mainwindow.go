@@ -906,6 +906,11 @@ func (mw *MainWindow) setupDonationBar() {
 			openURL("https://ko-fi.com/dathinkingchair")
 		})
 		bar.PackEnd(button, false, false, 0)
+
+		supporterLabel, _ := gtk.LabelNew("Join 80+ supporters")
+		addStyleClass(supporterLabel.GetStyleContext, "supporter-count")
+		supporterLabel.SetHAlign(gtk.ALIGN_END)
+		bar.PackEnd(supporterLabel, false, false, 6)
 	}
 
 	mw.donationBar = bar
@@ -917,9 +922,9 @@ func (mw *MainWindow) updateDonationBar(success bool) {
 	if mw.donationLabel == nil || mw.donationBar == nil {
 		return
 	}
-	text := "<span size='large'><span foreground='#00a2ed'><b>WiiUDownloader is a solo project.</b></span> Your support helps make future updates possible.</span>"
+	text := "<span size='large'><span foreground='#00a2ed'><b>Free forever.</b></span> Support if you love it</span>"
 	if success {
-		text = "<span size='large'><span foreground='#16a34a'><b>Downloads Finished!</b></span> If this app was helpful, please consider leaving a small tip!</span>"
+		text = "<span size='large'>This tool is free. <span foreground='#16a34a'>Your support keeps it that way.</span></span>"
 	}
 	mw.donationLabel.SetMarkup(text)
 }
@@ -992,7 +997,7 @@ func (mw *MainWindow) showSuccessDialog(count int, path string) {
 		donationBox.SetMarginTop(6)
 
 		nudgeLabel, _ := gtk.LabelNew("")
-		nudgeLabel.SetMarkup("<span size='medium'><b>Support the Project!</b>\nWiiUDownloader is free, open-source, and developed entirely in my free time. If it saved you time and made your life easier, please consider leaving a small tip to support future updates and maintenance!</span>")
+		nudgeLabel.SetMarkup("<span size='medium'><b>This tool is free.</b> Your support keeps it that way.</span>")
 		nudgeLabel.SetLineWrap(true)
 		nudgeLabel.SetLineWrapMode(pango.WRAP_WORD)
 		nudgeLabel.SetXAlign(0.5)
@@ -1004,7 +1009,7 @@ func (mw *MainWindow) showSuccessDialog(count int, path string) {
 		kofiBtn.SetHAlign(gtk.ALIGN_CENTER)
 
 		kofiIcon, _ := gtk.ImageNewFromIconName("starred-symbolic", gtk.ICON_SIZE_BUTTON)
-		kofiLabel, _ := gtk.LabelNew("Buy Me a Coffee")
+		kofiLabel, _ := gtk.LabelNew("Donate")
 		kofiBtnBox, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 6)
 		kofiBtnBox.PackStart(kofiIcon, false, false, 0)
 		kofiBtnBox.PackStart(kofiLabel, false, false, 0)
@@ -1014,6 +1019,11 @@ func (mw *MainWindow) showSuccessDialog(count int, path string) {
 			openURL("https://ko-fi.com/dathinkingchair")
 		})
 		donationBox.PackStart(kofiBtn, false, false, 6)
+
+		supporterSmall, _ := gtk.LabelNew("Join 80+ supporters")
+		addStyleClass(supporterSmall.GetStyleContext, "supporter-count")
+		supporterSmall.SetHAlign(gtk.ALIGN_CENTER)
+		donationBox.PackStart(supporterSmall, false, false, 0)
 
 		contentArea.PackStart(donationBox, false, false, 0)
 	}

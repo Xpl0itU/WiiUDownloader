@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	wiiudownloader "github.com/Xpl0itU/WiiUDownloader"
 	"github.com/gotk3/gotk3/gdk"
@@ -512,9 +513,9 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 
 	lastPageIndex := len(pages) - 1
 
-	for i, p := range pages {
+	for _, p := range pages {
 		assistant.SetPageComplete(p.widget, true)
-		assistant.SetPageType(p.widget, assistantPageTypeForIndex(i, len(pages)-1))
+		assistant.SetPageType(p.widget, gtk.ASSISTANT_PAGE_CUSTOM)
 		assistant.SetPageTitle(p.widget, p.title)
 	}
 
@@ -598,13 +599,6 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	}
 
 	return &initialSetupAssistantWindow, nil
-}
-
-func assistantPageTypeForIndex(pageIndex, lastPageIndex int) gtk.AssistantPageType {
-	if pageIndex == lastPageIndex {
-		return gtk.ASSISTANT_PAGE_CUSTOM
-	}
-	return gtk.ASSISTANT_PAGE_CUSTOM
 }
 
 func platformSelectionToConfig(cemu, wiiU bool) (decryptContents, deleteEncryptedContents bool) {
@@ -749,10 +743,7 @@ func selectedRegionsSummary(europe, usa, japan bool) string {
 	if japan {
 		regions += "Japan, "
 	}
-	if len(regions) > 2 {
-		return regions[:len(regions)-2]
-	}
-	return regions
+	return strings.TrimRight(regions, ", ")
 }
 
 func selectedPlatformsSummary(cemu, wiiU bool) string {

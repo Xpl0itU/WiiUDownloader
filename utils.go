@@ -8,13 +8,6 @@ import (
 
 var removableEncryptedExtensions = []string{".app", ".h3"}
 
-func min(a, b uint64) uint64 {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 func doDeleteEncryptedContents(path string) error {
 	entries, err := os.ReadDir(path)
 	if err != nil {

@@ -79,8 +79,14 @@ jobs:
           python3 data/merge_universal_app.py "intel_dist" "arm_dist" "out/WiiUDownloader.app"
       - name: Sign and Create DMG
         run: |
-          codesign --force --sign - out/WiiUDownloader.app/Contents/MacOS/WiiUDownloader
+          # Move binary out of bundle to sign it without codesign complaining about bundle structure
+          cp out/WiiUDownloader.app/Contents/MacOS/WiiUDownloader ./WiiUDownloader.tmp
+          codesign --force --sign - ./WiiUDownloader.tmp
+          mv ./WiiUDownloader.tmp out/WiiUDownloader.app/Contents/MacOS/WiiUDownloader
+
+          # Sign all dylib and .so files in lib/
           find out/WiiUDownloader.app/Contents/MacOS/lib -type f \( -name "*.dylib" -o -name "*.so" \) -exec codesign --force --sign - {} \;
+
           create-dmg \
            --volname "WiiUDownloader" \
            --window-pos 200 120 \

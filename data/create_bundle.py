@@ -264,7 +264,10 @@ for root, dirs, files in os.walk(macos_path):
                     run(f'install_name_tool -change "{old_path}" "{new_path}" "{p}"')
 
             set_minimum_macos_version(p)
-            run(f'codesign --force --sign - "{p}"')
+            res = run(f'codesign --force --sign - "{p}"')
+            if res.returncode != 0 and "bundle format" in res.stderr:
+                # gdk-pixbuf-2.0 directory misidentified as sub-bundle; skip and sign later
+                print(f"Warning: bundle format error for {p}, will retry after cleanup")
 
 # 4. Resources
 share_src = os.path.join(brew_prefix, "share")
@@ -277,8 +280,23 @@ for item in ["glib-2.0/schemas", "icons/Adwaita", "icons/hicolor", "themes/Adwai
         dst = os.path.join(dest_share, item)
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         if os.path.isdir(src):
-            # Follow symlinks, copy all files
-            shutil.copytree(src, dst, symlinks=False, dirs_exist_ok=True)
+            # Follow symlinks, copy all files (skip broken symlinks)
+            try:
+                shutil.copytree(src, dst, symlinks=False, dirs_exist_ok=True)
+            except shutil.Error as e:
+                # Some homebrew packages have broken symlinks; copy what we can
+                print(f"Warning: partial copy for {item}: {e}")
+                for root, dirs, files in os.walk(src):
+                    rel = os.path.relpath(root, src)
+                    dst_dir = os.path.join(dst, rel)
+                    os.makedirs(dst_dir, exist_ok=True)
+                    for f in files:
+                        src_file = os.path.join(root, f)
+                        dst_file = os.path.join(dst_dir, f)
+                        try:
+                            shutil.copy2(src_file, dst_file)
+                        except (OSError, FileNotFoundError):
+                            pass
         else:
             shutil.copy2(src, dst)
 

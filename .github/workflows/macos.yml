@@ -77,9 +77,10 @@ jobs:
       - name: Merge Universal Binary
         run: |
           python3 data/merge_universal_app.py "intel_dist" "arm_dist" "out/WiiUDownloader.app"
-      - name: Sign and DMG
+      - name: Sign and Create DMG
         run: |
-          codesign --force --deep --sign - out/WiiUDownloader.app
+          codesign --force --sign - out/WiiUDownloader.app/Contents/MacOS/WiiUDownloader
+          find out/WiiUDownloader.app/Contents/MacOS/lib -type f \( -name "*.dylib" -o -name "*.so" \) -exec codesign --force --sign - {} \;
           create-dmg \
            --volname "WiiUDownloader" \
            --window-pos 200 120 \

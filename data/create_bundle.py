@@ -185,9 +185,8 @@ for dep in get_deps(main_exe):
     bundle_lib(dep, lib_path, processed, search_paths)
 
 # 2. Bundle Modules (GIO/Loaders)
-# GdkPixbuf loaders
-# Place loaders in lib/gdk-pixbuf-2_0/2.10.0/loaders (underscore avoids codesign bundle detection)
-loaders_dest = os.path.join(lib_path, "gdk-pixbuf-2_0", "2.10.0", "loaders")
+# GdkPixbuf loaders, use flat dir without dots/version to avoid codesign bundle detection
+loaders_dest = os.path.join(lib_path, "gdkpixbuf_loaders")
 os.makedirs(loaders_dest, exist_ok=True)
 for pattern in [
     "libpixbufloader-png.so",
@@ -205,17 +204,17 @@ for pattern in [
 # Ensure librsvg is bundled for SVG loader
 bundle_lib("/opt/homebrew/lib/librsvg-2.2.dylib", lib_path, processed, search_paths)
 bundle_lib("/opt/homebrew/opt/librsvg/lib/librsvg-2.2.dylib", lib_path, processed, search_paths)
-# After copying loaders, generate loaders.cache in the same location
+# Generate loaders.cache — place in Resources so gdk-pixbuf can find it via env var
 query_loaders = os.path.join(brew_prefix, "bin", "gdk-pixbuf-query-loaders")
 if os.path.exists(query_loaders):
     bundled_loaders = glob.glob(os.path.join(loaders_dest, "*.so"))
     if bundled_loaders:
         res = subprocess.run([query_loaders] + bundled_loaders, capture_output=True, text=True)
         if res.returncode == 0:
-            cache_path = os.path.join(lib_path, "gdk-pixbuf-2_0", "2.10.0", "loaders.cache")
+            cache_path = os.path.join(resources_path, "loaders.cache")
             with open(cache_path, "w") as f:
                 f.write(res.stdout)
-            print("Created loaders.cache in lib/gdk-pixbuf-2_0/2.10.0")
+            print("Created loaders.cache in Resources")
 
 # GIO modules
 gio_dest = os.path.join(lib_path, "gio-modules")

@@ -924,7 +924,7 @@ func (mw *MainWindow) updateDonationBar(success bool) {
 	if mw.donationLabel == nil || mw.donationBar == nil {
 		return
 	}
-	text := "<span size='large'><span foreground='#00a2ed'><b>Free forever.</b></span> Support if you love it</span>"
+	text := "<span size='large'><span foreground='#00a2ed'><b>Free forever.</b></span> Support with a <b>small donation</b> if you love it</span>"
 	if success {
 		text = "<span size='large'>This tool is free. <span foreground='#16a34a'>Your support keeps it that way.</span></span>"
 	}

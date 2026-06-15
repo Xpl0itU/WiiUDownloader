@@ -126,10 +126,21 @@ func configureMacOSEnvironment() {
 		os.Setenv("GSETTINGS_SCHEMA_DIR", glibPath)
 	}
 
-	os.Setenv("GDK_PIXBUF_MODULE_DIR", filepath.Join(bundlePath, "MacOS", "lib", "loaders"))
-	cachePath := filepath.Join(bundlePath, "Resources", "loaders.cache")
-	if _, err := os.Stat(cachePath); err == nil {
-		os.Setenv("GDK_PIXBUF_MODULE_FILE", cachePath)
+	gdkBase := filepath.Join(bundlePath, "MacOS", "lib", "gdk-pixbuf-2.0")
+	if entries, err := os.ReadDir(gdkBase); err == nil {
+		for _, e := range entries {
+			if e.IsDir() {
+				loaderDir := filepath.Join(gdkBase, e.Name(), "loaders")
+				if _, err := os.Stat(loaderDir); err == nil {
+					os.Setenv("GDK_PIXBUF_MODULE_DIR", loaderDir)
+					cachePath := filepath.Join(gdkBase, e.Name(), "loaders.cache")
+					if _, err := os.Stat(cachePath); err == nil {
+						os.Setenv("GDK_PIXBUF_MODULE_FILE", cachePath)
+					}
+					break
+				}
+			}
+		}
 	}
 
 	gioModPath := filepath.Join(bundlePath, "MacOS", "lib", "gio-modules")

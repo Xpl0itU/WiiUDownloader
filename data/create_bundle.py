@@ -24,12 +24,26 @@ def set_minimum_macos_version(path):
     parts = MIN_MACOS_VERSION.split(".")
     minos = ".".join((parts + ["0", "0"])[:2])
     tmp_path = f"{path}.vtool.tmp"
-    result = run(
-        f'vtool -set-build-version macos {minos} {minos} -replace '
-        f'-output "{tmp_path}" "{path}" && mv "{tmp_path}" "{path}"'
-    )
-    if result.returncode != 0:
+    vtool_cmd = ["vtool", "-set-build-version", "macos", minos, minos, "-replace", "-output", tmp_path, path]
+    try:
+        print(f"Running: {' '.join(vtool_cmd)}")
+        res = subprocess.run(vtool_cmd, capture_output=True, text=True, timeout=15)
+    except subprocess.TimeoutExpired:
+        print(f"Warning: vtool timed out while processing {path}; skipping version bump")
+        return
+    if res.returncode != 0:
+        print(f"vtool failed for {path}. STDOUT:\n{res.stdout}\nSTDERR:\n{res.stderr}")
         print(f"Warning: could not set minimum macOS version for {path}")
+        return
+    try:
+        os.replace(tmp_path, path)
+    except Exception as e:
+        print(f"Warning: failed to move vtool output for {path}: {e}")
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except:
+            pass
 
 
 def get_deps(path):
@@ -172,11 +186,13 @@ for dep in get_deps(main_exe):
 
 # 2. Bundle Modules (GIO/Loaders)
 # GdkPixbuf loaders
-loaders_dest = os.path.join(lib_path, "loaders")
+# Place loaders where gdk-pixbuf expects them: lib/gdk-pixbuf-2.0/2.10.0/loaders
+loaders_dest = os.path.join(lib_path, "gdk-pixbuf-2.0", "2.10.0", "loaders")
 os.makedirs(loaders_dest, exist_ok=True)
 for pattern in [
     "libpixbufloader-png.so",
     "libpixbufloader-svg.so",
+    "libpixbufloader_svg.so",
     "libpixbufloader-ico.so",
 ]:
     matches = glob.glob(
@@ -185,6 +201,21 @@ for pattern in [
     if matches:
         shutil.copy2(os.path.realpath(matches[0]), os.path.join(loaders_dest, pattern))
         bundle_lib(matches[0], lib_path, processed, search_paths)
+
+# Ensure librsvg is bundled for SVG loader
+bundle_lib("/opt/homebrew/lib/librsvg-2.2.dylib", lib_path, processed, search_paths)
+bundle_lib("/opt/homebrew/opt/librsvg/lib/librsvg-2.2.dylib", lib_path, processed, search_paths)
+# After copying loaders, generate loaders.cache in the same location
+query_loaders = os.path.join(brew_prefix, "bin", "gdk-pixbuf-query-loaders")
+if os.path.exists(query_loaders):
+    bundled_loaders = glob.glob(os.path.join(loaders_dest, "*.so"))
+    if bundled_loaders:
+        res = subprocess.run([query_loaders] + bundled_loaders, capture_output=True, text=True)
+        if res.returncode == 0:
+            cache_path = os.path.join(lib_path, "gdk-pixbuf-2.0", "2.10.0", "loaders.cache")
+            with open(cache_path, "w") as f:
+                f.write(res.stdout)
+            print("Created loaders.cache in lib/gdk-pixbuf-2.0/2.10.0")
 
 # GIO modules
 gio_dest = os.path.join(lib_path, "gio-modules")
@@ -241,18 +272,15 @@ dest_share = os.path.join(resources_path, "share")
 for item in ["glib-2.0/schemas", "icons/Adwaita", "icons/hicolor", "themes/Adwaita"]:
     src = os.path.join(share_src, item)
     if os.path.exists(src):
+        # Resolve symlinks to actual directories
+        src = os.path.realpath(src)
         dst = os.path.join(dest_share, item)
         os.makedirs(os.path.dirname(dst), exist_ok=True)
-        (
-            shutil.copytree(
-                os.path.realpath(src),
-                dst,
-                symlinks=False,
-                ignore_dangling_symlinks=True,
-            )
-            if os.path.isdir(src)
-            else shutil.copy2(os.path.realpath(src), dst)
-        )
+        if os.path.isdir(src):
+            # Follow symlinks, copy all files
+            shutil.copytree(src, dst, symlinks=False, dirs_exist_ok=True)
+        else:
+            shutil.copy2(src, dst)
 
 # 5. GENERATE LOADERS CACHE
 print("=== Generating Loaders Cache ===")

@@ -905,12 +905,14 @@ func (mw *MainWindow) setupDonationBar() {
 		button.Connect("clicked", func() {
 			openURL("https://ko-fi.com/dathinkingchair")
 		})
-		bar.PackEnd(button, false, false, 0)
 
+		btnBox, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 4)
+		btnBox.PackStart(button, false, false, 0)
 		supporterLabel, _ := gtk.LabelNew("Join 80+ supporters")
 		addStyleClass(supporterLabel.GetStyleContext, "supporter-count")
-		supporterLabel.SetHAlign(gtk.ALIGN_END)
-		bar.PackEnd(supporterLabel, false, false, 6)
+		supporterLabel.SetHAlign(gtk.ALIGN_CENTER)
+		btnBox.PackStart(supporterLabel, false, false, 0)
+		bar.PackEnd(btnBox, false, false, 0)
 	}
 
 	mw.donationBar = bar

@@ -126,7 +126,7 @@ func configureMacOSEnvironment() {
 		os.Setenv("GSETTINGS_SCHEMA_DIR", glibPath)
 	}
 
-	gdkBase := filepath.Join(bundlePath, "MacOS", "lib", "gdk-pixbuf-2.0")
+	gdkBase := filepath.Join(bundlePath, "MacOS", "lib", "gdk-pixbuf-2_0")
 	if entries, err := os.ReadDir(gdkBase); err == nil {
 		for _, e := range entries {
 			if e.IsDir() {

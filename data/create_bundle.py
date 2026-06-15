@@ -186,8 +186,8 @@ for dep in get_deps(main_exe):
 
 # 2. Bundle Modules (GIO/Loaders)
 # GdkPixbuf loaders
-# Place loaders where gdk-pixbuf expects them: lib/gdk-pixbuf-2.0/2.10.0/loaders
-loaders_dest = os.path.join(lib_path, "gdk-pixbuf-2.0", "2.10.0", "loaders")
+# Place loaders in lib/gdk-pixbuf-2_0/2.10.0/loaders (underscore avoids codesign bundle detection)
+loaders_dest = os.path.join(lib_path, "gdk-pixbuf-2_0", "2.10.0", "loaders")
 os.makedirs(loaders_dest, exist_ok=True)
 for pattern in [
     "libpixbufloader-png.so",
@@ -212,10 +212,10 @@ if os.path.exists(query_loaders):
     if bundled_loaders:
         res = subprocess.run([query_loaders] + bundled_loaders, capture_output=True, text=True)
         if res.returncode == 0:
-            cache_path = os.path.join(lib_path, "gdk-pixbuf-2.0", "2.10.0", "loaders.cache")
+            cache_path = os.path.join(lib_path, "gdk-pixbuf-2_0", "2.10.0", "loaders.cache")
             with open(cache_path, "w") as f:
                 f.write(res.stdout)
-            print("Created loaders.cache in lib/gdk-pixbuf-2.0/2.10.0")
+            print("Created loaders.cache in lib/gdk-pixbuf-2_0/2.10.0")
 
 # GIO modules
 gio_dest = os.path.join(lib_path, "gio-modules")

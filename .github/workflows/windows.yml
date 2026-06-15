@@ -61,7 +61,7 @@ jobs:
           cp main.exe dist/WiiUDownloader.exe
 
           cd dist
-          rm -f "libx265-215.dll"
+          rm -f "libx265-*.dll"
           zip -9 -r ../WiiUDownloader-Windows.zip .
       - name: Upload Windows Artifact
         uses: ncipollo/release-action@v1

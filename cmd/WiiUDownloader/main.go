@@ -129,10 +129,17 @@ func configureMacOSEnvironment() {
 	loaderDir := filepath.Join(bundlePath, "MacOS", "lib", "gdkpixbuf_loaders")
 	if _, err := os.Stat(loaderDir); err == nil {
 		os.Setenv("GDK_PIXBUF_MODULE_DIR", loaderDir)
-	}
-	cachePath := filepath.Join(bundlePath, "Resources", "loaders.cache")
-	if _, err := os.Stat(cachePath); err == nil {
-		os.Setenv("GDK_PIXBUF_MODULE_FILE", cachePath)
+		// Patch the loaders.cache to replace build-machine absolute paths with bundle paths
+		cachePath := filepath.Join(bundlePath, "Resources", "loaders.cache")
+		if cacheData, err := os.ReadFile(cachePath); err == nil {
+			// Replace CI-built absolute paths with actual bundle-relative paths
+			patched := strings.ReplaceAll(string(cacheData), "/opt/homebrew/lib/gdk-pixbuf-2.0/2.10.0/loaders/", loaderDir+"/")
+			if patchedCache, err := os.Create(cachePath); err == nil {
+				patchedCache.WriteString(patched)
+				patchedCache.Close()
+			}
+			os.Setenv("GDK_PIXBUF_MODULE_FILE", cachePath)
+		}
 	}
 
 	gioModPath := filepath.Join(bundlePath, "MacOS", "lib", "gio-modules")
@@ -142,6 +149,7 @@ func configureMacOSEnvironment() {
 	sharePath := filepath.Join(bundlePath, "Resources", "share")
 	if _, err := os.Stat(sharePath); err == nil {
 		os.Setenv("XDG_DATA_DIRS", sharePath)
+		os.Setenv("GTK_DATA_PREFIX", filepath.Join(bundlePath, "Resources"))
 		if isDarkMode() {
 			os.Setenv("GTK_THEME", "Adwaita:dark")
 		} else {

@@ -204,7 +204,9 @@ for pattern in [
 # Ensure librsvg is bundled for SVG loader
 bundle_lib("/opt/homebrew/lib/librsvg-2.2.dylib", lib_path, processed, search_paths)
 bundle_lib("/opt/homebrew/opt/librsvg/lib/librsvg-2.2.dylib", lib_path, processed, search_paths)
-# Generate loaders.cache — place in Resources so gdk-pixbuf can find it via env var
+
+# Generate loaders.cache with absolute paths from build machine
+# At runtime, main.go patches these paths to the actual bundle location
 query_loaders = os.path.join(brew_prefix, "bin", "gdk-pixbuf-query-loaders")
 if os.path.exists(query_loaders):
     bundled_loaders = glob.glob(os.path.join(loaders_dest, "*.so"))
@@ -214,7 +216,7 @@ if os.path.exists(query_loaders):
             cache_path = os.path.join(resources_path, "loaders.cache")
             with open(cache_path, "w") as f:
                 f.write(res.stdout)
-            print("Created loaders.cache in Resources")
+            print(f"Created loaders.cache in Resources ({len(bundled_loaders)} loaders)")
 
 # GIO modules
 gio_dest = os.path.join(lib_path, "gio-modules")
@@ -263,10 +265,9 @@ for root, dirs, files in os.walk(macos_path):
                     run(f'install_name_tool -change "{old_path}" "{new_path}" "{p}"')
 
             set_minimum_macos_version(p)
-            res = run(f'codesign --force --sign - "{p}"')
-            if res.returncode != 0 and "bundle format" in res.stderr:
-                # gdk-pixbuf-2.0 directory misidentified as sub-bundle; skip and sign later
-                print(f"Warning: bundle format error for {p}, will retry after cleanup")
+            # codesign is handled in GitHub Actions workflow after bundle is complete
+            # and flat directories are finalized. Skipping here to avoid bundle structure errors.
+            pass
 
 # 4. Resources
 share_src = os.path.join(brew_prefix, "share")

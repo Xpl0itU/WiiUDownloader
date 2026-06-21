@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
+import glob
 import os
-import sys
+import re
 import shutil
 import subprocess
 import sys
-import re
-import glob
 
 
 MIN_MACOS_VERSION = os.environ.get("MACOSX_DEPLOYMENT_TARGET", "11.0")
@@ -185,38 +184,68 @@ for dep in get_deps(main_exe):
     bundle_lib(dep, lib_path, processed, search_paths)
 
 # 2. Bundle Modules (GIO/Loaders)
-# GdkPixbuf loaders, use flat dir without dots/version to avoid codesign bundle detection
+# GdkPixbuf loaders — copy ALL .so files from the loaders directory
+# Use flat dir without dots/version to avoid codesign bundle detection
 loaders_dest = os.path.join(lib_path, "gdkpixbuf_loaders")
 os.makedirs(loaders_dest, exist_ok=True)
-for pattern in [
-    "libpixbufloader-png.so",
-    "libpixbufloader-svg.so",
-    "libpixbufloader_svg.so",
-    "libpixbufloader-ico.so",
-]:
-    matches = glob.glob(
-        os.path.join(brew_prefix, "lib", "gdk-pixbuf-2.0", "*", "loaders", pattern)
-    )
-    if matches:
-        shutil.copy2(os.path.realpath(matches[0]), os.path.join(loaders_dest, pattern))
-        bundle_lib(matches[0], lib_path, processed, search_paths)
 
-# Ensure librsvg is bundled for SVG loader
-bundle_lib("/opt/homebrew/lib/librsvg-2.2.dylib", lib_path, processed, search_paths)
-bundle_lib("/opt/homebrew/opt/librsvg/lib/librsvg-2.2.dylib", lib_path, processed, search_paths)
+# Find the gdk-pixbuf loaders directory (may be versioned path under brew lib)
+loaders_src_dir = None
+for candidate in glob.glob(os.path.join(brew_prefix, "lib", "gdk-pixbuf-2.0", "*", "loaders")):
+    if os.path.isdir(candidate):
+        loaders_src_dir = candidate
+        break
 
-# Generate loaders.cache with absolute paths from build machine
-# At runtime, main.go patches these paths to the actual bundle location
+if loaders_src_dir:
+    print(f"Copying pixbuf loaders from {loaders_src_dir}")
+    for so_file in glob.glob(os.path.join(loaders_src_dir, "*.so")):
+        real = os.path.realpath(so_file)
+        dest = os.path.join(loaders_dest, os.path.basename(so_file))
+        try:
+            shutil.copy2(real, dest)
+            print(f"  Copied: {os.path.basename(so_file)}")
+            bundle_lib(so_file, lib_path, processed, search_paths)
+        except Exception as e:
+            print(f"  Warning: failed to copy {os.path.basename(so_file)}: {e}")
+else:
+    print("Warning: gdk-pixbuf loaders directory not found!")
+
+# Ensure librsvg is bundled for SVG loader (use pkg-config for version-agnostic discovery)
+rsvg_lib = None
+for candidate in glob.glob(os.path.join(brew_prefix, "lib", "librsvg-*.dylib")):
+    if os.path.isfile(candidate) and not os.path.islink(candidate):
+        rsvg_lib = candidate
+        break
+if not rsvg_lib:
+    for candidate in glob.glob(os.path.join(brew_prefix, "opt", "librsvg", "lib", "librsvg-*.dylib")):
+        if os.path.isfile(candidate) and not os.path.islink(candidate):
+            rsvg_lib = candidate
+            break
+if rsvg_lib:
+    bundle_lib(rsvg_lib, lib_path, processed, search_paths)
+    shutil.copy2(os.path.realpath(rsvg_lib), os.path.join(loaders_dest, os.path.basename(rsvg_lib)))
+    print(f"Copied {os.path.basename(rsvg_lib)} into gdkpixbuf_loaders")
+else:
+    print("Warning: librsvg not found for SVG loader")
+
+# Generate loaders.cache
+# At runtime, main.go patches the paths to the actual bundle location
+cache_path = os.path.join(resources_path, "loaders.cache")
 query_loaders = os.path.join(brew_prefix, "bin", "gdk-pixbuf-query-loaders")
 if os.path.exists(query_loaders):
     bundled_loaders = glob.glob(os.path.join(loaders_dest, "*.so"))
     if bundled_loaders:
         res = subprocess.run([query_loaders] + bundled_loaders, capture_output=True, text=True)
-        if res.returncode == 0:
-            cache_path = os.path.join(resources_path, "loaders.cache")
+        if res.returncode == 0 and res.stdout:
             with open(cache_path, "w") as f:
                 f.write(res.stdout)
-            print(f"Created loaders.cache in Resources ({len(bundled_loaders)} loaders)")
+            print(f"Created loaders.cache ({len(bundled_loaders)} entries)")
+        else:
+            open(cache_path, "w").close()
+            print("Empty loaders.cache (query failed, runtime will populate)")
+else:
+    open(cache_path, "w").close()
+    print("gdk-pixbuf-query-loaders not found, empty cache")
 
 # GIO modules
 gio_dest = os.path.join(lib_path, "gio-modules")
@@ -265,52 +294,26 @@ for root, dirs, files in os.walk(macos_path):
                     run(f'install_name_tool -change "{old_path}" "{new_path}" "{p}"')
 
             set_minimum_macos_version(p)
-            # codesign is handled in GitHub Actions workflow after bundle is complete
-            # and flat directories are finalized. Skipping here to avoid bundle structure errors.
-            pass
 
 # 4. Resources
 share_src = os.path.join(brew_prefix, "share")
 dest_share = os.path.join(resources_path, "share")
-for item in ["glib-2.0/schemas", "icons/Adwaita", "icons/hicolor", "themes/Adwaita"]:
+os.makedirs(dest_share, exist_ok=True)
+
+# List of essential resources to copy from Homebrew's share
+for item in ["glib-2.0/schemas", "icons/Adwaita", "icons/hicolor", "themes/Adwaita", "mime"]:
     src = os.path.join(share_src, item)
     if os.path.exists(src):
-        # Resolve symlinks to actual directories
         src = os.path.realpath(src)
         dst = os.path.join(dest_share, item)
         os.makedirs(os.path.dirname(dst), exist_ok=True)
+        print(f"Copying resource: {item}")
+        # Use a more robust copy approach to follow symlinks to their REAL source
+        # and skip broken links that homebrew sometimes leaves behind.
         if os.path.isdir(src):
-            # Follow symlinks, copy all files (skip broken symlinks)
-            try:
-                shutil.copytree(src, dst, symlinks=False, dirs_exist_ok=True)
-            except shutil.Error as e:
-                # Some homebrew packages have broken symlinks; copy what we can
-                print(f"Warning: partial copy for {item}: {e}")
-                for root, dirs, files in os.walk(src):
-                    rel = os.path.relpath(root, src)
-                    dst_dir = os.path.join(dst, rel)
-                    os.makedirs(dst_dir, exist_ok=True)
-                    for f in files:
-                        src_file = os.path.join(root, f)
-                        dst_file = os.path.join(dst_dir, f)
-                        try:
-                            shutil.copy2(src_file, dst_file)
-                        except (OSError, FileNotFoundError):
-                            pass
+            if os.path.exists(dst):
+                shutil.rmtree(dst)
+            # Use cp -L (follow symlinks) for robustness
+            run(f'cp -RL "{src}" "{dst}"')
         else:
             shutil.copy2(src, dst)
-
-# 5. GENERATE LOADERS CACHE
-print("=== Generating Loaders Cache ===")
-query_loaders = os.path.join(brew_prefix, "bin", "gdk-pixbuf-query-loaders")
-if os.path.exists(query_loaders):
-    bundled_loaders = glob.glob(os.path.join(loaders_dest, "*.so"))
-    if bundled_loaders:
-        res = subprocess.run(
-            [query_loaders] + bundled_loaders, capture_output=True, text=True
-        )
-        if res.returncode == 0:
-            # Place it in Resources instead of MacOS/lib to satisfy codesign
-            with open(os.path.join(resources_path, "loaders.cache"), "w") as f:
-                f.write(res.stdout)
-            print("Created loaders.cache in Resources")

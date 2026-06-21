@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -129,16 +130,41 @@ func configureMacOSEnvironment() {
 	loaderDir := filepath.Join(bundlePath, "MacOS", "lib", "gdkpixbuf_loaders")
 	if _, err := os.Stat(loaderDir); err == nil {
 		os.Setenv("GDK_PIXBUF_MODULE_DIR", loaderDir)
-		// Patch the loaders.cache to replace build-machine absolute paths with bundle paths
-		cachePath := filepath.Join(bundlePath, "Resources", "loaders.cache")
-		if cacheData, err := os.ReadFile(cachePath); err == nil {
-			// Replace CI-built absolute paths with actual bundle-relative paths
-			patched := strings.ReplaceAll(string(cacheData), "/opt/homebrew/lib/gdk-pixbuf-2.0/2.10.0/loaders/", loaderDir+"/")
-			if patchedCache, err := os.Create(cachePath); err == nil {
-				patchedCache.WriteString(patched)
-				patchedCache.Close()
+		// Read the cache and rewrite all .so paths to use loaderDir (bundle location)
+		// Then ensure every .so in the dir has a cache entry
+		cacheOrig := filepath.Join(bundlePath, "Resources", "loaders.cache")
+		cacheData, _ := os.ReadFile(cacheOrig)
+		lines := strings.Split(string(cacheData), "\n")
+
+		// Patch existing paths
+		for i, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "\"") && strings.HasSuffix(trimmed, ".so\"") {
+				soPath := strings.Trim(trimmed, "\"")
+				soName := filepath.Base(soPath)
+				lines[i] = "\"" + filepath.Join(loaderDir, soName) + "\""
 			}
-			os.Setenv("GDK_PIXBUF_MODULE_FILE", cachePath)
+		}
+
+		// Scan loaders dir for .so files missing from cache, append entries
+		if entries, err := os.ReadDir(loaderDir); err == nil {
+			existingCache := strings.Join(lines, "\n")
+			for _, entry := range entries {
+				if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".so") {
+					continue
+				}
+				if strings.Contains(existingCache, entry.Name()) {
+					continue
+				}
+				// Add a minimal cache entry for the unknown loader
+				lines = append(lines, fmt.Sprintf("%q", filepath.Join(loaderDir, entry.Name())))
+				lines = append(lines, fmt.Sprintf("%q 0 \"gdk-pixbuf\" \"Unknown\" \"LGPL\"", entry.Name()[:strings.Index(entry.Name(), ".so")]))
+			}
+		}
+
+		patchedCache := filepath.Join(os.TempDir(), "wiiu-loaders.cache")
+		if err := os.WriteFile(patchedCache, []byte(strings.Join(lines, "\n")), 0644); err == nil {
+			os.Setenv("GDK_PIXBUF_MODULE_FILE", patchedCache)
 		}
 	}
 
@@ -149,7 +175,6 @@ func configureMacOSEnvironment() {
 	sharePath := filepath.Join(bundlePath, "Resources", "share")
 	if _, err := os.Stat(sharePath); err == nil {
 		os.Setenv("XDG_DATA_DIRS", sharePath)
-		os.Setenv("GTK_DATA_PREFIX", filepath.Join(bundlePath, "Resources"))
 		if isDarkMode() {
 			os.Setenv("GTK_THEME", "Adwaita:dark")
 		} else {

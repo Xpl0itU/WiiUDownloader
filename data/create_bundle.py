@@ -313,7 +313,7 @@ for item in ["glib-2.0/schemas", "icons/Adwaita", "icons/hicolor", "themes/Adwai
         if os.path.isdir(src):
             if os.path.exists(dst):
                 shutil.rmtree(dst)
-            # Use cp -L (follow symlinks) for robustness
-            run(f'cp -RL "{src}" "{dst}"')
+            # Use tar to copy — handles broken symlinks, preserves structure
+            run(f'tar -C "{os.path.dirname(src)}" -cf - "{os.path.basename(src)}" | tar -C "{os.path.dirname(dst)}" -xf -')
         else:
             shutil.copy2(src, dst)

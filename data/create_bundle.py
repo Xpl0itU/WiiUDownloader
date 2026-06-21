@@ -303,20 +303,23 @@ share_src = os.path.join(brew_prefix, "share")
 dest_share = os.path.join(resources_path, "share")
 os.makedirs(dest_share, exist_ok=True)
 
-# List of essential resources to copy from Homebrew's share
-for item in ["glib-2.0/schemas", "icons/Adwaita", "icons/hicolor", "themes/Adwaita", "mime"]:
+# Resources requiring --dereference (follow symlinks to actual files)
+# Icons and MIME: symlinks point to Cellar paths; need real file contents
+dereference_items = ["icons/Adwaita", "icons/hicolor", "themes/Adwaita", "mime"]
+# Glib schemas: broken symlinks present; tar without dereference preserves them harmlessly
+no_dereference_items = ["glib-2.0/schemas"]
+
+for item in dereference_items + no_dereference_items:
     src = os.path.join(share_src, item)
     if os.path.exists(src):
         src = os.path.realpath(src)
         dst = os.path.join(dest_share, item)
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         print(f"Copying resource: {item}")
-        # Use a more robust copy approach to follow symlinks to their REAL source
-        # and skip broken links that homebrew sometimes leaves behind.
         if os.path.isdir(src):
             if os.path.exists(dst):
                 shutil.rmtree(dst)
-            # Use tar to copy — handles broken symlinks, preserves structure
-            run(f'tar -C "{os.path.dirname(src)}" -cf - "{os.path.basename(src)}" | tar -C "{os.path.dirname(dst)}" -xf -')
+            deref = "--dereference" if item in dereference_items else ""
+            run(f'tar {deref} -C "{os.path.dirname(src)}" -cf - "{os.path.basename(src)}" | tar -C "{os.path.dirname(dst)}" -xf -')
         else:
             shutil.copy2(src, dst)

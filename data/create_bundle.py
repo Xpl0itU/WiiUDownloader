@@ -210,16 +210,19 @@ if loaders_src_dir:
 else:
     print("Warning: gdk-pixbuf loaders directory not found!")
 
-# Ensure librsvg is bundled for SVG loader (use pkg-config for version-agnostic discovery)
+# Ensure librsvg is bundled for SVG loader (version-agnostic discovery)
+# Homebrew lib files are often symlinks — use realpath to follow them
 rsvg_lib = None
 for candidate in glob.glob(os.path.join(brew_prefix, "lib", "librsvg-*.dylib")):
-    if os.path.isfile(candidate) and not os.path.islink(candidate):
-        rsvg_lib = candidate
+    rsvg_real = os.path.realpath(candidate)
+    if os.path.exists(rsvg_real):
+        rsvg_lib = rsvg_real
         break
 if not rsvg_lib:
     for candidate in glob.glob(os.path.join(brew_prefix, "opt", "librsvg", "lib", "librsvg-*.dylib")):
-        if os.path.isfile(candidate) and not os.path.islink(candidate):
-            rsvg_lib = candidate
+        rsvg_real = os.path.realpath(candidate)
+        if os.path.exists(rsvg_real):
+            rsvg_lib = rsvg_real
             break
 if rsvg_lib:
     bundle_lib(rsvg_lib, lib_path, processed, search_paths)

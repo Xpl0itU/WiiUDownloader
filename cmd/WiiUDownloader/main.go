@@ -156,9 +156,19 @@ func configureMacOSEnvironment() {
 				if strings.Contains(existingCache, entry.Name()) {
 					continue
 				}
-				// Add a minimal cache entry for the unknown loader
-				lines = append(lines, fmt.Sprintf("%q", filepath.Join(loaderDir, entry.Name())))
-				lines = append(lines, fmt.Sprintf("%q 0 \"gdk-pixbuf\" \"Unknown\" \"LGPL\"", entry.Name()[:strings.Index(entry.Name(), ".so")]))
+				// Add a proper cache entry. SVG needs specific magic patterns.
+				if strings.Contains(entry.Name(), "svg") {
+					lines = append(lines, fmt.Sprintf("%q", filepath.Join(loaderDir, entry.Name())))
+					lines = append(lines, `"svg" 6 "gdk-pixbuf" "Scalable Vector Graphics" "LGPL"`)
+					lines = append(lines, `"image/svg+xml" "image/svg" "image/svg-xml" "image/vnd.adobe.svg+xml" "text/xml-svg" "image/svg+xml-compressed" ""`)
+					lines = append(lines, `"svg" "svgz" "svg.gz" ""`)
+					lines = append(lines, `" <svg" "*    " 100`)
+					lines = append(lines, `" <!DOCTYPE svg" "*             " 100`)
+				} else {
+					// Add a minimal cache entry for the unknown loader
+					lines = append(lines, fmt.Sprintf("%q", filepath.Join(loaderDir, entry.Name())))
+					lines = append(lines, fmt.Sprintf("%q 0 \"gdk-pixbuf\" \"Unknown\" \"LGPL\"", entry.Name()[:strings.Index(entry.Name(), ".so")]))
+				}
 			}
 		}
 

@@ -323,3 +323,23 @@ for item in dereference_items + no_dereference_items:
             run(f'tar {deref} -C "{os.path.dirname(src)}" -cf - "{os.path.basename(src)}" | tar -C "{os.path.dirname(dst)}" -xf -')
         else:
             shutil.copy2(src, dst)
+
+# Fix icon theme: remove Hidden=true from index.theme and regenerate cache
+for icon_dir in glob.glob(os.path.join(dest_share, "icons", "*")):
+    if os.path.isdir(icon_dir):
+        index_theme = os.path.join(icon_dir, "index.theme")
+        if os.path.exists(index_theme):
+            # Remove Hidden=true so GTK discovers the theme
+            with open(index_theme, "r") as f:
+                content = f.read()
+            content = content.replace("Hidden=true", "Hidden=false")
+            with open(index_theme, "w") as f:
+                f.write(content)
+        # Regenerate icon theme cache
+        cache_path = os.path.join(icon_dir, "icon-theme.cache")
+        if os.path.exists(cache_path):
+            os.remove(cache_path)
+        update_cache = os.path.join(brew_prefix, "bin", "gtk-update-icon-cache")
+        if os.path.exists(update_cache):
+            run(f'"{update_cache}" -f "{icon_dir}"')
+            print(f"Regenerated icon cache: {os.path.basename(icon_dir)}")

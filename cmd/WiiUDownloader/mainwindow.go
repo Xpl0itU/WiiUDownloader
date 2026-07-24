@@ -919,7 +919,7 @@ func (mw *MainWindow) setupDonationBar() {
 
 		btnBox, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 4)
 		btnBox.PackStart(button, false, false, 0)
-		supporterLabel, _ := gtk.LabelNew("Join 110+ supporters")
+		supporterLabel, _ := gtk.LabelNew("120+ people already chipped in")
 		addStyleClass(supporterLabel.GetStyleContext, "supporter-count")
 		supporterLabel.SetHAlign(gtk.ALIGN_CENTER)
 		btnBox.PackStart(supporterLabel, false, false, 0)
@@ -935,9 +935,9 @@ func (mw *MainWindow) updateDonationBar(success bool) {
 	if mw.donationLabel == nil || mw.donationBar == nil {
 		return
 	}
-	text := "<span size='large'><span foreground='#00a2ed'><b>Free &amp; Open Source.</b></span> If this saves you time, <b>a coffee keeps updates coming!</b></span>"
+	text := "<span size='large'><b>120+ people keep this tool alive.</b> <span foreground='#ff813f'>Your coffee keeps it free.</span></span>"
 	if success {
-		text = "<span size='large'>This tool is free. <span foreground='#16a34a'>Your support keeps it that way.</span></span>"
+		text = "<span size='large'><span foreground='#16a34a'><b>Downloads complete.</b></span> You saved hours. <b>A coffee keeps it free for everyone.</b></span>"
 	}
 	mw.donationLabel.SetMarkup(text)
 }
@@ -1056,7 +1056,7 @@ func (mw *MainWindow) showSuccessDialog(count int, downloadPath string, decryptO
 		donationBox.SetMarginTop(6)
 
 		nudgeLabel, _ := gtk.LabelNew("")
-		nudgeLabel.SetMarkup("<span size='medium'><b>Downloads finished!</b> Did this tool save you time today? A small coffee keeps it free and maintained.</span>")
+		nudgeLabel.SetMarkup("<span size='medium'>You just downloaded free games: no title keys, no server failures, no Windows-only lock-in. <b>120+ supporters chip in to keep it that way.</b></span>")
 		nudgeLabel.SetLineWrap(true)
 		nudgeLabel.SetLineWrapMode(pango.WRAP_WORD)
 		nudgeLabel.SetXAlign(0.5)
@@ -1079,7 +1079,7 @@ func (mw *MainWindow) showSuccessDialog(count int, downloadPath string, decryptO
 		})
 		donationBox.PackStart(kofiBtn, false, false, 6)
 
-		supporterSmall, _ := gtk.LabelNew("Join 110+ supporters")
+		supporterSmall, _ := gtk.LabelNew("120+ people already chipped in")
 		addStyleClass(supporterSmall.GetStyleContext, "supporter-count")
 		supporterSmall.SetHAlign(gtk.ALIGN_CENTER)
 		donationBox.PackStart(supporterSmall, false, false, 0)
@@ -1812,10 +1812,10 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string, decryptContent
 		errors := mw.progressWindow.GetErrors()
 		if len(errors) == 0 && !mw.progressWindow.Cancelled() {
 			decryptPathToShow := ""
-		if decryptContents && config.DecryptOutputPath != "" {
-			decryptPathToShow = config.DecryptOutputPath
-		}
-		mw.showSuccessDialog(totalInQueue, selectedPath, decryptPathToShow)
+			if decryptContents && config.DecryptOutputPath != "" {
+				decryptPathToShow = config.DecryptOutputPath
+			}
+			mw.showSuccessDialog(totalInQueue, selectedPath, decryptPathToShow)
 		}
 	})
 

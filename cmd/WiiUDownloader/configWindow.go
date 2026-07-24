@@ -215,7 +215,7 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 	SetupCheckButtonAccessibility(darkModeCheck, "Enable dark theme for the interface")
 	interfaceGrid.Attach(darkModeCheck, 0, 0, 1, 1)
 
-	showDonationBarCheck, err := gtk.CheckButtonNewWithLabel("Show project support banners")
+	showDonationBarCheck, err := gtk.CheckButtonNewWithLabel("Show donation banner")
 	if err != nil {
 		return nil, err
 	}

@@ -43,6 +43,11 @@ type QueuePane struct {
 	versionColumn         *gtk.TreeViewColumn
 }
 
+func safeColumnTitleIs(column *gtk.TreeViewColumn, title string) bool {
+	defer func() { recover() }()
+	return column != nil && column.GetTitle() == title
+}
+
 func createColumn(renderer *gtk.CellRendererText, title string, id int) (*gtk.TreeViewColumn, error) {
 	return gtk.TreeViewColumnNewWithAttribute(title, renderer, "text", id)
 }
@@ -207,7 +212,7 @@ func NewQueuePane() (*QueuePane, error) {
 
 		x, y := btnEvent.X(), btnEvent.Y()
 		path, column, _, _, _ := treeView.GetPathAtPos(int(x), int(y))
-		if path == nil || column.GetTitle() != "Version" {
+		if path == nil || !safeColumnTitleIs(column, "Version") {
 			return false
 		}
 

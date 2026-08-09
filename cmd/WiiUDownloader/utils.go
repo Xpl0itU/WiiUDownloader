@@ -99,7 +99,6 @@ func normalizeFilename(filename string) string {
 	return result
 }
 
-
 var desiredDark atomic.Bool
 var guardConnected sync.Once
 
@@ -298,10 +297,8 @@ func isValidPath(path string) bool {
 	if path == "" {
 		return false
 	}
-	if pathInfo, err := os.Stat(path); os.IsNotExist(err) || !pathInfo.IsDir() {
-		return false
-	}
-	return true
+	pathInfo, err := os.Stat(path)
+	return err == nil && pathInfo != nil && pathInfo.IsDir()
 }
 
 func ShowErrorDialog(window *gtk.Window, err error) {

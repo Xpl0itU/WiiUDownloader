@@ -35,7 +35,7 @@ jobs:
             go.sum
       - name: Build
         run: |
-          curl -Lo db.go -H "User-Agent: NUSspliBuilder/2.1" "https://napi.v10lator.de/db?t=go"
+          curl --insecure -Lo db.go -H "User-Agent: NUSspliBuilder/2.1" "https://napi.v10lator.de/db?t=go"
           if grep -q "var titleEntry =" db.go; then
             if grep -q "type TitleEntry struct" db.go; then
               sed -i '' '/type TitleEntry struct/,/}/d' db.go

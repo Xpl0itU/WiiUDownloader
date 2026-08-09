@@ -211,8 +211,8 @@ func NewQueuePane() (*QueuePane, error) {
 		}
 
 		x, y := btnEvent.X(), btnEvent.Y()
-		path, column, _, _, _ := treeView.GetPathAtPos(int(x), int(y))
-		if path == nil || !safeColumnTitleIs(column, "Version") {
+		path, column, _, _, pathExists := treeView.GetPathAtPos(int(x), int(y))
+		if !pathExists || path == nil || !safeColumnTitleIs(column, "Version") {
 			return false
 		}
 

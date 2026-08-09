@@ -216,6 +216,9 @@ func showMainWindow(app *gtk.Application, win *MainWindow) {
 	app.AddWindow(win.window)
 	if win.window != nil {
 		win.window.ShowAll()
+		if !win.showDonationBar {
+			win.setDonationBarVisible(false)
+		}
 		win.PostShowInit()
 	}
 }

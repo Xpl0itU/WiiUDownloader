@@ -441,8 +441,13 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 		setupOptionRow{row: cemuRow, check: cemuCheck},
 		setupOptionRow{row: wiiURow, check: wiiUCheck},
 	)
+	updatePlatformSelection := func() {
+		assistant.SetPageComplete(page3, cemuCheck.GetActive() || wiiUCheck.GetActive())
+	}
+	cemuCheck.Connect("toggled", updatePlatformSelection)
+	wiiUCheck.Connect("toggled", updatePlatformSelection)
 
-	// --- Storage Page (decrypt output path) ---
+	// --- Storage Page ---
 	pageStorage, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
 	if err != nil {
 		return nil, err
@@ -454,7 +459,6 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	if err != nil {
 		return nil, err
 	}
-	pageStorageLabel.SetMarkup("<span font='14' weight='bold'>Where should decrypted files go?</span>")
 	pageStorageLabel.SetHAlign(gtk.ALIGN_START)
 	pageStorage.PackStart(pageStorageLabel, false, false, 0)
 
@@ -462,70 +466,127 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	if err != nil {
 		return nil, err
 	}
-	pageStorageDesc.SetMarkup("<span font='11' alpha='80%'>Decrypted files can be saved to a different drive or folder to keep your storage organized. Leave empty to save alongside encrypted downloads.</span>")
 	pageStorageDesc.SetHAlign(gtk.ALIGN_START)
 	pageStorageDesc.SetLineWrap(true)
 	pageStorage.PackStart(pageStorageDesc, false, false, 0)
+
+	downloadPathEntry, err := gtk.EntryNew()
+	if err != nil {
+		return nil, err
+	}
+	downloadPathEntry.SetPlaceholderText("Select download location...")
+	downloadPathEntry.SetWidthChars(30)
+	downloadPathEntry.SetHExpand(true)
+	if config.LastSelectedPath != "" {
+		downloadPathEntry.SetText(config.LastSelectedPath)
+	}
+	SetupEntryAccessibility(downloadPathEntry, "Download path", "Folder where downloaded game files will be saved.")
 
 	decryptPathEntry, err := gtk.EntryNew()
 	if err != nil {
 		return nil, err
 	}
-	decryptPathEntry.SetPlaceholderText("Same as download location...")
+	decryptPathEntry.SetPlaceholderText("Select decrypted game location...")
 	decryptPathEntry.SetWidthChars(30)
 	decryptPathEntry.SetHExpand(true)
 	if config.DecryptOutputPath != "" {
 		decryptPathEntry.SetText(config.DecryptOutputPath)
 	}
-	SetupEntryAccessibility(decryptPathEntry, "Decrypted output path", "Optional folder where decrypted game files will be saved. Leave empty to save alongside downloads.")
+	SetupEntryAccessibility(decryptPathEntry, "Decrypted output path", "Optional folder where decrypted game files will be saved. Leave empty to use the download location.")
 
-	decryptPathBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 6)
-	if err != nil {
-		return nil, err
-	}
-	decryptPathBox.SetMarginTop(8)
-	decryptPathLabel, err := gtk.LabelNew("Decrypted output path:")
-	if err != nil {
-		return nil, err
-	}
-	decryptPathLabel.SetHAlign(gtk.ALIGN_START)
-	pageStorage.PackStart(decryptPathLabel, false, false, 0)
-	decryptPathBox.PackStart(decryptPathEntry, true, true, 0)
-
-	browseDecryptPathButton, err := gtk.ButtonNewWithLabel("Browse")
-	if err != nil {
-		return nil, err
-	}
-	SetupButtonAccessibility(browseDecryptPathButton, "Browse for decrypted files output directory")
-	browseDecryptPathButton.Connect("clicked", func() {
-		selectedPath, err := dialog.Directory().Title("Select Decrypted Files Output Path").Browse()
+	newPathRow := func(labelText string, entry *gtk.Entry, browseTitle string, clearLabel string) (*gtk.Box, error) {
+		row, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 6)
 		if err != nil {
-			return
+			return nil, err
 		}
-		if selectedPath != "" {
-			decryptPathEntry.SetText(selectedPath)
-		}
-	})
+		row.SetMarginTop(8)
 
-	clearDecryptPathButton, err := gtk.ButtonNewWithLabel("Clear")
+		label, err := gtk.LabelNew(labelText)
+		if err != nil {
+			return nil, err
+		}
+		label.SetHAlign(gtk.ALIGN_START)
+		row.PackStart(label, false, false, 0)
+		row.PackStart(entry, true, true, 0)
+
+		browseButton, err := gtk.ButtonNewWithLabel("Browse")
+		if err != nil {
+			return nil, err
+		}
+		SetupButtonAccessibility(browseButton, "Browse for "+strings.ToLower(labelText))
+		browseButton.Connect("clicked", func() {
+			selectedPath, err := dialog.Directory().Title(browseTitle).Browse()
+			if err == nil && selectedPath != "" {
+				entry.SetText(selectedPath)
+			}
+		})
+
+		clearButton, err := gtk.ButtonNewWithLabel(clearLabel)
+		if err != nil {
+			return nil, err
+		}
+		SetupButtonAccessibility(clearButton, "Clear "+strings.ToLower(labelText))
+		addStyleClass(clearButton.GetStyleContext, "destructive-action")
+		clearButton.Connect("clicked", func() {
+			entry.SetText("")
+		})
+
+		buttonBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
+		if err != nil {
+			return nil, err
+		}
+		addStyleClass(buttonBox.GetStyleContext, "linked")
+		buttonBox.PackStart(browseButton, true, true, 0)
+		buttonBox.PackStart(clearButton, true, true, 0)
+		row.PackStart(buttonBox, false, false, 0)
+		return row, nil
+	}
+
+	downloadPathRow, err := newPathRow("Download path:", downloadPathEntry, "Select Download Path", "Clear")
 	if err != nil {
 		return nil, err
 	}
-	SetupButtonAccessibility(clearDecryptPathButton, "Clear the decrypted files output path")
-	addStyleClass(clearDecryptPathButton.GetStyleContext, "destructive-action")
-	clearDecryptPathButton.Connect("clicked", func() {
-		decryptPathEntry.SetText("")
-	})
+	pageStorage.PackStart(downloadPathRow, false, false, 0)
 
-	decryptBtnBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
+	decryptPathRow, err := newPathRow("Decrypted path:", decryptPathEntry, "Select Decrypted Files Output Path", "Clear")
 	if err != nil {
 		return nil, err
 	}
-	addStyleClass(decryptBtnBox.GetStyleContext, "linked")
-	decryptBtnBox.PackStart(browseDecryptPathButton, true, true, 0)
-	decryptBtnBox.PackStart(clearDecryptPathButton, true, true, 0)
-	decryptPathBox.PackStart(decryptBtnBox, false, false, 0)
-	pageStorage.PackStart(decryptPathBox, false, false, 0)
+	pageStorage.PackStart(decryptPathRow, false, false, 0)
+
+	updateStoragePage := func() {
+		cemu := cemuCheck.GetActive()
+		wiiU := wiiUCheck.GetActive()
+		decryptOnly := cemu && !wiiU
+		downloadPath, _ := downloadPathEntry.GetText()
+		decryptPath, _ := decryptPathEntry.GetText()
+		downloadPath = strings.TrimSpace(downloadPath)
+		decryptPath = strings.TrimSpace(decryptPath)
+
+		switch {
+		case decryptOnly:
+			pageStorageLabel.SetMarkup("<span font='14' weight='bold'>Where should decrypted games go?</span>")
+			pageStorageDesc.SetMarkup("<span font='11' alpha='80%'>CEMU downloads are decrypted automatically. This folder will also be used as the regular download location.</span>")
+			decryptPathEntry.SetPlaceholderText("Select decrypted game location...")
+		case wiiU && !cemu:
+			pageStorageLabel.SetMarkup("<span font='14' weight='bold'>Where should Wii U games go?</span>")
+			decryptPathEntry.SetPlaceholderText("Same as download location...")
+			pageStorageDesc.SetMarkup("<span font='11' alpha='80%'>Wii U downloads stay encrypted for installation on a console.</span>")
+		default:
+			pageStorageLabel.SetMarkup("<span font='14' weight='bold'>Where should games go?</span>")
+			decryptPathEntry.SetPlaceholderText("Same as download location...")
+			pageStorageDesc.SetMarkup("<span font='11' alpha='80%'>Choose a download folder and an optional separate folder for decrypted games. Leave decrypted path empty to use the download location.</span>")
+		}
+
+		downloadPathRow.SetVisible(!decryptOnly)
+		decryptPathRow.SetVisible(cemu)
+		storageComplete := (wiiU && downloadPath != "") || (decryptOnly && decryptPath != "") || (cemu && wiiU && downloadPath != "")
+		assistant.SetPageComplete(pageStorage, storageComplete)
+	}
+	downloadPathEntry.Connect("changed", updateStoragePage)
+	decryptPathEntry.Connect("changed", updateStoragePage)
+	cemuCheck.Connect("toggled", updateStoragePage)
+	wiiUCheck.Connect("toggled", updateStoragePage)
 
 	storageSpacer, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
 	if err != nil {
@@ -625,18 +686,23 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	lastPageIndex := len(pages) - 1
 
 	for _, p := range pages {
-		assistant.SetPageComplete(p.widget, true)
+		assistant.SetPageComplete(p.widget, p.widget != pageStorage)
 		assistant.SetPageType(p.widget, gtk.ASSISTANT_PAGE_CUSTOM)
 		assistant.SetPageTitle(p.widget, p.title)
 	}
+	updatePlatformSelection()
+	updateStoragePage()
 
 	completeSetup := func() {
 		config.DidInitialSetup = true
 		selectedRegions := selectedRegionMask(europeCheck.GetActive(), usaCheck.GetActive(), japanCheck.GetActive())
 		config.SelectedRegion = selectedRegions
-		config.DecryptContents, config.DeleteEncryptedContents = platformSelectionToConfig(cemuCheck.GetActive(), wiiUCheck.GetActive())
+		cemu := cemuCheck.GetActive()
+		wiiU := wiiUCheck.GetActive()
+		config.DecryptContents, config.DeleteEncryptedContents = platformSelectionToConfig(cemu, wiiU)
+		downloadPath, _ := downloadPathEntry.GetText()
 		decryptPath, _ := decryptPathEntry.GetText()
-		config.DecryptOutputPath = decryptPath
+		config.LastSelectedPath, config.DecryptOutputPath = storagePathsForPlatforms(cemu, wiiU, downloadPath, decryptPath)
 
 		if err := config.Save(); err != nil {
 			ShowErrorDialog(nil, fmt.Errorf("Failed to save config: %w", err))
@@ -690,16 +756,29 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 		} else if pageNum == 3 {
 			setSetupButtonsVisible(skipButton, backButton, nextButton, finishButton, false, true, true, false)
 			nextButton.SetSensitive(true)
-			decryptPathEntry.GrabFocus()
+			if cemuCheck.GetActive() && !wiiUCheck.GetActive() {
+				decryptPathEntry.GrabFocus()
+			} else {
+				downloadPathEntry.GrabFocus()
+			}
 		} else if isFinishPage {
 			setSetupButtonsVisible(skipButton, backButton, nextButton, finishButton, false, true, false, true)
 			summaryRegions.SetMarkup("<span font='10' alpha='85%'>✓ Regions: " + selectedRegionsSummary(europeCheck.GetActive(), usaCheck.GetActive(), japanCheck.GetActive()) + "</span>")
 			summaryPlatforms.SetMarkup("<span font='10' alpha='85%'>✓ Platforms: " + selectedPlatformsSummary(cemuCheck.GetActive(), wiiUCheck.GetActive()) + "</span>")
+			cemu := cemuCheck.GetActive()
+			wiiU := wiiUCheck.GetActive()
+			downloadPath, _ := downloadPathEntry.GetText()
 			decryptPath, _ := decryptPathEntry.GetText()
-			if decryptPath != "" {
-				summaryStorage.SetMarkup("<span font='10' alpha='85%'>✓ Decrypt output: " + escapeMarkup(decryptPath) + "</span>")
+			lastPath, outputPath := storagePathsForPlatforms(cemu, wiiU, downloadPath, decryptPath)
+			if cemu && !wiiU {
+				summaryStorage.SetMarkup("<span font='10' alpha='85%'>✓ Games: " + escapeMarkup(lastPath) + "</span>")
+			} else if wiiU && cemu {
+				if outputPath == "" {
+					outputPath = "same as download"
+				}
+				summaryStorage.SetMarkup("<span font='10' alpha='85%'>✓ Downloads: " + escapeMarkup(lastPath) + "\n✓ Decrypted: " + escapeMarkup(outputPath) + "</span>")
 			} else {
-				summaryStorage.SetMarkup("<span font='10' alpha='85%'>✓ Decrypt output: same as download</span>")
+				summaryStorage.SetMarkup("<span font='10' alpha='85%'>✓ Downloads: " + escapeMarkup(lastPath) + "</span>")
 			}
 			finishButton.GrabFocus()
 		}
@@ -728,6 +807,16 @@ func platformSelectionToConfig(cemu, wiiU bool) (decryptContents, deleteEncrypte
 	decryptContents = cemu
 	deleteEncryptedContents = cemu && !wiiU
 	return decryptContents, deleteEncryptedContents
+}
+
+func storagePathsForPlatforms(cemu, wiiU bool, downloadPath, decryptPath string) (lastSelectedPath, decryptOutputPath string) {
+	if cemu && !wiiU {
+		return decryptPath, ""
+	}
+	if wiiU && cemu {
+		return downloadPath, decryptPath
+	}
+	return downloadPath, ""
 }
 
 type setupOptionRow struct {

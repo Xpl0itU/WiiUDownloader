@@ -660,7 +660,7 @@ func (mw *MainWindow) BuildUI() {
 	if err != nil {
 		log.Fatalln("Unable to create paned:", err)
 	}
-	splitPane.Pack1(mw.queuePane.GetContainer(), false, false)
+	splitPane.Pack1(mw.queuePane.GetContainer(), false, true)
 	splitPane.Pack2(mainvBox, true, true)
 
 	splitPane.SetMarginBottom(SPLIT_PANE_MARGIN)

@@ -603,7 +603,7 @@ func (qp *QueuePane) Update(doUpdateFunc bool) {
 				sizeStr = ""
 			}
 
-			versionStr := "Default"
+			versionStr := "Latest"
 			if title.Version > 0 {
 				versionStr = fmt.Sprintf("v%d", title.Version)
 			}

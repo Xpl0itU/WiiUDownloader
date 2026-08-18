@@ -404,7 +404,6 @@ func (qp *QueuePane) SetDownloadCallback(f func()) {
 }
 
 func (qp *QueuePane) GetContainer() *gtk.Box {
-
 	return qp.container
 }
 
@@ -522,53 +521,6 @@ func (qp *QueuePane) SetTitleLoadingNoUpdate(titleID uint64) {
 
 func (qp *QueuePane) SetSetVersionRequested(f func([]wiiudownloader.TitleEntry)) {
 	qp.setVersionRequested = f
-}
-
-func (qp *QueuePane) getSelectedEntries() []wiiudownloader.TitleEntry {
-	selection, err := qp.titleTreeView.GetSelection()
-	if err != nil {
-		return nil
-	}
-
-	model := qp.store.ToTreeModel()
-	var selectedTIDs []uint64
-
-	iter, ok := model.GetIterFirst()
-	if !ok {
-		return nil
-	}
-	for {
-		if selection.IterIsSelected(iter) {
-			tidVal, err := model.GetValue(iter, QUEUE_COL_TID)
-			if err == nil {
-				if tidStr, err := tidVal.GetString(); err == nil {
-					if tid, err := strconv.ParseUint(tidStr, TID_BASE_16, TID_BITS_64); err == nil {
-						selectedTIDs = append(selectedTIDs, tid)
-					}
-				}
-			}
-		}
-		if !model.IterNext(iter) {
-			break
-		}
-	}
-
-	if len(selectedTIDs) == 0 {
-		return nil
-	}
-
-	var entries []wiiudownloader.TitleEntry
-	qp.titleQueue.WithRLock(func(queue []wiiudownloader.TitleEntry) {
-		for _, t := range queue {
-			for _, tid := range selectedTIDs {
-				if t.TitleID == tid {
-					entries = append(entries, t)
-					break
-				}
-			}
-		}
-	})
-	return entries
 }
 
 func (qp *QueuePane) SetTitleVersion(titleID uint64, version int) {

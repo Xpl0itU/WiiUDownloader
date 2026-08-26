@@ -97,25 +97,11 @@ func showVersionSelectionDialog(parent *gtk.Window, title wiiudownloader.TitleEn
 		contentArea.PackStart(descLabel, false, false, 0)
 	}
 
-	linkBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
+	linkLabel, err := gtk.LabelNew("")
 	if err == nil {
-		linkBox.SetHAlign(gtk.ALIGN_START)
-
-		linkLabel, _ := gtk.LabelNew("You can find a list of available versions on the ")
-		wikiLinkBtn, _ := gtk.LinkButtonNewWithLabel("https://wiiubrew.org/wiki/Title_database", "WiiUBrew Title Database")
-		wikiLinkBtn.SetRelief(gtk.RELIEF_NONE)
-		wikiLinkBtn.SetMarginStart(0)
-		wikiLinkBtn.SetMarginEnd(0)
-		if widget, err := wikiLinkBtn.GetChild(); err == nil && widget != nil {
-			if lbl, ok := widget.(*gtk.Label); ok {
-				lbl.SetMarginStart(0)
-				lbl.SetMarginEnd(0)
-			}
-		}
-
-		linkBox.PackStart(linkLabel, false, false, 0)
-		linkBox.PackStart(wikiLinkBtn, false, false, 0)
-		contentArea.PackStart(linkBox, false, false, 0)
+		linkLabel.SetMarkup("You can find a list of available versions on the <a href=\"https://wiiubrew.org/wiki/Title_database\">WiiUBrew Title Database</a>")
+		linkLabel.SetHAlign(gtk.ALIGN_START)
+		contentArea.PackStart(linkLabel, false, false, 0)
 	}
 
 	hintLabel, err := gtk.LabelNew("")

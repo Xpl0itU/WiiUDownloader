@@ -477,7 +477,7 @@ func DownloadTitle(titleID, outputDirectory string, version int, doDecryption bo
 
 	tmdPath := filepath.Join(outputDir, "title.tmd")
 	tmdURL := fmt.Sprintf("%s/tmd", baseURL)
-	if version > 0 {
+	if version >= 0 {
 		tmdURL = fmt.Sprintf("%s/tmd.%d", baseURL, version)
 	}
 	if err := downloadFileWithOptions(context.Background(), progressReporter, client, tmdURL, tmdPath, downloadOptions{

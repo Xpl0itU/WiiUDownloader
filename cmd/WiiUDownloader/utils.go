@@ -39,7 +39,7 @@ func formatBytes(bytes uint64) string {
 func fetchTMDSize(titleID uint64, version int, client *http.Client) (uint64, error) {
 	baseURL := fmt.Sprintf("http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/%016x", titleID)
 	tmdURL := fmt.Sprintf("%s/tmd", baseURL)
-	if version > 0 {
+	if version >= 0 {
 		tmdURL = fmt.Sprintf("%s/tmd.%d", baseURL, version)
 	}
 

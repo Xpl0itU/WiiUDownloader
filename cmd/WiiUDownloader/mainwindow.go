@@ -1773,7 +1773,7 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string, decryptContent
 			}
 			tidStr := fmt.Sprintf("%016x", title.TitleID)
 			titlePath := filepath.Join(selectedPath, fmt.Sprintf("%s [%s] [%s]", normalizeFilename(title.Name), wiiudownloader.GetFormattedKind(title.TitleID), tidStr))
-			if title.Version > 0 {
+			if title.Version >= 0 {
 				titlePath = fmt.Sprintf("%s [v%d]", titlePath, title.Version)
 			}
 			downloadErr := wiiudownloader.DownloadTitle(tidStr, titlePath, title.Version, decryptContents, mw.progressWindow, deleteEncryptedContents, mw.client, config.DecryptOutputPath)
@@ -1849,7 +1849,12 @@ func (mw *MainWindow) addTitlesToQueueInternal(titles []wiiudownloader.TitleEntr
 		return
 	}
 
-	for _, entry := range titles {
+	for i, entry := range titles {
+		// Database entries default to 0 meaning "latest"; remap so v0 is selectable.
+		if entry.Version == 0 {
+			entry.Version = wiiudownloader.VersionLatest
+			titles[i] = entry
+		}
 		mw.queuePane.SetTitleLoadingNoUpdate(entry.TitleID)
 	}
 	mw.queuePane.AddTitles(titles)

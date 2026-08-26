@@ -55,6 +55,10 @@ type TitleEntry struct {
 	Version  int
 }
 
+// VersionLatest selects the default TMD (most recent version).
+// Any value >= 0 downloads that exact title version, including v0.
+const VersionLatest = -1
+
 var TitleDatabase []TitleEntry
 
 func SetTitleDatabase(db []TitleEntry) {

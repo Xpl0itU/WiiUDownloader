@@ -9,6 +9,7 @@ import (
 	"github.com/gotk3/gotk3/gdk"
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
+	"github.com/gotk3/gotk3/pango"
 )
 
 const (
@@ -148,6 +149,7 @@ func NewQueuePane() (*QueuePane, error) {
 	removeIcon, err := gtk.ImageNewFromIconName("list-remove-symbolic", gtk.ICON_SIZE_BUTTON)
 	if err == nil {
 		removeLabel.SetJustify(gtk.JUSTIFY_CENTER)
+		removeLabel.SetEllipsize(pango.ELLIPSIZE_END)
 		removeBtnBox, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 6)
 		removeBtnBox.PackStart(removeIcon, false, false, 0)
 		removeBtnBox.PackStart(removeLabel, false, false, 0)
@@ -167,6 +169,7 @@ func NewQueuePane() (*QueuePane, error) {
 	downloadIcon, err := gtk.ImageNewFromIconName(queueDownloadIconName(), gtk.ICON_SIZE_BUTTON)
 	if err == nil {
 		downloadLabel.SetJustify(gtk.JUSTIFY_CENTER)
+		downloadLabel.SetEllipsize(pango.ELLIPSIZE_END)
 		downloadBtnBox, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 6)
 		downloadBtnBox.PackStart(downloadIcon, false, false, 0)
 		downloadBtnBox.PackStart(downloadLabel, false, false, 0)
@@ -186,6 +189,7 @@ func NewQueuePane() (*QueuePane, error) {
 	totalSizeLabel.SetMarginEnd(12)
 	totalSizeLabel.SetMarginTop(6)
 	totalSizeLabel.SetMarginBottom(6)
+	totalSizeLabel.SetEllipsize(pango.ELLIPSIZE_END)
 	addStyleClass(totalSizeLabel.GetStyleContext, "total-size-label")
 
 	queuePane := QueuePane{

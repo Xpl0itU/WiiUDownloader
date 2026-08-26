@@ -17,7 +17,7 @@ RUN apt-fast -y --no-install-recommends update && \
     apt-fast -y --no-install-recommends upgrade && \
     apt-fast install -y --no-install-recommends build-essential libgcrypt20-dev libgtk-3-dev libfuse2 libtool librsvg2-dev && \
     GO_ARCH=$(case "$ARCH" in x86_64) echo "amd64" ;; aarch64) echo "arm64" ;; *) echo "Unsupported ARCH: $ARCH" >&2; exit 1 ;; esac) && \
-    wget "https://go.dev/dl/go1.26.5.linux-${GO_ARCH}.tar.gz" && \
+    wget "https://go.dev/dl/go1.27.0.linux-${GO_ARCH}.tar.gz" && \
     tar -C /usr/local -xzf go*.linux-*.tar.gz && \
     chmod +x /usr/local/go/bin/go* && \
     LINUXDEPLOY="/usr/bin/linuxdeploy.AppImage" && \

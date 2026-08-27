@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=WiiUDownloader
+Comment=Cross-platform Wii U NUS downloader for Windows, macOS & Linux. No title keys needed. Alternative to Wii U USB Helper.
+Exec=wiiudownloader
+Icon=io.github.xpl0itu.wiiudownloader
+Terminal=false
+Type=Application
+Categories=Network;FileTransfer;Utility;
+StartupNotify=true

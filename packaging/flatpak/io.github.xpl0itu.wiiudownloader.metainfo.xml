@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.xpl0itu.wiiudownloader</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>WiiUDownloader</name>
+  <summary>Download Wii U games, updates, DLC, and demos</summary>
+  <description>
+    <p>
+      WiiUDownloader downloads Wii U games, updates, DLC, and demos directly
+      from Nintendo's CDN. No title keys needed. Automatic decryption produces
+      playable files for your console or the Cemu emulator. Alternative to Wii U USB Helper.
+    </p>
+  </description>
+  <developer_name>Xpl0itU</developer_name>
+  <launchable type="desktop-id">io.github.xpl0itu.wiiudownloader.desktop</launchable>
+  <url type="homepage">https://github.com/Xpl0itU/WiiUDownloader</url>
+  <url type="bugtracker">https://github.com/Xpl0itU/WiiUDownloader/issues</url>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/Xpl0itU/WiiUDownloader/main/screenshots/main-window.png</image>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/Xpl0itU/WiiUDownloader/main/screenshots/downloading.png</image>
+    </screenshot>
+  </screenshots>
+  <releases>
+    <release version="2.102" date="2026-08-27"/>
+  </releases>
+  <content_rating type="oars-1.1"/>
+</component>

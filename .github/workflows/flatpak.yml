@@ -1,0 +1,29 @@
+name: Flatpak
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v6
+        with:
+          submodules: "recursive"
+      - name: Build Flatpak bundle
+        run: ./scripts/build-flatpak.sh
+      - name: Upload Flatpak Artifact
+        uses: ncipollo/release-action@v1
+        with:
+          allowUpdates: True
+          makeLatest: True
+          omitBody: True
+          omitBodyDuringUpdate: True
+          omitNameDuringUpdate: True
+          artifacts: "dist/flatpak/wiiudownloader-*.tar.gz"
+          token: ${{ secrets.GITHUB_TOKEN }}

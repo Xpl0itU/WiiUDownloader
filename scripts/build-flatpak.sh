@@ -2,7 +2,7 @@
 # Build WiiUDownloader as a Flatpak bundle and package it as a tar.gz.
 #
 # Requires Docker (Flatpak can't run natively on macOS). Works on Linux too.
-# Uses the official Flathub CI image, so the result matches what Flathub builds.
+# Uses the official Flatpak build image (ghcr.io/flathub-infra/flatpak-github-actions).
 #
 # Usage:
 #   ./scripts/build-flatpak.sh              # arch = host arch, version 2.102
@@ -62,7 +62,7 @@ docker run --rm -v "$PWD":/build -w /build \
   flatpak build-bundle --arch="$QARCH" \
     "$OUT/repo" "$OUT/wiiudownloader-$VERSION-$QARCH.flatpak" "$APP_ID"
 
-tar -C "$OUT" -czf "$OUT/wiiudownloader-$VERSION-$QARCH.tar.gz" \
+tar -C "$OUT" -czf "$OUT/wiiudownloader-$VERSION-$QARCH-Flatpak.tar.gz" \
   "wiiudownloader-$VERSION-$QARCH.flatpak"
 
-echo "OK: $OUT/wiiudownloader-$VERSION-$QARCH.tar.gz"
+echo "OK: $OUT/wiiudownloader-$VERSION-$QARCH-Flatpak.tar.gz"

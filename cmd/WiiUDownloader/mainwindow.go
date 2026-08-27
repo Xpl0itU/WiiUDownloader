@@ -180,7 +180,9 @@ func (mw *MainWindow) BuildUI() {
 	}
 
 	allTitles := wiiudownloader.GetTitleEntries(wiiudownloader.TITLE_CATEGORY_ALL)
+	titleRegionByTID := make(map[uint64]uint8, len(allTitles))
 	for _, entry := range allTitles {
+		titleRegionByTID[entry.TitleID] = entry.Region
 		iter := mw.childStore.Append()
 		err = mw.childStore.Set(iter,
 			[]int{IN_QUEUE_COLUMN, KIND_COLUMN, TITLE_ID_COLUMN, REGION_COLUMN, NAME_COLUMN},
@@ -237,13 +239,8 @@ func (mw *MainWindow) BuildUI() {
 			}
 		}
 
-		for _, t := range allTitles {
-			if t.TitleID == tid {
-				if (mw.currentRegion & t.Region) == 0 {
-					return false
-				}
-				break
-			}
+		if region, ok := titleRegionByTID[tid]; ok && (mw.currentRegion&region) == 0 {
+			return false
 		}
 
 		if mw.lastSearchText != "" {

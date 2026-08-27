@@ -1,7 +1,6 @@
 package wiiudownloader
 
 import (
-	"bytes"
 	"crypto/cipher"
 	"encoding/binary"
 	"errors"
@@ -38,8 +37,9 @@ func extractWiiUContents(srcPath string, destPath string, tmd *TMD, cipherHashTr
 	}
 	defer fstEncFile.Close()
 
-	var decryptedBuffer bytes.Buffer
-	if err := decryptContentToBuffer(fstEncFile, &decryptedBuffer, cipherHashTree, tmd.Contents[0]); err != nil {
+	decryptedBuffer := getDecryptedContentBuffer()
+	defer putDecryptedContentBuffer(decryptedBuffer)
+	if err := decryptContentToBuffer(fstEncFile, decryptedBuffer, cipherHashTree, tmd.Contents[0]); err != nil {
 		return err
 	}
 

@@ -416,15 +416,24 @@ func verifyPartialFile(partPath string, state *downloadState) (int64, bool, erro
 }
 
 func newResumeStateWriter(file *os.File, state *downloadState, statePath string) (*resumeStateWriter, error) {
+	pendingCap := state.SegmentSize
+	if state.ExpectedSize > 0 && state.ExpectedSize < pendingCap {
+		pendingCap = state.ExpectedSize
+	}
 	writer := &resumeStateWriter{
 		file:        file,
 		state:       state,
 		statePath:   statePath,
 		segmentSize: state.SegmentSize,
-		pending:     make([]byte, 0, state.SegmentSize),
+		pending:     make([]byte, 0, pendingCap),
 	}
 	if state.PartialSegment != nil {
-		pending := make([]byte, state.PartialSegment.Size)
+		partialSize := int(state.PartialSegment.Size)
+		pendingCap := partialSize
+		if segmentCap := int(state.SegmentSize); segmentCap > pendingCap {
+			pendingCap = segmentCap
+		}
+		pending := make([]byte, partialSize, pendingCap)
 		if _, err := file.ReadAt(pending, state.PartialSegment.Offset); err != nil {
 			return nil, err
 		}
@@ -466,16 +475,32 @@ func (w *resumeStateWriter) reconcileFromFile() error {
 		return nil
 	}
 
-	missing := make([]byte, info.Size()-recordedOffset)
-	if _, err := w.file.ReadAt(missing, recordedOffset); err != nil {
-		return err
+	for recordedOffset < info.Size() {
+		n := info.Size() - recordedOffset
+		if n > w.segmentSize {
+			n = w.segmentSize
+		}
+		missing := make([]byte, n)
+		if _, err := w.file.ReadAt(missing, recordedOffset); err != nil {
+			return err
+		}
+		if err := w.record(missing, false); err != nil {
+			return err
+		}
+		recordedOffset += n
 	}
-	return w.record(missing, false)
+	return nil
 }
 
 func (w *resumeStateWriter) record(p []byte, finalize bool) error {
 	for len(p) > 0 {
 		remaining := int(w.segmentSize) - len(w.pending)
+		if remaining <= 0 {
+			if err := w.persistPending(); err != nil {
+				return err
+			}
+			continue
+		}
 		if remaining > len(p) {
 			remaining = len(p)
 		}

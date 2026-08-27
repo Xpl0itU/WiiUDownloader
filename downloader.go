@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	ctxio "github.com/jbenet/go-context/io"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -48,6 +47,9 @@ type ProgressReporter interface {
 	UpdateDecryptionProgress(progress float64)
 	Cancelled() bool
 	SetCancelled()
+	// Done returns a channel that is closed once the operation is cancelled.
+	// It lets download loops wait for cancellation without polling.
+	Done() <-chan struct{}
 	SetDownloadSize(size int64)
 	ResetTotals()
 	MarkFileAsDone(filename string)
@@ -79,21 +81,19 @@ func shouldRetry(progressReporter ProgressReporter, doRetries bool, attempt int)
 
 func monitorCancellation(ctx context.Context, cancel context.CancelFunc, progressReporter ProgressReporter) func() {
 	done := make(chan struct{})
+	var reporterCancelled <-chan struct{}
+	if progressReporter != nil {
+		reporterCancelled = progressReporter.Done()
+	}
 	go func() {
-		ticker := time.NewTicker(100 * time.Millisecond)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-done:
-				return
-			case <-ticker.C:
-				if isCancelled(progressReporter) {
-					cancel()
-					return
-				}
-			}
+		select {
+		case <-ctx.Done():
+			return
+		case <-done:
+			return
+		case <-reporterCancelled:
+			cancel()
+			return
 		}
 	}()
 	return func() {
@@ -353,10 +353,9 @@ func downloadFileWithOptions(ctx context.Context, progressReporter ProgressRepor
 		}
 
 		writerProgress := newWriterProgress(underlyingWriter, progressReporter, basePath)
-		writerProgressWithContext := ctxio.NewWriter(attemptCtx, writerProgress)
 		watchdog := &watchdogReader{Reader: resp.Body, timer: timer}
 
-		_, err = io.Copy(writerProgressWithContext, watchdog)
+		_, err = io.Copy(writerProgress, watchdog)
 		timer.Stop()
 		stopMonitor()
 		resp.Body.Close()

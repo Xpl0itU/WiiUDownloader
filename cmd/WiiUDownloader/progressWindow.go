@@ -73,14 +73,17 @@ func (sa *SpeedAverager) GetAverageSpeed() float64 {
 }
 
 type ProgressWindow struct {
-	Window          *gtk.Window
-	box             *gtk.Box
-	gameLabel       *gtk.Label
-	bar             *gtk.ProgressBar
-	pauseButton     *gtk.Button
-	cancelButton    *gtk.Button
-	cancelled       bool
-	paused          bool
+
+	Window                 *gtk.Window
+	box                    *gtk.Box
+	gameLabel              *gtk.Label
+	bar                    *gtk.ProgressBar
+	pauseButton            *gtk.Button
+	cancelButton           *gtk.Button
+	cancelled              bool
+	paused                 bool
+	cancelledChan          chan struct{}
+	cancelOnce             sync.Once
 	totalToDownload int64
 	totalDownloaded int64
 	progressPerFile map[string]int64
@@ -122,7 +125,6 @@ func (pw *ProgressWindow) UpdateDownloadProgress(downloaded int64, filename stri
 	pw.progressMutex.Unlock()
 
 	uiIdleAddBool(func() bool {
-		pw.setTransferControlsSensitive(true)
 		pw.progressMutex.Lock()
 		pw.updatePending = false
 		total := pw.totalDownloaded
@@ -185,6 +187,12 @@ func (pw *ProgressWindow) SetCancelled() {
 	}
 	pw.controlMutex.Unlock()
 
+	if pw.cancelledChan != nil {
+		pw.cancelOnce.Do(func() {
+			close(pw.cancelledChan)
+		})
+	}
+
 	uiIdleAddBool(func() bool {
 		pw.setTransferControlsSensitive(false)
 		if pw.pauseButton != nil {
@@ -193,6 +201,15 @@ func (pw *ProgressWindow) SetCancelled() {
 		pw.gameLabel.SetText("Cancelling...")
 		return false
 	})
+}
+
+// Done implements the event-driven cancellation half of ProgressReporter:
+// the returned channel is closed exactly once when SetCancelled is called.
+func (pw *ProgressWindow) Done() <-chan struct{} {
+	if pw == nil {
+		return nil
+	}
+	return pw.cancelledChan
 }
 
 func (pw *ProgressWindow) WaitIfPaused() bool {
@@ -415,16 +432,17 @@ func createProgressWindow(parent *gtk.Window) (*ProgressWindow, error) {
 	box.PackEnd(bottomhBox, false, false, 0)
 
 	progressWindow := ProgressWindow{
-		Window:        win,
-		box:           box,
-		gameLabel:     gameLabel,
-		bar:           progressBar,
-		pauseButton:   pauseButton,
-		cancelButton:  cancelButton,
-		cancelled:     false,
-		paused:        false,
-		speedAverager: newSpeedAverager(),
-		errors:        make([]DownloadError, 0),
+		Window:         win,
+		box:            box,
+		gameLabel:      gameLabel,
+		bar:            progressBar,
+		pauseButton:    pauseButton,
+		cancelButton:   cancelButton,
+		cancelled:      false,
+		paused:         false,
+		cancelledChan:  make(chan struct{}),
+		speedAverager:  newSpeedAverager(),
+		errors:         make([]DownloadError, 0),
 	}
 	progressWindow.controlCond = sync.NewCond(&progressWindow.controlMutex)
 

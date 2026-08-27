@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 )
 
 const (
@@ -26,6 +27,64 @@ const (
 	HASH_H2_END   = 0x3c0
 )
 
+type hashExtractBuffers struct {
+	encrypted []byte
+	decrypted []byte
+	hashes    []byte
+	bw        *bufio.Writer
+}
+
+var hashExtractBufPool = sync.Pool{
+	New: func() any {
+		return &hashExtractBuffers{
+			encrypted: make([]byte, BLOCK_SIZE_HASHED),
+			decrypted: make([]byte, HASH_BLOCK_SIZE),
+			hashes:    make([]byte, HASHES_SIZE),
+			bw:        bufio.NewWriterSize(io.Discard, BLOCK_SIZE_HASHED),
+		}
+	},
+}
+
+type reusableCBC struct {
+	block cipher.Block
+	mode  cipher.BlockMode
+	setIV func([]byte)
+}
+
+func newReusableCBC(block cipher.Block) *reusableCBC {
+	d := &reusableCBC{block: block}
+	d.mode = cipher.NewCBCDecrypter(block, make([]byte, block.BlockSize()))
+	if r, ok := d.mode.(interface{ SetIV([]byte) }); ok {
+		d.setIV = r.SetIV
+	}
+	return d
+}
+
+func (d *reusableCBC) decrypt(dst, src, iv []byte) {
+	if d.setIV != nil {
+		d.setIV(iv)
+	} else {
+		d.mode = cipher.NewCBCDecrypter(d.block, iv)
+	}
+	d.mode.CryptBlocks(dst, src)
+}
+
+type extractBuffers struct {
+	encrypted []byte
+	decrypted []byte
+	bw        *bufio.Writer
+}
+
+var extractBufPool = sync.Pool{
+	New: func() any {
+		return &extractBuffers{
+			encrypted: make([]byte, BLOCK_SIZE),
+			decrypted: make([]byte, BLOCK_SIZE),
+			bw:        bufio.NewWriterSize(io.Discard, BLOCK_SIZE),
+		}
+	},
+}
+
 func extractFileHash(src *os.File, partDataOffset uint64, fileOffset uint64, size uint64, path string, contentID uint16, cipherHashTree cipher.Block) error {
 	writeSize := HASH_BLOCK_SIZE
 	blockNumber := (fileOffset / HASH_BLOCK_SIZE) & (HASH_ENTRIES_PER_LEVEL - 1)
@@ -34,10 +93,6 @@ func extractFileHash(src *os.File, partDataOffset uint64, fileOffset uint64, siz
 	if err != nil {
 		return fmt.Errorf("could not create '%s': %w", path, err)
 	}
-	defer dst.Close()
-
-	bw := bufio.NewWriterSize(dst, BLOCK_SIZE_HASHED)
-	defer bw.Flush()
 
 	readOffset := fileOffset / HASH_BLOCK_SIZE * BLOCK_SIZE_HASHED
 	subOffset := fileOffset - (fileOffset / HASH_BLOCK_SIZE * HASH_BLOCK_SIZE)
@@ -49,9 +104,19 @@ func extractFileHash(src *os.File, partDataOffset uint64, fileOffset uint64, siz
 		return err
 	}
 
-	encryptedHashedContentBuffer := make([]byte, BLOCK_SIZE_HASHED)
-	decryptedHashedContentBuffer := make([]byte, HASH_BLOCK_SIZE)
-	hashes := make([]byte, HASHES_SIZE)
+	bufs := hashExtractBufPool.Get().(*hashExtractBuffers)
+	defer hashExtractBufPool.Put(bufs)
+	bufs.bw.Reset(dst)
+
+	defer dst.Close()
+	defer bufs.bw.Flush()
+
+	encryptedHashedContentBuffer := bufs.encrypted
+	decryptedHashedContentBuffer := bufs.decrypted
+	hashes := bufs.hashes
+
+	hashesCBC := newReusableCBC(cipherHashTree)
+	dataCBC := newReusableCBC(cipherHashTree)
 
 	fileInfo, err := src.Stat()
 	if err != nil {
@@ -87,7 +152,7 @@ func extractFileHash(src *os.File, partDataOffset uint64, fileOffset uint64, siz
 
 		var iv [aes.BlockSize]byte
 		iv[1] = byte(contentID)
-		cipher.NewCBCDecrypter(cipherHashTree, iv[:]).CryptBlocks(hashes, encryptedHashedContentBuffer[:HASHES_SIZE])
+		hashesCBC.decrypt(hashes, encryptedHashedContentBuffer[:HASHES_SIZE], iv[:])
 
 		h0RangeStart := int(HASH_ENTRY_SIZE * blockNumber)
 		h0RangeEnd := h0RangeStart + sha1.Size
@@ -98,7 +163,10 @@ func extractFileHash(src *os.File, partDataOffset uint64, fileOffset uint64, siz
 			ivBlock[1] ^= byte(contentID)
 		}
 
-		cipher.NewCBCDecrypter(cipherHashTree, ivBlock[:]).CryptBlocks(decryptedHashedContentBuffer, encryptedHashedContentBuffer[HASHES_SIZE:readLen])
+		dataCBC.decrypt(decryptedHashedContentBuffer, encryptedHashedContentBuffer[HASHES_SIZE:readLen], ivBlock[:])
+		if clearFrom := readLen - HASHES_SIZE; clearFrom < HASH_BLOCK_SIZE {
+			clear(decryptedHashedContentBuffer[clearFrom:])
+		}
 		hash := sha1.Sum(decryptedHashedContentBuffer[:HASH_BLOCK_SIZE])
 		if blockNumber == 0 {
 			hash[1] ^= byte(contentID)
@@ -107,7 +175,7 @@ func extractFileHash(src *os.File, partDataOffset uint64, fileOffset uint64, siz
 			return errors.New("h0 hash mismatch")
 		}
 
-		n, err := bw.Write(decryptedHashedContentBuffer[subOffset : subOffset+uint64(writeSize)])
+		n, err := bufs.bw.Write(decryptedHashedContentBuffer[subOffset : subOffset+uint64(writeSize)])
 		if err != nil {
 			return err
 		}
@@ -135,7 +203,10 @@ func extractFile(src *os.File, partDataOffset uint64, fileOffset uint64, size ui
 	}
 	defer dst.Close()
 
-	bw := bufio.NewWriterSize(dst, BLOCK_SIZE)
+	bufs := extractBufPool.Get().(*extractBuffers)
+	defer extractBufPool.Put(bufs)
+	bufs.bw.Reset(dst)
+	bw := bufs.bw
 	defer bw.Flush()
 
 	readOffset := fileOffset / BLOCK_SIZE * BLOCK_SIZE
@@ -152,8 +223,8 @@ func extractFile(src *os.File, partDataOffset uint64, fileOffset uint64, size ui
 	ivLocal[1] = byte(contentID)
 	aesCipher := cipher.NewCBCDecrypter(cipherHashTree, ivLocal[:])
 
-	encryptedContentBuffer := make([]byte, BLOCK_SIZE)
-	decryptedContentBuffer := make([]byte, BLOCK_SIZE)
+	encryptedContentBuffer := bufs.encrypted
+	decryptedContentBuffer := bufs.decrypted
 
 	fileInfo, err := src.Stat()
 	if err != nil {
@@ -239,12 +310,15 @@ func decryptContentToBuffer(encryptedFile *os.File, decryptedBuffer *bytes.Buffe
 		hashesBuffer := make([]byte, HASHES_SIZE)
 		decryptedDataBuffer := make([]byte, HASH_BLOCK_SIZE)
 
+		hashesCBC := newReusableCBC(cipherHashTree)
+		dataCBC := newReusableCBC(cipherHashTree)
+
 		for chunkNum := int64(0); chunkNum < chunkCount; chunkNum++ {
 			if _, err := io.ReadFull(encryptedFile, hashesBuffer); err != nil {
 				return err
 			}
 			var zeroIV [aes.BlockSize]byte
-			cipher.NewCBCDecrypter(cipherHashTree, zeroIV[:]).CryptBlocks(hashes, hashesBuffer)
+			hashesCBC.decrypt(hashes, hashesBuffer, zeroIV[:])
 
 			h0Hashes := hashes[HASH_H0_START:HASH_H1_START]
 			h1Hashes := hashes[HASH_H1_START:HASH_H2_START]
@@ -273,7 +347,7 @@ func decryptContentToBuffer(encryptedFile *os.File, decryptedBuffer *bytes.Buffe
 				return err
 			}
 
-			cipher.NewCBCDecrypter(cipherHashTree, h0Hash[:16]).CryptBlocks(decryptedDataBuffer, decryptedDataBuffer)
+			dataCBC.decrypt(decryptedDataBuffer, decryptedDataBuffer, h0Hash[:16])
 			decryptedDataHash := sha1.Sum(decryptedDataBuffer)
 			if !bytes.Equal(decryptedDataHash[:], h0Hash) {
 				return errors.New("data block hash invalid")

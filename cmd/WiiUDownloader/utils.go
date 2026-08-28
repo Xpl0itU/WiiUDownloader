@@ -2,17 +2,14 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"log"
 	"math"
-	"net/http"
 	"os"
 	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
 
-	wiiudownloader "github.com/Xpl0itU/WiiUDownloader"
 	"github.com/gotk3/gotk3/gdk"
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
@@ -34,36 +31,6 @@ func formatBytes(bytes uint64) string {
 	}
 	value = math.Round(value*100) / 100
 	return fmt.Sprintf("%.2f %s", value, units[unitIndex])
-}
-
-func fetchTMDSize(titleID uint64, version int, client *http.Client) (uint64, error) {
-	baseURL := fmt.Sprintf("http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/%016x", titleID)
-	tmdURL := fmt.Sprintf("%s/tmd", baseURL)
-	if version >= 0 {
-		tmdURL = fmt.Sprintf("%s/tmd.%d", baseURL, version)
-	}
-
-	resp, err := client.Get(tmdURL)
-	if err != nil {
-		return 0, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("failed to fetch TMD: status %d", resp.StatusCode)
-	}
-
-	tmdData, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return 0, fmt.Errorf("failed to read TMD data: %w", err)
-	}
-
-	tmd, err := wiiudownloader.ParseTMD(tmdData)
-	if err != nil {
-		return 0, fmt.Errorf("failed to parse TMD: %w", err)
-	}
-
-	return tmd.CalculateTotalSize(), nil
 }
 
 func normalizeFilename(filename string) string {

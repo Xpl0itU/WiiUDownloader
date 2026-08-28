@@ -1876,7 +1876,7 @@ func (mw *MainWindow) fetchTitleSize(entry wiiudownloader.TitleEntry) {
 		return
 	}
 
-	size, err := fetchTMDSize(entry.TitleID, entry.Version, mw.client)
+	size, err := wiiudownloader.FetchTMDSize(entry.TitleID, entry.Version, mw.client)
 
 	if !mw.queuePane.IsTitleInQueue(entry) {
 		return

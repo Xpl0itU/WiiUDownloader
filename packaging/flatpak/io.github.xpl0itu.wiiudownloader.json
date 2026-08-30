@@ -3,41 +3,40 @@
     "runtime": "org.freedesktop.Platform",
     "runtime-version": "25.08",
     "sdk": "org.freedesktop.Sdk",
-    "sdk-extensions": [
-        "org.freedesktop.Sdk.Extension.golang"
-    ],
     "command": "wiiudownloader",
     "finish-args": [
         "--share=network",
         "--socket=x11",
         "--socket=wayland",
         "--device=dri",
-        "--filesystem=xdg-config/wiiudownloader:create"
+        "--filesystem=xdg-config/WiiUDownloader:create"
     ],
     "modules": [
         {
             "name": "wiiudownloader",
             "buildsystem": "simple",
-            "build-options": {
-                "append-path": "/usr/lib/sdk/golang/bin",
-                "build-args": [
-                    "--share=network"
-                ],
-                "env": {
-                    "CGO_ENABLED": "1",
-                    "GOTOOLCHAIN": "auto"
-                }
-            },
             "build-commands": [
-                "go build -C cmd/WiiUDownloader -o /app/bin/wiiudownloader .",
-                "install -Dm644 packaging/flatpak/io.github.xpl0itu.wiiudownloader.desktop /app/share/applications/io.github.xpl0itu.wiiudownloader.desktop",
-                "install -Dm644 packaging/flatpak/io.github.xpl0itu.wiiudownloader.metainfo.xml /app/share/metainfo/io.github.xpl0itu.wiiudownloader.metainfo.xml",
-                "install -Dm644 data/WiiUDownloader.svg /app/share/icons/hicolor/scalable/apps/io.github.xpl0itu.wiiudownloader.svg"
+                "install -Dm755 WiiUDownloader /app/bin/wiiudownloader",
+                "install -Dm644 io.github.xpl0itu.wiiudownloader.desktop /app/share/applications/io.github.xpl0itu.wiiudownloader.desktop",
+                "install -Dm644 io.github.xpl0itu.wiiudownloader.metainfo.xml /app/share/metainfo/io.github.xpl0itu.wiiudownloader.metainfo.xml",
+                "install -Dm644 WiiUDownloader.svg /app/share/icons/hicolor/scalable/apps/io.github.xpl0itu.wiiudownloader.svg"
             ],
             "sources": [
                 {
-                    "type": "dir",
-                    "path": "../.."
+                    "type": "file",
+                    "path": "../../WiiUDownloader"
+                },
+                {
+                    "type": "file",
+                    "path": "io.github.xpl0itu.wiiudownloader.desktop"
+                },
+                {
+                    "type": "file",
+                    "path": "io.github.xpl0itu.wiiudownloader.metainfo.xml"
+                },
+                {
+                    "type": "file",
+                    "path": "../../data/WiiUDownloader.svg"
                 }
             ]
         }

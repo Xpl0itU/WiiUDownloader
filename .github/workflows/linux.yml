@@ -41,6 +41,8 @@ jobs:
           CHECKRT_PLUGIN=""
           if [ "${{ matrix.arch }}" = "x86_64" ]; then CHECKRT_PLUGIN="--plugin checkrt"; fi
           docker run --privileged --rm -e DEPLOY_GTK_VERSION=3 -e OUTPUT="WiiUDownloader-Linux-${{ matrix.arch }}.AppImage" -e UPDATE_INFORMATION="gh-releases-zsync|Xpl0itU|WiiUDownloader|latest|WiiUDownloader-Linux-${{ matrix.arch }}.AppImage.zsync" -v "${PWD}":/project builder linuxdeploy.AppImage --plugin gtk $CHECKRT_PLUGIN --output=appimage --create-desktop-file --executable=WiiUDownloader --appdir dist --icon-file data/WiiUDownloader.png
+      - name: Build Flatpak bundle
+        run: ./scripts/build-flatpak.sh
       - name: Upload Linux Artifact
         uses: ncipollo/release-action@v1
         with:
@@ -49,5 +51,7 @@ jobs:
           omitBody: True
           omitBodyDuringUpdate: True
           omitNameDuringUpdate: True
-          artifacts: "WiiUDownloader-*.AppImage"
+          artifacts: |
+            WiiUDownloader-*.AppImage
+            dist/flatpak/WiiUDownloader-Linux-*.flatpak
           token: ${{ secrets.GITHUB_TOKEN }}

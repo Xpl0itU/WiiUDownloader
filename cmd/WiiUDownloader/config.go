@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -8,25 +9,21 @@ import (
 	"sync"
 
 	wiiudownloader "github.com/Xpl0itU/WiiUDownloader"
-	"github.com/knadh/koanf/parsers/json"
-	"github.com/knadh/koanf/providers/file"
-	"github.com/knadh/koanf/providers/structs"
-	"github.com/knadh/koanf/v2"
 )
 
 type Config struct {
-	DarkMode                bool   `koanf:"darkMode"`
-	DecryptContents         bool   `koanf:"decryptContents"`
-	DeleteEncryptedContents bool   `koanf:"deleteEncryptedContents"`
-	DecryptOutputPath       string `koanf:"decryptOutputPath"`
-	ContinueOnError         bool   `koanf:"continueOnError"`
-	SuggestRelatedContent   bool   `koanf:"suggestRelatedContent"`
-	SelectedRegion          uint8  `koanf:"selectedRegion"`
-	DidInitialSetup         bool   `koanf:"didInitialSetup"`
-	LastSelectedPath        string `koanf:"lastSelectedPath"`
-	RememberLastPath        bool   `koanf:"rememberLastPath"`
-	ShowDonationBar         bool   `koanf:"showDonationBar"`
-	GetSizeOnQueue          bool   `koanf:"getSizeOnQueue"`
+	DarkMode                bool   `json:"darkMode"`
+	DecryptContents         bool   `json:"decryptContents"`
+	DeleteEncryptedContents bool   `json:"deleteEncryptedContents"`
+	DecryptOutputPath       string `json:"decryptOutputPath"`
+	ContinueOnError         bool   `json:"continueOnError"`
+	SuggestRelatedContent   bool   `json:"suggestRelatedContent"`
+	SelectedRegion          uint8  `json:"selectedRegion"`
+	DidInitialSetup         bool   `json:"didInitialSetup"`
+	LastSelectedPath        string `json:"lastSelectedPath"`
+	RememberLastPath        bool   `json:"rememberLastPath"`
+	ShowDonationBar         bool   `json:"showDonationBar"`
+	GetSizeOnQueue          bool   `json:"getSizeOnQueue"`
 	saveConfigCallback      func()
 	saveMutex               *sync.Mutex
 }
@@ -41,9 +38,6 @@ const (
 var (
 	globalConfig     *Config
 	globalConfigOnce sync.Once
-	k                = koanf.NewWithConf(koanf.Conf{
-		Delim: ".",
-	})
 )
 
 func getDefaultConfig() *Config {
@@ -97,27 +91,57 @@ func loadConfig() (*Config, error) {
 			err = errConf
 			return
 		}
-
 		configPath := configFilePath(userConfigDir)
-		if errConf := k.Load(file.Provider(configPath), json.Parser()); errConf != nil {
-			log.Printf("error loading config file: %v, writing defaults...\n", errConf)
-			if errConf := createDefaultConfigFile(); errConf != nil {
-				err = fmt.Errorf("error creating default config file: %w", errConf)
+
+		data, readErr := os.ReadFile(configPath)
+		if readErr != nil {
+			log.Printf("error loading config file: %v, writing defaults...\n", readErr)
+			if createErr := createDefaultConfigFile(); createErr != nil {
+				err = fmt.Errorf("error creating default config file: %w", createErr)
 				return
 			}
-			if errConf := k.Load(file.Provider(configPath), json.Parser()); errConf != nil {
-				err = fmt.Errorf("error loading config file: %w", errConf)
+			if data, readErr = os.ReadFile(configPath); readErr != nil {
+				err = fmt.Errorf("error loading config file: %w", readErr)
 				return
 			}
 		}
 
-		if errConf := globalConfig.SetValuesFromConfig(k); errConf != nil {
-			err = fmt.Errorf("error setting values from config: %w", errConf)
-			return
+		if umErr := decodeConfig(data, globalConfig); umErr != nil {
+			log.Printf("error parsing config file: %v, resetting to defaults\n", umErr)
+			if createErr := createDefaultConfigFile(); createErr != nil {
+				err = fmt.Errorf("error resetting corrupt config file: %w", createErr)
+				return
+			}
+			globalConfig = getDefaultConfig()
+		}
+
+		if globalConfig.SelectedRegion > 7 { // Assuming bitmask 0-7
+			log.Printf("Warning: invalid region %d, resetting to default", globalConfig.SelectedRegion)
+			globalConfig.SelectedRegion = getDefaultConfig().SelectedRegion
 		}
 	})
 
 	return globalConfig, err
+}
+
+func decodeConfig(data []byte, c *Config) error {
+	return json.Unmarshal(data, c)
+}
+
+func (c *Config) saveTo(path string) error {
+	data, err := json.MarshalIndent(c, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal config to JSON: %w", err)
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, CONFIG_FILE_PERM); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp)
+		return fmt.Errorf("failed to replace config file: %w", err)
+	}
+	return nil
 }
 
 func (c *Config) Save() error {
@@ -127,62 +151,14 @@ func (c *Config) Save() error {
 		c.saveConfigCallback()
 	}
 
-	if err := k.Load(structs.Provider(c, "koanf"), nil); err != nil {
-		return fmt.Errorf("failed to load struct into koanf: %w", err)
-	}
-
 	userConfigDir, err := os.UserConfigDir()
 	if err != nil {
 		return err
 	}
-	confBytes, err := k.Marshal(json.Parser())
-	if err != nil {
-		return fmt.Errorf("failed to marshal config to JSON: %w", err)
+	if err := os.MkdirAll(configDirPath(userConfigDir), CONFIG_DIR_PERM); err != nil {
+		return fmt.Errorf("failed to create config dir: %w", err)
 	}
-	if err := os.WriteFile(configFilePath(userConfigDir), confBytes, CONFIG_FILE_PERM); err != nil {
-		return fmt.Errorf("failed to write config file: %w", err)
-	}
-	return nil
-}
-
-func (c *Config) SetValuesFromConfig(newK *koanf.Koanf) error {
-	c.saveMutex.Lock()
-	defer c.saveMutex.Unlock()
-
-	darkModeDefault := c.DarkMode
-	selectedRegionDefault := c.SelectedRegion
-	continueOnErrorDefault := c.ContinueOnError
-	getSizeOnQueueDefault := c.GetSizeOnQueue
-
-	if err := newK.Unmarshal("", c); err != nil {
-		return err
-	}
-
-	// Validation: Ensure Region is within bounds (example)
-	if c.SelectedRegion > 7 { // Assuming bitmask 0-7
-		log.Printf("Warning: invalid region %d, resetting to default", c.SelectedRegion)
-		c.SelectedRegion = selectedRegionDefault
-	}
-
-	if !newK.Exists("darkMode") {
-		c.DarkMode = darkModeDefault
-	}
-	if !newK.Exists("selectedRegion") {
-		c.SelectedRegion = selectedRegionDefault
-	}
-	if !newK.Exists("continueOnError") {
-		c.ContinueOnError = continueOnErrorDefault
-	}
-	if !newK.Exists("getSizeOnQueue") {
-		c.GetSizeOnQueue = getSizeOnQueueDefault
-	}
-	if !newK.Exists("suggestRelatedContent") {
-		c.SuggestRelatedContent = true
-	}
-	if !newK.Exists("showDonationBar") {
-		c.ShowDonationBar = true
-	}
-	return nil
+	return c.saveTo(configFilePath(userConfigDir))
 }
 
 func configDirPath(userConfigDir string) string {

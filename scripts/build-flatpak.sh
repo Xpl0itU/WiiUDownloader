@@ -12,7 +12,7 @@
 #     # If ./WiiUDownloader doesn't exist, it is compiled first (AppImage-style:
 #     # curl db.go + go build in the Dockerfile.linux container), then bundled.
 #     # If it does exist (e.g. CI after the AppImage build step), it's reused.
-#   VERSION=2.103 ./scripts/build-flatpak.sh
+#   VERSION=2.104 ./scripts/build-flatpak.sh
 #   ./scripts/build-flatpak.sh x86_64                # cross-arch (needs qemu)
 set -euo pipefail
 
@@ -25,14 +25,14 @@ case "$ARCH" in
   *) echo "unsupported arch: $ARCH" >&2; exit 1 ;;
 esac
 
-# Version from env, else the tag being built (CI), else 2.103.
+# Version from env, else the tag being built (CI), else 2.104.
 VERSION="${VERSION:-}"
 if [ -z "$VERSION" ]; then
   case "${GITHUB_REF:-}" in
     refs/tags/v*) VERSION="${GITHUB_REF#refs/tags/v}" ;;
   esac
 fi
-VERSION="${VERSION:-2.103}"
+VERSION="${VERSION:-2.104}"
 
 APP_ID=io.github.xpl0itu.wiiudownloader
 IMAGE=ghcr.io/flathub-infra/flatpak-github-actions:gnome-50

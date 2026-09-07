@@ -79,6 +79,23 @@ func shouldRetry(progressReporter ProgressReporter, doRetries bool, attempt int)
 	return doRetries && attempt < maxRetries && waitUntilResumed(progressReporter)
 }
 
+func retrySleep(ctx context.Context, progressReporter ProgressReporter) bool {
+	timer := time.NewTimer(retryDelay)
+	defer timer.Stop()
+	var reporterDone <-chan struct{}
+	if progressReporter != nil {
+		reporterDone = progressReporter.Done()
+	}
+	select {
+	case <-timer.C:
+		return !isCancelled(progressReporter)
+	case <-ctx.Done():
+		return false
+	case <-reporterDone:
+		return false
+	}
+}
+
 func monitorCancellation(ctx context.Context, cancel context.CancelFunc, progressReporter ProgressReporter) func() {
 	done := make(chan struct{})
 	var reporterCancelled <-chan struct{}
@@ -197,7 +214,9 @@ func downloadFileWithOptions(ctx context.Context, progressReporter ProgressRepor
 				return errCancel
 			}
 			if shouldRetry(progressReporter, opts.DoRetries, attempt) {
-				time.Sleep(retryDelay)
+				if !retrySleep(ctx, progressReporter) {
+					return errCancel
+				}
 				continue
 			}
 			return err
@@ -213,7 +232,9 @@ func downloadFileWithOptions(ctx context.Context, progressReporter ProgressRepor
 					return err
 				}
 				if shouldRetry(progressReporter, opts.DoRetries, attempt) {
-					time.Sleep(retryDelay)
+					if !retrySleep(ctx, progressReporter) {
+						return errCancel
+					}
 					continue
 				}
 				return fmt.Errorf("download resume failed: unexpected content-range")
@@ -242,7 +263,9 @@ func downloadFileWithOptions(ctx context.Context, progressReporter ProgressRepor
 			stopMonitor()
 			cancel()
 			if shouldRetry(progressReporter, opts.DoRetries, attempt) {
-				time.Sleep(retryDelay)
+				if !retrySleep(ctx, progressReporter) {
+					return errCancel
+				}
 				continue
 			}
 			return fmt.Errorf("download error after %d attempts, status code: %d", attempt, resp.StatusCode)
@@ -258,7 +281,9 @@ func downloadFileWithOptions(ctx context.Context, progressReporter ProgressRepor
 					return err
 				}
 				if shouldRetry(progressReporter, opts.DoRetries, attempt) {
-					time.Sleep(retryDelay)
+					if !retrySleep(ctx, progressReporter) {
+						return errCancel
+					}
 					continue
 				}
 				return fmt.Errorf("download size mismatch: expected %d, got %d", state.ExpectedSize, expectedSize)
@@ -275,7 +300,9 @@ func downloadFileWithOptions(ctx context.Context, progressReporter ProgressRepor
 					return err
 				}
 				if shouldRetry(progressReporter, opts.DoRetries, attempt) {
-					time.Sleep(retryDelay)
+					if !retrySleep(ctx, progressReporter) {
+						return errCancel
+					}
 					continue
 				}
 				return fmt.Errorf("download source changed while resuming")
@@ -292,7 +319,9 @@ func downloadFileWithOptions(ctx context.Context, progressReporter ProgressRepor
 					return err
 				}
 				if shouldRetry(progressReporter, opts.DoRetries, attempt) {
-					time.Sleep(retryDelay)
+					if !retrySleep(ctx, progressReporter) {
+						return errCancel
+					}
 					continue
 				}
 				return fmt.Errorf("download source changed while resuming")
@@ -375,7 +404,9 @@ func downloadFileWithOptions(ctx context.Context, progressReporter ProgressRepor
 				return errCancel
 			}
 			if shouldRetry(progressReporter, opts.DoRetries, attempt) {
-				time.Sleep(retryDelay)
+				if !retrySleep(ctx, progressReporter) {
+					return errCancel
+				}
 				continue
 			}
 			return err
@@ -400,7 +431,9 @@ func downloadFileWithOptions(ctx context.Context, progressReporter ProgressRepor
 		if err := finalFileSizeMatches(partPath, expectedSize); err != nil {
 			cancel()
 			if shouldRetry(progressReporter, opts.DoRetries, attempt) {
-				time.Sleep(retryDelay)
+				if !retrySleep(ctx, progressReporter) {
+					return errCancel
+				}
 				continue
 			}
 			return err
@@ -412,7 +445,9 @@ func downloadFileWithOptions(ctx context.Context, progressReporter ProgressRepor
 					return cleanupErr
 				}
 				if shouldRetry(progressReporter, opts.DoRetries, attempt) {
-					time.Sleep(retryDelay)
+					if !retrySleep(ctx, progressReporter) {
+						return errCancel
+					}
 					continue
 				}
 				return err
@@ -434,10 +469,6 @@ func downloadFileWithOptions(ctx context.Context, progressReporter ProgressRepor
 	}
 
 	return nil
-}
-
-func downloadFileWithSemaphoreOptions(ctx context.Context, progressReporter ProgressReporter, client *http.Client, downloadURL, dstPath string, opts downloadOptions) error {
-	return downloadFileWithOptions(ctx, progressReporter, client, downloadURL, dstPath, opts)
 }
 
 func downloadFile(progressReporter ProgressReporter, client *http.Client, downloadURL, dstPath string, doRetries bool) error {
@@ -555,7 +586,7 @@ func DownloadTitle(titleID, outputDirectory string, version int, doDecryption bo
 			}
 			content := tmd.Contents[i]
 			filePath := filepath.Join(outputDir, fmt.Sprintf("%08X.app", content.ID))
-			if err := downloadFileWithSemaphoreOptions(ctx, progressReporter, client, fmt.Sprintf("%s/%08X", baseURL, content.ID), filePath, downloadOptions{
+			if err := downloadFileWithOptions(ctx, progressReporter, client, fmt.Sprintf("%s/%08X", baseURL, content.ID), filePath, downloadOptions{
 				ExpectedSize: expectedContentDownloadSize(content),
 				DoRetries:    true,
 				AllowResume:  true,
@@ -569,7 +600,7 @@ func DownloadTitle(titleID, outputDirectory string, version int, doDecryption bo
 
 			if content.Type&CONTENT_TYPE_HASHED == CONTENT_TYPE_HASHED {
 				filePath = filepath.Join(outputDir, fmt.Sprintf("%08X.h3", content.ID))
-				if err := downloadFileWithSemaphoreOptions(ctx, progressReporter, client, fmt.Sprintf("%s/%08X.h3", baseURL, content.ID), filePath, downloadOptions{
+				if err := downloadFileWithOptions(ctx, progressReporter, client, fmt.Sprintf("%s/%08X.h3", baseURL, content.ID), filePath, downloadOptions{
 					ExpectedSize: expectedH3DownloadSize(content),
 					DoRetries:    true,
 					AllowResume:  true,

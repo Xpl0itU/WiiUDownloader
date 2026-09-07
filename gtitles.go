@@ -1,6 +1,9 @@
 package wiiudownloader
 
-import "strings"
+import (
+	"strings"
+	"sync"
+)
 
 const (
 	MCP_REGION_JAPAN  = 0x01
@@ -61,8 +64,47 @@ const VersionLatest = -1
 
 var TitleDatabase []TitleEntry
 
+// Lazily-built TitleID -> entry index over TitleDatabase. db.go assigns
+// TitleDatabase via init(), so the index is built on first lookup and
+// invalidated whenever SetTitleDatabase installs a new database.
+var (
+	titleIndexMu sync.RWMutex
+	titleIndex   map[uint64]TitleEntry
+)
+
 func SetTitleDatabase(db []TitleEntry) {
+	titleIndexMu.Lock()
+	defer titleIndexMu.Unlock()
 	TitleDatabase = db
+	titleIndex = nil
+}
+
+func buildTitleIndexLocked() {
+	idx := make(map[uint64]TitleEntry, len(TitleDatabase))
+	for _, entry := range TitleDatabase {
+		if entry.Category == TITLE_CATEGORY_DISC {
+			continue
+		}
+		if _, exists := idx[entry.TitleID]; !exists {
+			idx[entry.TitleID] = entry
+		}
+	}
+	titleIndex = idx
+}
+
+func getTitleIndex() map[uint64]TitleEntry {
+	titleIndexMu.RLock()
+	idx := titleIndex
+	titleIndexMu.RUnlock()
+	if idx != nil {
+		return idx
+	}
+	titleIndexMu.Lock()
+	defer titleIndexMu.Unlock()
+	if titleIndex == nil {
+		buildTitleIndexLocked()
+	}
+	return titleIndex
 }
 
 func GetTitleEntries(category uint8) []TitleEntry {
@@ -206,13 +248,8 @@ func FindRelatedTitleByHighAndLow(source TitleEntry, targetHigh uint32, exclude 
 }
 
 func GetTitleEntryFromTid(tid uint64) TitleEntry {
-	for _, entry := range TitleDatabase {
-		if entry.Category == TITLE_CATEGORY_DISC {
-			continue
-		}
-		if entry.TitleID == tid {
-			return entry
-		}
+	if entry, ok := getTitleIndex()[tid]; ok {
+		return entry
 	}
 	return TitleEntry{}
 }

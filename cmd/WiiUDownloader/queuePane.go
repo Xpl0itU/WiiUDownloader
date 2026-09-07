@@ -436,14 +436,6 @@ func (qp *QueuePane) GetTitleQueueSize() int {
 	return size
 }
 
-func (qp *QueuePane) GetTitleQueueAtIndex(index int) wiiudownloader.TitleEntry {
-	var entry wiiudownloader.TitleEntry
-	qp.titleQueue.WithRLock(func(queue []wiiudownloader.TitleEntry) {
-		entry = queue[index]
-	})
-	return entry
-}
-
 func (qp *QueuePane) IsTitleInQueue(title wiiudownloader.TitleEntry) bool {
 	var found bool
 	qp.titleQueue.WithRLock(func(queue []wiiudownloader.TitleEntry) {
@@ -472,14 +464,6 @@ func (qp *QueuePane) ForEachRemoving(f func(wiiudownloader.TitleEntry) bool) {
 			break
 		}
 	}
-}
-
-func (qp *QueuePane) GetTitleTreeView() *gtk.TreeView {
-	return qp.titleTreeView
-}
-
-func (qp *QueuePane) SetTitleTreeView(titleTreeView *gtk.TreeView) {
-	qp.titleTreeView = titleTreeView
 }
 
 func (qp *QueuePane) SetTitleSize(titleID uint64, bytes uint64) {

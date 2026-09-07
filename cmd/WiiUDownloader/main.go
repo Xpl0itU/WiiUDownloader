@@ -220,6 +220,7 @@ func showMainWindow(app *gtk.Application, win *MainWindow) {
 			win.setDonationBarVisible(false)
 		}
 		win.PostShowInit()
+		win.restorePersistedQueue()
 	}
 }
 

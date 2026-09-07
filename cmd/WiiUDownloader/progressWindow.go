@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,22 +19,50 @@ type DownloadError struct {
 }
 
 const (
-	MAX_SPEEDS         = 32
-	SMOOTHING_FACTOR   = 0.2
-	PERCENT_SCALE      = 100
-	PROGRESS_MIN_WIDTH = 350
+	MAX_SPEEDS          = 32
+	SMOOTHING_FACTOR    = 0.2
+	PERCENT_SCALE       = 100
+	PROGRESS_MIN_WIDTH  = 350
+	MIN_SAMPLE_INTERVAL = 100 * time.Millisecond
 )
 
 type SpeedAverager struct {
 	speeds       []int64
 	averageSpeed int64
+	lastBytes    int64
+	lastTime     time.Time
 }
 
 func newSpeedAverager() *SpeedAverager {
 	return &SpeedAverager{
-		speeds:       make([]int64, 0, MAX_SPEEDS),
-		averageSpeed: 0,
+		speeds: make([]int64, 0, MAX_SPEEDS),
 	}
+}
+
+func (sa *SpeedAverager) Reset() {
+	sa.speeds = sa.speeds[:0]
+	sa.averageSpeed = 0
+	sa.lastBytes = 0
+	sa.lastTime = time.Time{}
+}
+
+func (sa *SpeedAverager) Sample(totalBytes int64, now time.Time) {
+	if sa.lastTime.IsZero() || now.Before(sa.lastTime) {
+		sa.lastBytes = totalBytes
+		sa.lastTime = now
+		return
+	}
+	elapsed := now.Sub(sa.lastTime)
+	if elapsed < MIN_SAMPLE_INTERVAL {
+		return
+	}
+	speed := int64(float64(totalBytes-sa.lastBytes) / elapsed.Seconds())
+	if speed < 0 {
+		speed = 0
+	}
+	sa.lastBytes = totalBytes
+	sa.lastTime = now
+	sa.AddSpeed(speed)
 }
 
 func (sa *SpeedAverager) AddSpeed(speed int64) {
@@ -42,14 +71,6 @@ func (sa *SpeedAverager) AddSpeed(speed int64) {
 		sa.speeds = sa.speeds[:MAX_SPEEDS/2]
 	}
 	sa.speeds = append(sa.speeds, speed)
-}
-
-func calculateDownloadSpeed(downloaded int64, startTime, endTime time.Time) int64 {
-	duration := endTime.Sub(startTime).Seconds()
-	if duration > 0 {
-		return int64(float64(downloaded) / duration)
-	}
-	return 0
 }
 
 func (sa *SpeedAverager) calculateAverageOfSpeeds() {
@@ -73,17 +94,16 @@ func (sa *SpeedAverager) GetAverageSpeed() float64 {
 }
 
 type ProgressWindow struct {
-
-	Window                 *gtk.Window
-	box                    *gtk.Box
-	gameLabel              *gtk.Label
-	bar                    *gtk.ProgressBar
-	pauseButton            *gtk.Button
-	cancelButton           *gtk.Button
-	cancelled              bool
-	paused                 bool
-	cancelledChan          chan struct{}
-	cancelOnce             sync.Once
+	Window          *gtk.Window
+	gameLabel       *gtk.Label
+	queueLabel      *gtk.Label
+	bar             *gtk.ProgressBar
+	pauseButton     *gtk.Button
+	cancelButton    *gtk.Button
+	cancelled       bool
+	paused          bool
+	cancelledChan   chan struct{}
+	cancelOnce      sync.Once
 	totalToDownload int64
 	totalDownloaded int64
 	progressPerFile map[string]int64
@@ -97,6 +117,55 @@ type ProgressWindow struct {
 	updatePending   bool
 	decPending      bool
 	decProgress     float64
+	queueDone       int
+	queueTotal      int
+}
+
+func formatDuration(d time.Duration) string {
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	}
+	if d < time.Hour {
+		return fmt.Sprintf("%dm %02ds", int(d.Minutes()), int(d.Seconds())%60)
+	}
+	return fmt.Sprintf("%dh %02dm", int(d.Hours()), int(d.Minutes())%60)
+}
+
+// SetQueueProgress records how many titles of the queue run have completed
+// and updates the dedicated queue indicator label plus the window title;
+// total <= 0 hides the indicator.
+func (pw *ProgressWindow) SetQueueProgress(done, total int) {
+	pw.progressMutex.Lock()
+	pw.queueDone, pw.queueTotal = done, total
+	pw.progressMutex.Unlock()
+
+	uiIdleAdd(func() {
+		text := queueProgressText(done, total)
+		if pw.queueLabel != nil {
+			pw.queueLabel.SetText(text)
+			pw.queueLabel.SetVisible(text != "")
+		}
+		if pw.Window != nil {
+			title := "WiiUDownloader - Downloading"
+			if text != "" {
+				title += fmt.Sprintf(" (%s)", strings.ToLower(text))
+			}
+			pw.Window.SetTitle(title)
+		}
+	})
+}
+
+func queueProgressText(done, total int) string {
+	if total <= 0 {
+		return ""
+	}
+	if done >= total {
+		done = total - 1
+	}
+	if done < 0 {
+		done = 0
+	}
+	return fmt.Sprintf("Title %d/%d", done+1, total)
 }
 
 func (pw *ProgressWindow) SetGameTitle(title string) {
@@ -133,13 +202,23 @@ func (pw *ProgressWindow) UpdateDownloadProgress(downloaded int64, filename stri
 		}
 		pw.progressMutex.Unlock()
 
+		now := time.Now()
+		pw.speedAverager.Sample(total, now)
+		speed := pw.speedAverager.GetAverageSpeed()
+
+		etaText := ""
+		if speed > 0 && pw.totalToDownload > total {
+			remaining := time.Duration(float64(pw.totalToDownload-total)/speed) * time.Second
+			etaText = fmt.Sprintf(", ~%s left", formatDuration(remaining))
+		}
+
 		pw.bar.SetFraction(float64(total) / float64(pw.totalToDownload))
-		pw.speedAverager.AddSpeed(calculateDownloadSpeed(total, pw.startTime, time.Now()))
 		pw.bar.SetText(fmt.Sprintf(
-			"Downloading... (%s/%s) (%s/s)",
+			"Downloading... (%s/%s, %s/s%s)",
 			formatBytes(uint64(total)),
 			formatBytes(uint64(pw.totalToDownload)),
-			formatBytes(uint64(int64(pw.speedAverager.GetAverageSpeed()))),
+			formatBytes(uint64(int64(speed))),
+			etaText,
 		))
 
 		return false
@@ -287,23 +366,11 @@ func (pw *ProgressWindow) ResetTotals() {
 	pw.progressPerFile = make(map[string]int64)
 	pw.totalDownloaded = 0
 	pw.totalToDownload = 0
+	pw.speedAverager.Reset()
 }
 
 func (pw *ProgressWindow) ResetTotalsAndErrors() {
-	uiIdleAdd(func() {
-		pw.setTransferControlsSensitive(true)
-		if pw.pauseButton != nil {
-			pw.pauseButton.SetLabel("Pause")
-		}
-		pw.bar.SetFraction(0)
-		pw.bar.SetText("Preparing...")
-	})
-	pw.resetTransferState()
-	pw.progressMutex.Lock()
-	defer pw.progressMutex.Unlock()
-	pw.progressPerFile = make(map[string]int64)
-	pw.totalDownloaded = 0
-	pw.totalToDownload = 0
+	pw.ResetTotals()
 	pw.ClearErrors()
 }
 
@@ -385,7 +452,22 @@ func createProgressWindow(parent *gtk.Window) (*ProgressWindow, error) {
 	}
 	addStyleClass(gameLabel.GetStyleContext, "title")
 	SetupLabelAccessibility(gameLabel, "Game title label")
-	box.PackStart(gameLabel, false, false, 0)
+
+	queueLabel, err := gtk.LabelNew("")
+	if err != nil {
+		return nil, err
+	}
+	addStyleClass(queueLabel.GetStyleContext, "queue-position-label")
+	queueLabel.SetHAlign(gtk.ALIGN_CENTER)
+	queueLabel.SetVisible(false)
+
+	titleBox, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 2)
+	if err != nil {
+		return nil, err
+	}
+	titleBox.PackStart(gameLabel, false, false, 0)
+	titleBox.PackStart(queueLabel, false, false, 0)
+	box.PackStart(titleBox, false, false, 0)
 
 	progressBar, err := gtk.ProgressBarNew()
 	if err != nil {
@@ -430,19 +512,18 @@ func createProgressWindow(parent *gtk.Window) (*ProgressWindow, error) {
 	bottomhBox.PackStart(pauseButton, true, true, 0)
 	bottomhBox.PackStart(cancelButton, true, true, 0)
 	box.PackEnd(bottomhBox, false, false, 0)
-
 	progressWindow := ProgressWindow{
-		Window:         win,
-		box:            box,
-		gameLabel:      gameLabel,
-		bar:            progressBar,
-		pauseButton:    pauseButton,
-		cancelButton:   cancelButton,
-		cancelled:      false,
-		paused:         false,
-		cancelledChan:  make(chan struct{}),
-		speedAverager:  newSpeedAverager(),
-		errors:         make([]DownloadError, 0),
+		Window:        win,
+		gameLabel:     gameLabel,
+		queueLabel:    queueLabel,
+		bar:           progressBar,
+		pauseButton:   pauseButton,
+		cancelButton:  cancelButton,
+		cancelled:     false,
+		paused:        false,
+		cancelledChan: make(chan struct{}),
+		speedAverager: newSpeedAverager(),
+		errors:        make([]DownloadError, 0),
 	}
 	progressWindow.controlCond = sync.NewCond(&progressWindow.controlMutex)
 

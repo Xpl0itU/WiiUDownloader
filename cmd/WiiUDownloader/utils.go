@@ -223,6 +223,11 @@ func applyStyling() {
 		font-size: 1.2em;
 		font-weight: 500;
 	}
+	.queue-position-label {
+		font-size: 0.85em;
+		font-weight: 500;
+		color: @theme_unfocused_fg_color;
+	}
 	.subtitle {
 		font-size: 0.95em;
 		color: @theme_unfocused_fg_color;

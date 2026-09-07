@@ -19,7 +19,6 @@ import (
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
 	"github.com/gotk3/gotk3/pango"
-	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -1750,7 +1749,7 @@ func (mw *MainWindow) showErrorsDialog(errors []DownloadError) {
 			}
 		}
 		if len(titles) > 0 {
-			mw.addTitlesToQueueInternal(titles)
+			mw.addTitlesToQueue(titles)
 			mw.updateTitlesInQueue()
 		}
 	}
@@ -1761,60 +1760,40 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string, decryptContent
 		return nil
 	}
 
-	var err error = nil
-
-	queueStatusChan := make(chan bool, 1)
-	defer close(queueStatusChan)
-	errGroup := errgroup.Group{}
-
 	mw.progressWindow.ResetTotalsAndErrors()
 
 	totalInQueue := mw.queuePane.GetTitleQueueSize()
-	mw.queuePane.ForEachRemoving(func(title wiiudownloader.TitleEntry) bool {
+	mw.progressWindow.SetQueueProgress(0, totalInQueue)
+
+	var firstErr error
+	for i, title := range mw.queuePane.GetTitleQueue() {
 		if mw.progressWindow.Cancelled() {
-			return false
+			break
 		}
+		mw.progressWindow.SetQueueProgress(i, totalInQueue)
 
-		errGroup.Go(func() error {
-			if mw.progressWindow.Cancelled() {
-				queueStatusChan <- true
-				return nil
-			}
-			tidStr := fmt.Sprintf("%016x", title.TitleID)
-			titlePath := filepath.Join(selectedPath, fmt.Sprintf("%s [%s] [%s]", normalizeFilename(title.Name), wiiudownloader.GetFormattedKind(title.TitleID), tidStr))
-			if title.Version >= 0 {
-				titlePath = fmt.Sprintf("%s [v%d]", titlePath, title.Version)
-			}
-			downloadErr := wiiudownloader.DownloadTitle(tidStr, titlePath, title.Version, decryptContents, mw.progressWindow, deleteEncryptedContents, mw.client, config.DecryptOutputPath)
-
-			if downloadErr != nil && downloadErr != context.Canceled {
-				errorType := detectErrorType(downloadErr.Error())
-				mw.progressWindow.AddErrorWithType(title.Name, downloadErr.Error(), tidStr, errorType, title.Version)
-
-				if config.ContinueOnError {
-					queueStatusChan <- true
-					return nil
-				}
-				queueStatusChan <- false
-				return downloadErr
-			}
-
-			queueStatusChan <- true
-			return nil
-		})
-
-		if err = errGroup.Wait(); err != nil {
-			if mw.progressWindow.Cancelled() {
-				err = nil
-				queueStatusChan <- true
-				return <-queueStatusChan
-			} else {
-				return <-queueStatusChan
-			}
-		} else {
-			return <-queueStatusChan
+		tidStr := fmt.Sprintf("%016x", title.TitleID)
+		titlePath := filepath.Join(selectedPath, fmt.Sprintf("%s [%s] [%s]", normalizeFilename(title.Name), wiiudownloader.GetFormattedKind(title.TitleID), tidStr))
+		if title.Version >= 0 {
+			titlePath = fmt.Sprintf("%s [v%d]", titlePath, title.Version)
 		}
-	})
+		downloadErr := wiiudownloader.DownloadTitle(tidStr, titlePath, title.Version, decryptContents, mw.progressWindow, deleteEncryptedContents, mw.client, config.DecryptOutputPath)
+
+		step := nextQueueStep(downloadErr, mw.progressWindow.Cancelled(), config.ContinueOnError)
+		if step.record {
+			errorType := detectErrorType(downloadErr.Error())
+			mw.progressWindow.AddErrorWithType(title.Name, downloadErr.Error(), tidStr, errorType, title.Version)
+		}
+		if step.remove {
+			mw.queuePane.RemoveTitle(title)
+		}
+		if step.returned != nil {
+			firstErr = step.returned
+		}
+		if step.stop {
+			break
+		}
+	}
 
 	uiIdleAdd(func() {
 		mw.progressWindow.Window.Hide()
@@ -1830,7 +1809,27 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string, decryptContent
 		}
 	})
 
-	return err
+	return firstErr
+}
+
+type queueStep struct {
+	remove   bool  // remove the title from the queue
+	stop     bool  // stop processing further titles
+	record   bool  // record the error in the progress window
+	returned error // non-nil: abort the whole run with this error
+}
+
+func nextQueueStep(downloadErr error, cancelled, continueOnError bool) queueStep {
+	if downloadErr == nil || downloadErr == context.Canceled {
+		return queueStep{remove: true}
+	}
+	if cancelled {
+		return queueStep{stop: true}
+	}
+	if continueOnError {
+		return queueStep{remove: true, record: true}
+	}
+	return queueStep{record: true, stop: true, returned: downloadErr}
 }
 
 func (mw *MainWindow) collectTIDs(titles []wiiudownloader.TitleEntry) []uint64 {
@@ -1841,39 +1840,46 @@ func (mw *MainWindow) collectTIDs(titles []wiiudownloader.TitleEntry) []uint64 {
 	return tids
 }
 
-func (mw *MainWindow) addTitlesToQueue(titles []wiiudownloader.TitleEntry) {
-	var toAdd []wiiudownloader.TitleEntry
+func dedupeTitles(titles []wiiudownloader.TitleEntry, inQueue func(uint64) bool) []wiiudownloader.TitleEntry {
+	seen := make(map[uint64]struct{}, len(titles))
+	out := make([]wiiudownloader.TitleEntry, 0, len(titles))
 	for _, entry := range titles {
-		if mw.queuePane.IsTitleInQueue(entry) {
+		if _, dup := seen[entry.TitleID]; dup {
 			continue
 		}
-		toAdd = append(toAdd, entry)
+		if inQueue != nil && inQueue(entry.TitleID) {
+			continue
+		}
+		seen[entry.TitleID] = struct{}{}
+		out = append(out, entry)
 	}
-
-	mw.addTitlesToQueueInternal(toAdd)
+	return out
 }
 
-func (mw *MainWindow) addTitlesToQueueInternal(titles []wiiudownloader.TitleEntry) {
-	if len(titles) == 0 {
+func (mw *MainWindow) addTitlesToQueue(titles []wiiudownloader.TitleEntry) {
+	toAdd := dedupeTitles(titles, func(tid uint64) bool {
+		return mw.queuePane.IsTitleInQueue(wiiudownloader.TitleEntry{TitleID: tid})
+	})
+	if len(toAdd) == 0 {
 		return
 	}
 
-	for i, entry := range titles {
+	for i, entry := range toAdd {
 		// Database entries default to 0 meaning "latest"; remap so v0 is selectable.
 		if entry.Version == 0 {
 			entry.Version = wiiudownloader.VersionLatest
-			titles[i] = entry
+			toAdd[i] = entry
 		}
 		mw.queuePane.SetTitleLoadingNoUpdate(entry.TitleID)
 	}
-	mw.queuePane.AddTitles(titles)
+	mw.queuePane.AddTitles(toAdd)
 
 	config, _ := loadConfig()
 	if !config.GetSizeOnQueue {
 		return
 	}
 
-	for _, entry := range titles {
+	for _, entry := range toAdd {
 		go mw.fetchTitleSize(entry)
 	}
 }
@@ -1986,7 +1992,7 @@ func (mw *MainWindow) showAddByTitleIDDialog() {
 			}
 		}
 
-		mw.addTitlesToQueueInternal([]wiiudownloader.TitleEntry{entry})
+		mw.addTitlesToQueue([]wiiudownloader.TitleEntry{entry})
 		mw.updateTitlesInQueue()
 	}
 }

@@ -449,23 +449,6 @@ func (qp *QueuePane) IsTitleInQueue(title wiiudownloader.TitleEntry) bool {
 	return found
 }
 
-func (qp *QueuePane) ForEachRemoving(f func(wiiudownloader.TitleEntry) bool) {
-	var titleQueueCopy []wiiudownloader.TitleEntry
-	qp.titleQueue.WithRLock(func(queue []wiiudownloader.TitleEntry) {
-		titleQueueCopy = make([]wiiudownloader.TitleEntry, len(queue))
-		copy(titleQueueCopy, queue)
-	})
-
-	for _, title := range titleQueueCopy {
-		shouldContinue := f(title)
-		if shouldContinue {
-			qp.RemoveTitle(title)
-		} else {
-			break
-		}
-	}
-}
-
 func (qp *QueuePane) SetTitleSize(titleID uint64, bytes uint64) {
 	qp.titleBytes[titleID] = bytes
 	qp.titleSizes[titleID] = formatBytes(bytes)
@@ -531,6 +514,8 @@ func (qp *QueuePane) Update(doUpdateFunc bool) {
 		queueSnapshot = make([]wiiudownloader.TitleEntry, len(queue))
 		copy(queueSnapshot, queue)
 	})
+
+	persistQueue(queueSnapshot)
 
 	uiIdleAdd(func() {
 		qp.store.Clear()

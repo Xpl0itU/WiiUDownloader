@@ -5,9 +5,13 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"sync"
 )
 
-var cetkData []byte
+var (
+	cetkMu   sync.Mutex
+	cetkData []byte
+)
 
 const (
 	// Embedded certificate chain starts at this range inside the downloaded cetk.
@@ -16,6 +20,8 @@ const (
 )
 
 func getDefaultCert(progressReporter ProgressReporter, client *http.Client) ([]byte, error) {
+	cetkMu.Lock()
+	defer cetkMu.Unlock()
 	if hasCetkCertData(cetkData) {
 		return cetkData[CETK_CERT_START_OFFSET : CETK_CERT_START_OFFSET+CETK_CERT_SIZE], nil
 	}
@@ -23,7 +29,7 @@ func getDefaultCert(progressReporter ProgressReporter, client *http.Client) ([]b
 	if err := downloadFile(progressReporter, client, "http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/000500101000400a/cetk", cetkDir, true); err != nil {
 		return nil, err
 	}
-	cetkData, err := os.ReadFile(cetkDir)
+	data, err := os.ReadFile(cetkDir)
 	if err != nil {
 		return nil, err
 	}
@@ -32,10 +38,11 @@ func getDefaultCert(progressReporter ProgressReporter, client *http.Client) ([]b
 		return nil, err
 	}
 
-	if hasCetkCertData(cetkData) {
+	if hasCetkCertData(data) {
+		cetkData = data
 		return cetkData[CETK_CERT_START_OFFSET : CETK_CERT_START_OFFSET+CETK_CERT_SIZE], nil
 	}
-	return nil, fmt.Errorf("failed to download OSv10 cetk, length: %d", len(cetkData))
+	return nil, fmt.Errorf("failed to download OSv10 cetk, length: %d", len(data))
 }
 
 func GenerateCert(tmd *TMD, outputPath string, progressReporter ProgressReporter, client *http.Client) error {

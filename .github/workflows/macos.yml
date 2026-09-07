@@ -9,6 +9,8 @@ permissions:
 
 env:
   MACOSX_DEPLOYMENT_TARGET: "11.0"
+  MACOS_INTEL_TARGET: &macos-intel-target "macos-15-intel"
+  MACOS_ARM_TARGET: &macos-arm-target "macos-14"
 
 jobs:
   build:
@@ -16,23 +18,25 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-15-intel, macos-14]
+        os: [*macos-intel-target, *macos-arm-target]
     steps:
       - name: Check out repository code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           submodules: "recursive"
       - name: Install Homebrew Dependencies
         uses: tecolicom/actions-use-homebrew-tools@v1
         with:
           tools: create-dmg dylibbundler gtk+3 librsvg shared-mime-info adwaita-icon-theme
+          cache: yes
       - name: Install Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
-          go-version: "1.27.0"
+          go-version: "1.27.1"
           check-latest: true
           cache-dependency-path: |
             go.sum
+            cmd/WiiUDownloader/go.sum
       - name: Build
         run: |
           curl --insecure -Lo db.go -H "User-Agent: NUSspliBuilder/2.1" "https://napi.v10lator.de/db?t=go"
@@ -48,7 +52,7 @@ jobs:
         run: |
           python3 data/create_bundle.py
       - name: Upload Artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: WiiUDownloader-App-${{ matrix.os }}
           path: out/WiiUDownloader.app
@@ -59,20 +63,21 @@ jobs:
     needs: build
     steps:
       - name: Check out repository code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Install Homebrew Dependencies
         uses: tecolicom/actions-use-homebrew-tools@v1
         with:
           tools: create-dmg
+          cache: yes
       - name: Download Intel Artifact
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
-          name: WiiUDownloader-App-macos-15-intel
+          name: WiiUDownloader-App-${{ env.MACOS_INTEL_TARGET }}
           path: intel_dist
       - name: Download ARM Artifact
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
-          name: WiiUDownloader-App-macos-14
+          name: WiiUDownloader-App-${{ env.MACOS_ARM_TARGET }}
           path: arm_dist
       - name: Merge Universal Binary
         run: |

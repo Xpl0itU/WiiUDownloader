@@ -20,7 +20,7 @@ jobs:
             runner: ubuntu-24.04-arm
     steps:
       - name: Check out repository code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           submodules: "recursive"
       - name: Docker caching

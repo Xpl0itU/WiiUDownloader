@@ -181,12 +181,17 @@ func (mw *MainWindow) BuildUI() {
 
 	allTitles := wiiudownloader.GetTitleEntries(wiiudownloader.TITLE_CATEGORY_ALL)
 	titleRegionByTID := make(map[uint64]uint8, len(allTitles))
+	queuedTIDs := make(map[uint64]struct{})
+	for _, queued := range mw.queuePane.GetTitleQueue() {
+		queuedTIDs[queued.TitleID] = struct{}{}
+	}
 	for _, entry := range allTitles {
 		titleRegionByTID[entry.TitleID] = entry.Region
+		_, inQueue := queuedTIDs[entry.TitleID]
 		iter := mw.childStore.Append()
 		err = mw.childStore.Set(iter,
 			[]int{IN_QUEUE_COLUMN, KIND_COLUMN, TITLE_ID_COLUMN, REGION_COLUMN, NAME_COLUMN},
-			[]interface{}{mw.queuePane.IsTitleInQueue(entry), wiiudownloader.GetFormattedKind(entry.TitleID), fmt.Sprintf("%016x", entry.TitleID), wiiudownloader.GetFormattedRegion(entry.Region), entry.Name},
+			[]interface{}{inQueue, wiiudownloader.GetFormattedKind(entry.TitleID), fmt.Sprintf("%016x", entry.TitleID), wiiudownloader.GetFormattedRegion(entry.Region), entry.Name},
 		)
 		if err != nil {
 			log.Fatalln("Unable to set values:", err)
@@ -1556,6 +1561,11 @@ func (mw *MainWindow) updateTitlesInQueue() {
 	}
 	storeRef := mw.childStore
 
+	queuedTIDs := make(map[uint64]struct{})
+	for _, queued := range mw.queuePane.GetTitleQueue() {
+		queuedTIDs[queued.TitleID] = struct{}{}
+	}
+
 	iter, ok := storeRef.GetIterFirst()
 	if !ok {
 		return
@@ -1571,7 +1581,7 @@ func (mw *MainWindow) updateTitlesInQueue() {
 				if err != nil {
 					continue
 				}
-				isInQueue := mw.queuePane.IsTitleInQueue(wiiudownloader.TitleEntry{TitleID: tidNum})
+				_, isInQueue := queuedTIDs[tidNum]
 
 				if inQueueVal, err := storeRef.GetValue(iter, IN_QUEUE_COLUMN); err == nil {
 					if currentInQueue, err := inQueueVal.GoValue(); err == nil {

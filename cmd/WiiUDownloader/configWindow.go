@@ -1,8 +1,11 @@
 package main
 
 import (
-	"github.com/Xpl0itU/dialog"
-	"github.com/gotk3/gotk3/gtk"
+	"context"
+
+	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
+	"github.com/diamondburned/gotk4/pkg/gio/v2"
+	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 )
 
 type ConfigWindow struct {
@@ -11,289 +14,189 @@ type ConfigWindow struct {
 }
 
 const (
-	SETTINGS_WINDOW_WIDTH               = 480
-	SETTINGS_WINDOW_HEIGHT              = 400
-	SETTINGS_GRID_MIN_WIDTH             = 440
-	SETTINGS_GRID_MARGIN                = 12
-	SETTINGS_FIELD_MARGIN_TOP           = 10
-	SETTINGS_ENTRY_WIDTH_CHARS          = 35
-	SETTINGS_ENTRY_MARGIN_END           = 10
+	SETTINGS_WINDOW_WIDTH               = 540
+	SETTINGS_WINDOW_HEIGHT              = 620
 	UNSAVED_CHANGES_CONFIRM_MESSAGE     = "You have unsaved changes. Close without saving?"
 	INVALID_DOWNLOAD_PATH_ERROR_MESSAGE = "Invalid download path. Please select a valid directory."
 )
 
+// NewConfigWindow builds the preferences window out of libadwaita preference
+// pages, so every setting is a native-looking row instead of a hand-laid grid.
 func NewConfigWindow(config *Config) (*ConfigWindow, error) {
-	win, err := gtk.WindowNew(gtk.WINDOW_TOPLEVEL)
-	if err != nil {
-		return nil, err
-	}
+	win := adw.NewWindow()
 	win.SetTitle(WINDOW_TITLE_PREFIX + "Settings")
-	win.SetDecorated(true)
-	win.SetPosition(gtk.WIN_POS_CENTER)
 	win.SetDefaultSize(SETTINGS_WINDOW_WIDTH, SETTINGS_WINDOW_HEIGHT)
-	addStyleClass(win.GetStyleContext, "settings-window")
+	win.AddCSSClass("settings-window")
+	// The GTK-facing helpers take a *gtk.Window; this is the same object.
+	parentWindow := &win.Window
 
-	mainBox, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 12)
-	if err != nil {
-		return nil, err
-	}
-	mainBox.SetMarginTop(SETTINGS_GRID_MARGIN)
-	mainBox.SetMarginBottom(SETTINGS_GRID_MARGIN)
-	mainBox.SetMarginStart(SETTINGS_GRID_MARGIN)
-	mainBox.SetMarginEnd(SETTINGS_GRID_MARGIN)
-	win.Add(mainBox)
+	header := adw.NewHeaderBar()
 
-	stack, err := gtk.StackNew()
-	if err != nil {
-		return nil, err
-	}
-	stack.SetTransitionType(gtk.STACK_TRANSITION_TYPE_SLIDE_LEFT_RIGHT)
-	stack.SetTransitionDuration(200)
+	// --- Storage ---
+	storage := adw.NewPreferencesGroup()
+	storage.SetTitle("Storage")
 
-	switcher, err := gtk.StackSwitcherNew()
-	if err != nil {
-		return nil, err
-	}
-	switcher.SetStack(stack)
-	switcher.SetHAlign(gtk.ALIGN_CENTER)
-
-	mainBox.PackStart(switcher, false, false, 0)
-	mainBox.PackStart(stack, true, true, 0)
-
-	// --- General Tab ---
-	generalGrid, err := gtk.GridNew()
-	if err != nil {
-		return nil, err
-	}
-	generalGrid.SetRowSpacing(12)
-	generalGrid.SetColumnSpacing(12)
-	generalGrid.SetMarginTop(12)
-	generalGrid.SetMarginBottom(12)
-	generalGrid.SetMarginStart(12)
-	generalGrid.SetMarginEnd(12)
-
-	downloadPathLabel, err := gtk.LabelNew("Download Path:")
-	if err != nil {
-		return nil, err
-	}
-	downloadPathLabel.SetHAlign(gtk.ALIGN_START)
-	generalGrid.Attach(downloadPathLabel, 0, 0, 2, 1)
-
-	downloadPathEntry, err := gtk.EntryNew()
-	if err != nil {
-		return nil, err
-	}
-	downloadPathEntry.SetText(config.LastSelectedPath)
-	downloadPathEntry.SetWidthChars(SETTINGS_ENTRY_WIDTH_CHARS)
-	downloadPathEntry.SetHExpand(true)
-	SetupEntryAccessibility(downloadPathEntry, "Download path", "Location where downloaded games will be saved.")
-	generalGrid.Attach(downloadPathEntry, 0, 1, 1, 1)
-
-	downloadPathButton, err := gtk.ButtonNewWithLabel("Browse")
-	if err != nil {
-		return nil, err
-	}
-	SetupButtonAccessibility(downloadPathButton, "Browse for download path")
-	downloadPathButton.Connect("clicked", func() {
-		selectedPath, err := dialog.Directory().Title(WINDOW_TITLE_PREFIX + "Select Download Path").Browse()
-		if err != nil {
-			return
-		}
-		if selectedPath != "" {
-			downloadPathEntry.SetText(selectedPath)
-		}
+	downloadPathRow := adw.NewEntryRow()
+	downloadPathRow.SetTitle("Download path")
+	downloadPathRow.SetText(config.LastSelectedPath)
+	setTooltip(downloadPathRow, composeAccessibleText("Download path", "Location where downloaded games will be saved.", ". "))
+	downloadBrowseButton := gtk.NewButtonWithLabel("Browse")
+	downloadBrowseButton.SetVAlign(gtk.AlignCenter)
+	SetupButtonAccessibility(downloadBrowseButton, "Browse for download path")
+	downloadBrowseButton.ConnectClicked(func() {
+		chooseFolder(parentWindow, WINDOW_TITLE_PREFIX+"Select Download Path", "", func(selectedPath string) {
+			if selectedPath != "" {
+				downloadPathRow.SetText(selectedPath)
+			}
+		})
 	})
-	generalGrid.Attach(downloadPathButton, 1, 1, 1, 1)
+	downloadPathRow.AddSuffix(downloadBrowseButton)
+	storage.Add(downloadPathRow)
 
-	rememberPathCheck, err := gtk.CheckButtonNewWithLabel("Automatically save files to last used location")
-	if err != nil {
-		return nil, err
-	}
-	rememberPathCheck.SetActive(config.RememberLastPath)
-	SetupCheckButtonAccessibility(rememberPathCheck, "Remember and automatically use the last download location")
-	generalGrid.Attach(rememberPathCheck, 0, 2, 2, 1)
+	rememberPathRow := adw.NewSwitchRow()
+	rememberPathRow.SetTitle("Remember last used location")
+	rememberPathRow.SetActive(config.RememberLastPath)
+	setTooltip(rememberPathRow, composeAccessibleText("Remember last used location", "Automatically save files to the last used location.", ". "))
+	storage.Add(rememberPathRow)
 
-	decryptOutputPathLabel, err := gtk.LabelNew("Decrypted Output Path:")
-	if err != nil {
-		return nil, err
-	}
-	decryptOutputPathLabel.SetHAlign(gtk.ALIGN_START)
-	generalGrid.Attach(decryptOutputPathLabel, 0, 3, 2, 1)
-
-	decryptOutputPathEntry, err := gtk.EntryNew()
-	if err != nil {
-		return nil, err
-	}
-	decryptOutputPathEntry.SetText(config.DecryptOutputPath)
-	decryptOutputPathEntry.SetWidthChars(SETTINGS_ENTRY_WIDTH_CHARS)
-	decryptOutputPathEntry.SetHExpand(true)
-	decryptOutputPathEntry.SetPlaceholderText("Same as download location...")
-	SetupEntryAccessibility(decryptOutputPathEntry, "Decrypted output path", "Optional folder where decrypted game files will be saved. Leave empty to save alongside downloads.")
-	generalGrid.Attach(decryptOutputPathEntry, 0, 4, 1, 1)
-
-	decryptOutputPathButton, err := gtk.ButtonNewWithLabel("Browse")
-	if err != nil {
-		return nil, err
-	}
-	SetupButtonAccessibility(decryptOutputPathButton, "Browse for decrypted output path")
-	decryptOutputPathButton.Connect("clicked", func() {
-		selectedPath, err := dialog.Directory().Title(WINDOW_TITLE_PREFIX + "Select Decrypted Output Path").Browse()
-		if err != nil {
-			return
-		}
-		if selectedPath != "" {
-			decryptOutputPathEntry.SetText(selectedPath)
-		}
+	decryptPathRow := adw.NewEntryRow()
+	decryptPathRow.SetTitle("Decrypted output path")
+	decryptPathRow.SetText(config.DecryptOutputPath)
+	setTooltip(decryptPathRow, composeAccessibleText("Decrypted output path", "Optional folder where decrypted game files will be saved. Leave empty to save alongside downloads.", ". "))
+	decryptBrowseButton := gtk.NewButtonWithLabel("Browse")
+	decryptBrowseButton.SetVAlign(gtk.AlignCenter)
+	SetupButtonAccessibility(decryptBrowseButton, "Browse for decrypted output path")
+	decryptBrowseButton.ConnectClicked(func() {
+		chooseFolder(parentWindow, WINDOW_TITLE_PREFIX+"Select Decrypted Output Path", "", func(selectedPath string) {
+			if selectedPath != "" {
+				decryptPathRow.SetText(selectedPath)
+			}
+		})
 	})
+	decryptPathRow.AddSuffix(decryptBrowseButton)
 
-	clearDecryptPathButton, err := gtk.ButtonNewWithLabel("Clear")
-	if err != nil {
-		return nil, err
-	}
-	SetupButtonAccessibility(clearDecryptPathButton, "Clear the decrypted files output path")
-	addStyleClass(clearDecryptPathButton.GetStyleContext, "destructive-action")
-	clearDecryptPathButton.Connect("clicked", func() {
-		decryptOutputPathEntry.SetText("")
+	clearDecryptButton := gtk.NewButtonWithLabel("Clear")
+	clearDecryptButton.SetVAlign(gtk.AlignCenter)
+	clearDecryptButton.AddCSSClass("destructive-action")
+	SetupButtonAccessibility(clearDecryptButton, "Clear the decrypted files output path")
+	clearDecryptButton.ConnectClicked(func() {
+		decryptPathRow.SetText("")
 	})
+	decryptPathRow.AddSuffix(clearDecryptButton)
+	storage.Add(decryptPathRow)
 
-	decryptBtnBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
-	if err != nil {
-		return nil, err
-	}
-	addStyleClass(decryptBtnBox.GetStyleContext, "linked")
-	decryptBtnBox.PackStart(decryptOutputPathButton, true, true, 0)
-	decryptBtnBox.PackStart(clearDecryptPathButton, true, true, 0)
-	generalGrid.Attach(decryptBtnBox, 1, 4, 1, 1)
+	// --- Downloads ---
+	downloads := adw.NewPreferencesGroup()
+	downloads.SetTitle("Downloads")
 
-	stack.AddTitled(generalGrid, "general", "General")
+	continueOnErrorRow := adw.NewSwitchRow()
+	continueOnErrorRow.SetTitle("Continue downloading on errors")
+	continueOnErrorRow.SetSubtitle("Show a summary of failed titles at the end")
+	continueOnErrorRow.SetActive(config.ContinueOnError)
+	setTooltip(continueOnErrorRow, composeAccessibleText("Continue downloading on errors", "Continue with remaining titles even if some fail.", ". "))
+	downloads.Add(continueOnErrorRow)
 
-	// --- Downloads Tab ---
-	downloadsGrid, err := gtk.GridNew()
-	if err != nil {
-		return nil, err
-	}
-	downloadsGrid.SetRowSpacing(12)
-	downloadsGrid.SetMarginTop(12)
-	downloadsGrid.SetMarginBottom(12)
-	downloadsGrid.SetMarginStart(12)
-	downloadsGrid.SetMarginEnd(12)
+	inlineProgressRow := adw.NewSwitchRow()
+	inlineProgressRow.SetTitle("Show download progress in the queue pane")
+	inlineProgressRow.SetSubtitle("Off: downloads report in a separate progress window")
+	inlineProgressRow.SetActive(config.UseInlineDownloadUI)
+	setTooltip(inlineProgressRow, composeAccessibleText("Show download progress in the queue pane", "Report the running download inside the queue pane instead of a separate progress window.", ". "))
+	downloads.Add(inlineProgressRow)
 
-	continueOnErrorCheck, err := gtk.CheckButtonNewWithLabel("Continue downloading on errors (show summary at end)")
-	if err != nil {
-		return nil, err
-	}
-	continueOnErrorCheck.SetActive(config.ContinueOnError)
-	SetupCheckButtonAccessibility(continueOnErrorCheck, "Continue with remaining titles even if some fail")
-	downloadsGrid.Attach(continueOnErrorCheck, 0, 0, 1, 1)
+	suggestRelatedRow := adw.NewSwitchRow()
+	suggestRelatedRow.SetTitle("Suggest related content")
+	suggestRelatedRow.SetSubtitle("Offer matching Game, DLC and Update entries when queueing")
+	suggestRelatedRow.SetActive(config.SuggestRelatedContent)
+	setTooltip(suggestRelatedRow, composeAccessibleText("Suggest related content", "Offer related content that matches the same title ID.", ". "))
+	downloads.Add(suggestRelatedRow)
 
-	suggestRelatedContentCheck, err := gtk.CheckButtonNewWithLabel("Suggest related Game/DLC/Update when queueing")
-	if err != nil {
-		return nil, err
-	}
-	suggestRelatedContentCheck.SetActive(config.SuggestRelatedContent)
-	SetupCheckButtonAccessibility(suggestRelatedContentCheck, "Offer related content that matches the same title ID")
-	downloadsGrid.Attach(suggestRelatedContentCheck, 0, 1, 1, 1)
+	// --- Interface ---
+	interfaceGroup := adw.NewPreferencesGroup()
+	interfaceGroup.SetTitle("Interface")
 
-	stack.AddTitled(downloadsGrid, "downloads", "Downloads")
+	darkModeRow := adw.NewSwitchRow()
+	darkModeRow.SetTitle("Dark mode")
+	darkModeRow.SetActive(config.DarkMode)
+	setTooltip(darkModeRow, composeAccessibleText("Dark mode", "Enable dark theme for the interface.", ". "))
+	interfaceGroup.Add(darkModeRow)
 
-	// --- Interface Tab ---
-	interfaceGrid, err := gtk.GridNew()
-	if err != nil {
-		return nil, err
-	}
-	interfaceGrid.SetRowSpacing(12)
-	interfaceGrid.SetMarginTop(12)
-	interfaceGrid.SetMarginBottom(12)
-	interfaceGrid.SetMarginStart(12)
-	interfaceGrid.SetMarginEnd(12)
+	showDonationBarRow := adw.NewSwitchRow()
+	showDonationBarRow.SetTitle("Show donation banner")
+	showDonationBarRow.SetActive(config.ShowDonationBar)
+	setTooltip(showDonationBarRow, composeAccessibleText("Show donation banner", "Show a small banner at the bottom to support the project.", ". "))
+	interfaceGroup.Add(showDonationBarRow)
 
-	darkModeCheck, err := gtk.CheckButtonNewWithLabel("Dark mode")
-	if err != nil {
-		return nil, err
-	}
-	darkModeCheck.SetActive(config.DarkMode)
-	SetupCheckButtonAccessibility(darkModeCheck, "Enable dark theme for the interface")
-	interfaceGrid.Attach(darkModeCheck, 0, 0, 1, 1)
+	getSizeOnQueueRow := adw.NewSwitchRow()
+	getSizeOnQueueRow.SetTitle("Fetch game size when adding to queue")
+	getSizeOnQueueRow.SetActive(config.GetSizeOnQueue)
+	setTooltip(getSizeOnQueueRow, composeAccessibleText("Fetch game size when adding to queue", "Automatically calculate game size using the TMD file when added to queue.", ". "))
+	interfaceGroup.Add(getSizeOnQueueRow)
 
-	showDonationBarCheck, err := gtk.CheckButtonNewWithLabel("Show donation banner")
-	if err != nil {
-		return nil, err
-	}
-	showDonationBarCheck.SetActive(config.ShowDonationBar)
-	SetupCheckButtonAccessibility(showDonationBarCheck, "Show a small banner at the bottom to support the project")
-	interfaceGrid.Attach(showDonationBarCheck, 0, 1, 1, 1)
+	page := adw.NewPreferencesPage()
+	page.Add(storage)
+	page.Add(downloads)
+	page.Add(interfaceGroup)
 
-	getSizeOnQueueCheck, err := gtk.CheckButtonNewWithLabel("Fetch game size when adding to queue")
-	if err != nil {
-		return nil, err
-	}
-	getSizeOnQueueCheck.SetActive(config.GetSizeOnQueue)
-	SetupCheckButtonAccessibility(getSizeOnQueueCheck, "Automatically calculate game size using TMD file when added to queue")
-	interfaceGrid.Attach(getSizeOnQueueCheck, 0, 2, 1, 1)
+	scrolled := gtk.NewScrolledWindow()
+	scrolled.SetPolicy(gtk.PolicyNever, gtk.PolicyAutomatic)
+	scrolled.SetChild(page)
+	scrolled.SetVExpand(true)
 
-	stack.AddTitled(interfaceGrid, "interface", "Interface")
-
-	// --- Action Buttons ---
-	buttonBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 6)
-	if err != nil {
-		return nil, err
-	}
-	buttonBox.SetHAlign(gtk.ALIGN_END)
-	mainBox.PackEnd(buttonBox, false, false, 0)
-
-	saveButton, err := gtk.ButtonNewWithLabel("Save and Apply")
-	if err != nil {
-		return nil, err
-	}
-	saveButton.SetCanDefault(true)
-	SetupButtonAccessibility(saveButton, "Save all configuration changes and apply them immediately")
-	buttonBox.PackStart(saveButton, false, false, 0)
-
-	closeButton, err := gtk.ButtonNewWithLabel("Close")
-	if err != nil {
-		return nil, err
-	}
+	// --- Actions ---
+	closeButton := gtk.NewButtonWithLabel("Close")
 	SetupButtonAccessibility(closeButton, "Close settings window without saving changes")
-	buttonBox.PackStart(closeButton, false, false, 0)
 
-	dirty := false
-	darkModeCheck.Connect("toggled", func() { dirty = true })
-	rememberPathCheck.Connect("toggled", func() { dirty = true })
-	continueOnErrorCheck.Connect("toggled", func() { dirty = true })
-	suggestRelatedContentCheck.Connect("toggled", func() { dirty = true })
-	showDonationBarCheck.Connect("toggled", func() { dirty = true })
-	getSizeOnQueueCheck.Connect("toggled", func() { dirty = true })
-	downloadPathEntry.Connect("changed", func() { dirty = true })
-	decryptOutputPathEntry.Connect("changed", func() { dirty = true })
+	saveButton := gtk.NewButtonWithLabel("Save and Apply")
+	saveButton.AddCSSClass("suggested-action")
+	saveButton.SetReceivesDefault(true)
+	SetupButtonAccessibility(saveButton, "Save all configuration changes and apply them immediately")
 
-	saveButton.Connect("clicked", func() {
-		config.DarkMode = darkModeCheck.GetActive()
-		newPath, getTextErr := downloadPathEntry.GetText()
-		if getTextErr != nil {
-			ShowErrorDialog(win, getTextErr)
-			return
-		}
+	buttonBox := gtk.NewBox(gtk.OrientationHorizontal, 6)
+	buttonBox.SetHAlign(gtk.AlignEnd)
+	buttonBox.SetMarginTop(6)
+	buttonBox.SetMarginBottom(6)
+	buttonBox.SetMarginStart(12)
+	buttonBox.SetMarginEnd(12)
+	buttonBox.Append(closeButton)
+	buttonBox.Append(saveButton)
+
+	toolbar := adw.NewToolbarView()
+	toolbar.AddTopBar(header)
+	toolbar.SetContent(scrolled)
+	toolbar.AddBottomBar(buttonBox)
+	win.SetContent(toolbar)
+	win.SetDefaultWidget(saveButton)
+
+	// Comparing the rows against the config is the dirty check; no per-widget
+	// change bookkeeping is needed, and it cannot drift out of sync.
+	windowIsDirty := func() bool {
+		return downloadPathRow.Text() != config.LastSelectedPath ||
+			decryptPathRow.Text() != config.DecryptOutputPath ||
+			rememberPathRow.Active() != config.RememberLastPath ||
+			continueOnErrorRow.Active() != config.ContinueOnError ||
+			inlineProgressRow.Active() != config.UseInlineDownloadUI ||
+			suggestRelatedRow.Active() != config.SuggestRelatedContent ||
+			showDonationBarRow.Active() != config.ShowDonationBar ||
+			getSizeOnQueueRow.Active() != config.GetSizeOnQueue ||
+			darkModeRow.Active() != config.DarkMode
+	}
+
+	saveButton.ConnectClicked(func() {
+		config.DarkMode = darkModeRow.Active()
+		newPath := downloadPathRow.Text()
 		if newPath != "" && !isValidPath(newPath) {
-			errorDialog := gtk.MessageDialogNew(win, gtk.DIALOG_MODAL, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, INVALID_DOWNLOAD_PATH_ERROR_MESSAGE)
-			errorDialog.SetTitle(WINDOW_TITLE_PREFIX + "Error")
-			defer errorDialog.Destroy()
-			errorDialog.Run()
+			showAlert(parentWindow, WINDOW_TITLE_PREFIX+"Error", INVALID_DOWNLOAD_PATH_ERROR_MESSAGE)
 			return
 		}
 
 		config.LastSelectedPath = newPath
-		config.RememberLastPath = rememberPathCheck.GetActive()
-		config.ContinueOnError = continueOnErrorCheck.GetActive()
-		config.SuggestRelatedContent = suggestRelatedContentCheck.GetActive()
-		config.ShowDonationBar = showDonationBarCheck.GetActive()
-		config.GetSizeOnQueue = getSizeOnQueueCheck.GetActive()
-
-		newDecryptPath, getDecryptErr := decryptOutputPathEntry.GetText()
-		if getDecryptErr != nil {
-			ShowErrorDialog(win, getDecryptErr)
-			return
-		}
-		config.DecryptOutputPath = newDecryptPath
+		config.RememberLastPath = rememberPathRow.Active()
+		config.ContinueOnError = continueOnErrorRow.Active()
+		config.UseInlineDownloadUI = inlineProgressRow.Active()
+		config.SuggestRelatedContent = suggestRelatedRow.Active()
+		config.ShowDonationBar = showDonationBarRow.Active()
+		config.GetSizeOnQueue = getSizeOnQueueRow.Active()
+		config.DecryptOutputPath = decryptPathRow.Text()
 
 		setButtonsSensitive(false, saveButton, closeButton)
 
@@ -304,38 +207,32 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 				setButtonsSensitive(true, saveButton, closeButton)
 
 				if err != nil {
-					ShowErrorDialog(win, err)
-					return
+					ShowErrorDialog(parentWindow, err)
 				}
-
-				dirty = false
 			})
 		}()
 	})
-	closeButton.Connect("clicked", func() {
-		if dirty && !confirmCloseWithoutSaving(win) {
+
+	closeWindow := func() {
+		win.SetVisible(false)
+	}
+	closeButton.ConnectClicked(func() {
+		if !windowIsDirty() {
+			closeWindow()
 			return
 		}
-		win.Hide()
+		confirmCloseWithoutSaving(parentWindow, closeWindow)
 	})
-	win.Connect("delete-event", func() bool {
-		return dirty && !confirmCloseWithoutSaving(win)
+	// Returning true blocks the default close for the async confirmation.
+	win.ConnectCloseRequest(func() bool {
+		if !windowIsDirty() {
+			return false
+		}
+		confirmCloseWithoutSaving(parentWindow, closeWindow)
+		return true
 	})
 
-	configWindow := ConfigWindow{
-		Window: win,
-		Config: config,
-	}
-
-	return &configWindow, nil
-}
-
-func addStyleClass(getStyleContext func() (*gtk.StyleContext, error), className string) {
-	styleContext, err := getStyleContext()
-	if err != nil || styleContext == nil {
-		return
-	}
-	styleContext.AddClass(className)
+	return &ConfigWindow{Window: parentWindow, Config: config}, nil
 }
 
 func setButtonsSensitive(sensitive bool, buttons ...*gtk.Button) {
@@ -346,10 +243,21 @@ func setButtonsSensitive(sensitive bool, buttons ...*gtk.Button) {
 	}
 }
 
-func confirmCloseWithoutSaving(parent *gtk.Window) bool {
-	confirm := gtk.MessageDialogNew(parent, gtk.DIALOG_MODAL, gtk.MESSAGE_WARNING, gtk.BUTTONS_YES_NO, UNSAVED_CHANGES_CONFIRM_MESSAGE)
-	confirm.SetTitle(WINDOW_TITLE_PREFIX + "Unsaved Changes")
-	response := confirm.Run()
-	confirm.Destroy()
-	return response == gtk.RESPONSE_YES
+func confirmCloseWithoutSaving(parent *gtk.Window, onDiscard func()) {
+	dialog := adw.NewAlertDialog(WINDOW_TITLE_PREFIX+"Unsaved Changes", UNSAVED_CHANGES_CONFIRM_MESSAGE)
+	dialog.AddResponse("cancel", "Keep Editing")
+	dialog.AddResponse("discard", "Discard")
+	dialog.SetDefaultResponse("cancel")
+	dialog.SetCloseResponse("cancel")
+	dialog.SetResponseAppearance("discard", adw.ResponseDestructive)
+
+	var anchor gtk.Widgetter
+	if parent != nil {
+		anchor = parent
+	}
+	dialog.Choose(context.Background(), anchor, func(res gio.AsyncResulter) {
+		if dialog.ChooseFinish(res) == "discard" && onDiscard != nil {
+			onDiscard()
+		}
+	})
 }

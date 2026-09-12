@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gotk3/gotk3/gtk"
+	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 )
 
 const (
@@ -77,12 +77,9 @@ func fetchSupporterCount(client *http.Client) (int, bool) {
 }
 
 func (mw *MainWindow) newSupporterLabel() *gtk.Label {
-	label, err := gtk.LabelNew(supporterCountText(mw.supporterCount))
-	if err != nil {
-		return nil
-	}
-	addStyleClass(label.GetStyleContext, "supporter-count")
-	label.SetHAlign(gtk.ALIGN_CENTER)
+	label := gtk.NewLabel(supporterCountText(mw.supporterCount))
+	label.AddCSSClass("supporter-count")
+	label.SetHAlign(gtk.AlignCenter)
 	mw.supporterLabels = append(mw.supporterLabels, label)
 	return label
 }

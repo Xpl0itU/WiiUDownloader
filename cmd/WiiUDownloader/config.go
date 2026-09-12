@@ -24,8 +24,12 @@ type Config struct {
 	RememberLastPath        bool   `json:"rememberLastPath"`
 	ShowDonationBar         bool   `json:"showDonationBar"`
 	GetSizeOnQueue          bool   `json:"getSizeOnQueue"`
-	saveConfigCallback      func()
-	saveMutex               *sync.Mutex
+	// UseInlineDownloadUI is the experiment: report a download run inside the
+	// queue pane instead of the separate progress window. The window is still
+	// built either way, so this is the only switch needed to go back.
+	UseInlineDownloadUI bool `json:"useInlineDownloadUI"`
+	saveConfigCallback  func()
+	saveMutex           *sync.Mutex
 }
 
 const (
@@ -52,6 +56,7 @@ func getDefaultConfig() *Config {
 		RememberLastPath:        false,
 		ShowDonationBar:         true,
 		GetSizeOnQueue:          true,
+		UseInlineDownloadUI:     true,
 		saveConfigCallback:      nil,
 		saveMutex:               &sync.Mutex{},
 	}

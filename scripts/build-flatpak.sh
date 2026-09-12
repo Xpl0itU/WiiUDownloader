@@ -3,9 +3,9 @@
 # `WiiUDownloader` binary the AppImage build produces.
 #
 # Requires Docker (Flatpak can't run natively on macOS; works on Linux too).
-# The flatpak bundle points at the freedesktop 25.08 runtime for GTK3 and just
-# installs the prebuilt binary — it does NOT recompile, so the binary (and the
-# title database it embeds) is identical to the AppImage release.
+# The flatpak bundle points at the GNOME 50 runtime for GTK4 and just installs
+# the prebuilt binary — it does NOT recompile, so the binary (and the title
+# database it embeds) is identical to the AppImage release.
 #
 # Usage:
 #   ./scripts/build-flatpak.sh                       # arch = host arch
@@ -62,8 +62,8 @@ docker run --rm --privileged -e QARCH="$QARCH" -e OUT="$OUT" \
 set -e
 mkdir -p /var/lib/dbus
 [ -f /var/lib/dbus/machine-id ] || dbus-uuidgen > /var/lib/dbus/machine-id
-flatpak install -y flathub org.freedesktop.Platform//25.08
-flatpak install -y flathub org.freedesktop.Sdk//25.08
+flatpak install -y flathub org.gnome.Platform//50
+flatpak install -y flathub org.gnome.Sdk//50
 flatpak-builder --user --arch="$QARCH" --repo="$OUT/repo" --force-clean \
   --disable-rofiles-fuse --state-dir="$OUT/.state" \
   "$OUT/build-dir" packaging/flatpak/io.github.xpl0itu.wiiudownloader.json

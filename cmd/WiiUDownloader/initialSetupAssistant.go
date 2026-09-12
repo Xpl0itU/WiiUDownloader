@@ -5,19 +5,28 @@ import (
 	"strings"
 
 	wiiudownloader "github.com/Xpl0itU/WiiUDownloader"
-	"github.com/Xpl0itU/dialog"
-	"github.com/gotk3/gotk3/gdk"
-	"github.com/gotk3/gotk3/glib"
-	"github.com/gotk3/gotk3/gtk"
+	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
+	"github.com/diamondburned/gotk4/pkg/gdk/v4"
+	glib "github.com/diamondburned/gotk4/pkg/glib/v2"
+	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 )
 
+// InitialSetupAssistantWindow is the first-run wizard. GtkAssistant has been
+// deprecated since GTK 4.10 with no replacement, so the step bar is a
+// GtkListBox and the steps are pages of a GtkStack.
 type InitialSetupAssistantWindow struct {
-	assistantWindow   *gtk.Assistant
+	window            *gtk.Window
+	adwWindow         *adw.Window
+	headerBar         *adw.HeaderBar
+	stack             *gtk.Stack
+	stepList          *gtk.ListBox
+	stepRows          []*gtk.ListBoxRow
+	pageTitles        []string
+	setPage           func(int)
 	config            *Config
 	skipButton        *gtk.Button
 	nextButton        *gtk.Button
 	backButton        *gtk.Button
-	finishButton      *gtk.Button
 	postSetupCallback func()
 }
 
@@ -34,446 +43,324 @@ const (
 	SETUP_SUB_TEXT_SPACING      = 2
 	SETUP_SUMMARY_SPACING       = 4
 	SETUP_SUMMARY_MARGIN        = 8
+	SETUP_STACK_TRANSITION_MS   = 180
 )
+
+// setupPageBox applies the wizard's page margins.
+func setupPageBox(spacing int) *gtk.Box {
+	box := gtk.NewBox(gtk.OrientationVertical, 0)
+	box.SetSpacing(spacing)
+	box.SetMarginTop(SETUP_PAGE_BORDER_WIDTH)
+	box.SetMarginBottom(SETUP_PAGE_BORDER_WIDTH)
+	box.SetMarginStart(SETUP_PAGE_BORDER_WIDTH)
+	box.SetMarginEnd(SETUP_PAGE_BORDER_WIDTH)
+	return box
+}
 
 func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindow, error) {
 	var performPostSetup func()
 
-	assistant, err := gtk.AssistantNew()
-	if err != nil {
-		return nil, err
-	}
-	assistant.Connect("cancel", func() {
-		assistant.Destroy()
-	})
-	assistant.SetTitle(WINDOW_TITLE_PREFIX + "Initial Setup")
-	assistant.SetDefaultSize(INITIAL_SETUP_WINDOW_WIDTH, INITIAL_SETUP_WINDOW_HEIGHT)
-	assistant.SetPosition(gtk.WIN_POS_CENTER)
-	assistant.SetModal(true)
+	adwWin := adw.NewWindow()
+	win := &adwWin.Window
+	win.SetTitle(WINDOW_TITLE_PREFIX + "Initial Setup")
+	win.SetDefaultSize(INITIAL_SETUP_WINDOW_WIDTH, INITIAL_SETUP_WINDOW_HEIGHT)
+	win.SetModal(true)
+	win.AddCSSClass("setup-wizard")
 
-	actionBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 6)
-	if err != nil {
-		return nil, err
-	}
+	headerBar := adw.NewHeaderBar()
+	windowTitle := adw.NewWindowTitle("Initial Setup", "")
+	headerBar.SetTitleWidget(windowTitle)
 
-	skipButton, err := gtk.ButtonNewWithLabel("Skip")
-	if err != nil {
-		return nil, err
-	}
-	SetupButtonAccessibility(skipButton, "Skip the initial setup wizard and start using the application with default settings")
-
-	backButton, err := gtk.ButtonNewWithLabel("Back")
-	if err != nil {
-		return nil, err
-	}
+	// The button row is identical on every step: Skip on the start side, Back
+	// and one primary button whose label and enabled state are all that change.
+	backButton := gtk.NewButtonWithLabel("Back")
 	SetupButtonAccessibility(backButton, "Go back to the previous step")
 
-	nextButton, err := gtk.ButtonNewWithLabel("Next")
-	if err != nil {
-		return nil, err
-	}
+	nextButton := gtk.NewButtonWithLabel("Next")
 	SetupButtonAccessibility(nextButton, "Proceed to the next step")
+	nextButton.AddCSSClass("suggested-action")
 
-	finishButton, err := gtk.ButtonNewWithLabel("Finish")
-	if err != nil {
-		return nil, err
-	}
-	SetupButtonAccessibility(finishButton, "Complete the initial setup")
-	finishContext, err := finishButton.GetStyleContext()
-	if err != nil {
-		return nil, err
-	}
-	finishContext.AddClass("suggested-action")
+	skipButton := gtk.NewButtonWithLabel("Skip")
+	skipButton.AddCSSClass("flat")
+	SetupButtonAccessibility(skipButton, "Skip the initial setup wizard and start using the application with default settings")
 
-	actionBox.PackStart(skipButton, false, false, 0)
-	actionBox.PackStart(backButton, false, false, 0)
-	actionBox.PackStart(nextButton, false, false, 0)
-	actionBox.PackStart(finishButton, false, false, 0)
+	actionBox := gtk.NewBox(gtk.OrientationHorizontal, 6)
+	actionBox.SetHAlign(gtk.AlignEnd)
+	actionBox.Append(backButton)
+	actionBox.Append(nextButton)
 
-	assistant.AddActionWidget(actionBox)
+	actionRow := gtk.NewBox(gtk.OrientationHorizontal, 12)
+	actionRow.AddCSSClass("setup-actions")
+	actionRow.Append(skipButton)
+	actionSpacer := gtk.NewLabel("")
+	actionSpacer.SetHExpand(true)
+	actionRow.Append(actionSpacer)
+	actionRow.Append(actionBox)
 
-	page1, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
-	if err != nil {
-		return nil, err
-	}
-	page1.SetBorderWidth(SETUP_PAGE_BORDER_WIDTH)
-	page1.SetSpacing(SETUP_PAGE_SPACING_LARGE)
+	stack := gtk.NewStack()
+	stack.SetTransitionType(gtk.StackTransitionTypeSlideLeftRight)
+	stack.SetTransitionDuration(SETUP_STACK_TRANSITION_MS)
+	stack.SetHExpand(true)
+	stack.SetVExpand(true)
 
-	page1Label, err := gtk.LabelNew("")
-	if err != nil {
-		return nil, err
-	}
+	// Only the page on screen may change the Next button, so each page's
+	// completeness is stored here and the button state is always derived through
+	// refreshNext. Storage is deliberately always complete: an unset path is
+	// asked for at the first download, so the wizard must not block on it.
+	complete := []bool{true, true, true, true, true}
+
+	currentPage := 0
+	refreshNext := func() {}
+
+	page1 := setupPageBox(SETUP_PAGE_SPACING_LARGE)
+
+	page1Label := gtk.NewLabel("")
 	page1Label.SetMarkup("<span font='18' weight='bold'>Welcome to WiiUDownloader</span>")
-	page1Label.SetHAlign(gtk.ALIGN_START)
-	page1.PackStart(page1Label, false, false, 0)
+	page1Label.SetHAlign(gtk.AlignStart)
+	page1.Append(page1Label)
 
-	page1SubLabel, err := gtk.LabelNew("")
-	if err != nil {
-		return nil, err
-	}
+	page1SubLabel := gtk.NewLabel("")
 	page1SubLabel.SetMarkup("<span font='11' alpha='85%'>This setup wizard will guide you through the initial configuration in just a few steps. You can modify these settings anytime later in the preferences.</span>")
-	page1SubLabel.SetLineWrap(true)
-	page1SubLabel.SetHAlign(gtk.ALIGN_START)
-	page1.PackStart(page1SubLabel, false, false, 0)
+	page1SubLabel.SetWrap(true)
+	page1SubLabel.SetHAlign(gtk.AlignStart)
+	page1.Append(page1SubLabel)
 
-	spacer, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
-	if err != nil {
-		return nil, err
-	}
-	page1.PackStart(spacer, true, true, 0)
+	spacer := gtk.NewBox(gtk.OrientationVertical, 0)
+	spacer.SetVExpand(true)
+	page1.Append(spacer)
 
-	infoBox, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
-	if err != nil {
-		return nil, err
-	}
+	infoBox := gtk.NewBox(gtk.OrientationVertical, 0)
 	infoBox.SetSpacing(SETUP_INFO_SPACING)
 
-	info1, err := gtk.LabelNew("")
-	if err != nil {
-		return nil, err
-	}
+	info1 := gtk.NewLabel("")
 	info1.SetMarkup("<span font='10' alpha='80%'>▸ Select your preferred game regions</span>")
-	info1.SetHAlign(gtk.ALIGN_START)
-	infoBox.PackStart(info1, false, false, 0)
+	info1.SetHAlign(gtk.AlignStart)
+	infoBox.Append(info1)
 
-	info2, err := gtk.LabelNew("")
-	if err != nil {
-		return nil, err
-	}
+	info2 := gtk.NewLabel("")
 	info2.SetMarkup("<span font='10' alpha='80%'>▸ Choose target platforms (emulator and/or console)</span>")
-	info2.SetHAlign(gtk.ALIGN_START)
-	infoBox.PackStart(info2, false, false, 0)
+	info2.SetHAlign(gtk.AlignStart)
+	infoBox.Append(info2)
 
-	info3, err := gtk.LabelNew("")
-	if err != nil {
-		return nil, err
-	}
+	info3 := gtk.NewLabel("")
 	info3.SetMarkup("<span font='10' alpha='80%'>▸ Set the storage location for decrypted game files</span>")
-	info3.SetHAlign(gtk.ALIGN_START)
-	infoBox.PackStart(info3, false, false, 0)
+	info3.SetHAlign(gtk.AlignStart)
+	infoBox.Append(info3)
 
-	info4, err := gtk.LabelNew("")
-	if err != nil {
-		return nil, err
-	}
+	info4 := gtk.NewLabel("")
 	info4.SetMarkup("<span font='10' alpha='80%'>▸ Review and confirm your configuration</span>")
-	info4.SetHAlign(gtk.ALIGN_START)
-	infoBox.PackStart(info4, false, false, 0)
+	info4.SetHAlign(gtk.AlignStart)
+	infoBox.Append(info4)
 
-	page1.PackStart(infoBox, false, false, 8)
+	page1.Append(infoBox)
 
-	page2, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
-	if err != nil {
-		return nil, err
-	}
-	page2.SetBorderWidth(SETUP_PAGE_BORDER_WIDTH)
-	page2.SetSpacing(SETUP_PAGE_SPACING)
+	page2 := setupPageBox(SETUP_PAGE_SPACING)
 
-	page2Label, err := gtk.LabelNew("")
-	if err != nil {
-		return nil, err
-	}
+	page2Label := gtk.NewLabel("")
 	page2Label.SetMarkup("<span font='14' weight='bold'>Which regions do you want to download from?</span>")
-	page2Label.SetHAlign(gtk.ALIGN_START)
-	page2.PackStart(page2Label, false, false, 0)
+	page2Label.SetHAlign(gtk.AlignStart)
+	page2.Append(page2Label)
 
-	page2Desc, err := gtk.LabelNew("")
-	if err != nil {
-		return nil, err
-	}
+	page2Desc := gtk.NewLabel("")
 	page2Desc.SetMarkup("<span font='11' alpha='80%'>Select one or more regions to enable downloading games from their respective game libraries.</span>")
-	page2Desc.SetHAlign(gtk.ALIGN_START)
-	page2Desc.SetLineWrap(true)
-	page2.PackStart(page2Desc, false, false, 0)
+	page2Desc.SetHAlign(gtk.AlignStart)
+	page2Desc.SetWrap(true)
+	page2.Append(page2Desc)
 
-	regionList, err := gtk.ListBoxNew()
-	if err != nil {
-		return nil, err
-	}
-	regionList.SetSelectionMode(gtk.SELECTION_SINGLE)
+	regionList := gtk.NewListBox()
+	regionList.SetSelectionMode(gtk.SelectionSingle)
 	regionList.SetActivateOnSingleClick(false)
-	page2.PackStart(regionList, true, true, 8)
+	regionList.SetVExpand(true)
+	regionList.SetMarginTop(8)
+	page2.Append(regionList)
 
 	selectedRegionCheckboxes := uint8(0)
 
-	europeRow, err := gtk.ListBoxRowNew()
-	if err != nil {
-		return nil, err
-	}
+	europeRow := gtk.NewListBoxRow()
 	europeRow.SetSelectable(true)
 	europeRow.SetActivatable(true)
-	europeContainer, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
-	if err != nil {
-		return nil, err
-	}
+	europeContainer := gtk.NewBox(gtk.OrientationHorizontal, 0)
 	applySetupRowStyle(europeContainer)
-	europeRow.Add(europeContainer)
+	europeRow.SetChild(europeContainer)
 
-	europeCheck, err := gtk.CheckButtonNewWithLabel("")
-	if err != nil {
-		return nil, err
-	}
+	europeCheck := gtk.NewCheckButtonWithLabel("")
 	europeCheck.SetActive(true)
 	selectedRegionCheckboxes++
-	europeCheck.SetVAlign(gtk.ALIGN_CENTER)
+	europeCheck.SetVAlign(gtk.AlignCenter)
 	SetupCheckButtonAccessibility(europeCheck, "Include games from the European region")
-	europeContainer.PackStart(europeCheck, false, false, 0)
+	europeContainer.Append(europeCheck)
 
-	europeLabel, err := gtk.LabelNew("")
-	if err != nil {
-		return nil, err
-	}
+	europeLabel := gtk.NewLabel("")
 	europeLabel.SetMarkup("<span font='12' weight='600'>Europe</span>")
-	europeLabel.SetHAlign(gtk.ALIGN_START)
-	europeLabel.SetVAlign(gtk.ALIGN_CENTER)
-	europeContainer.PackStart(europeLabel, true, true, 0)
-	regionList.Add(europeRow)
+	europeLabel.SetHAlign(gtk.AlignStart)
+	europeLabel.SetVAlign(gtk.AlignCenter)
+	europeLabel.SetHExpand(true)
+	europeContainer.Append(europeLabel)
+	regionList.Append(europeRow)
 
-	usaRow, err := gtk.ListBoxRowNew()
-	if err != nil {
-		return nil, err
-	}
+	usaRow := gtk.NewListBoxRow()
 	usaRow.SetSelectable(true)
 	usaRow.SetActivatable(true)
-	usaContainer, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
-	if err != nil {
-		return nil, err
-	}
+	usaContainer := gtk.NewBox(gtk.OrientationHorizontal, 0)
 	applySetupRowStyle(usaContainer)
-	usaRow.Add(usaContainer)
+	usaRow.SetChild(usaContainer)
 
-	usaCheck, err := gtk.CheckButtonNewWithLabel("")
-	if err != nil {
-		return nil, err
-	}
+	usaCheck := gtk.NewCheckButtonWithLabel("")
 	usaCheck.SetActive(true)
 	selectedRegionCheckboxes++
-	usaCheck.SetVAlign(gtk.ALIGN_CENTER)
+	usaCheck.SetVAlign(gtk.AlignCenter)
 	SetupCheckButtonAccessibility(usaCheck, "Include games from the USA region")
-	usaContainer.PackStart(usaCheck, false, false, 0)
+	usaContainer.Append(usaCheck)
 
-	usaLabel, err := gtk.LabelNew("")
-	if err != nil {
-		return nil, err
-	}
+	usaLabel := gtk.NewLabel("")
 	usaLabel.SetMarkup("<span font='12' weight='600'>USA</span>")
-	usaLabel.SetHAlign(gtk.ALIGN_START)
-	usaLabel.SetVAlign(gtk.ALIGN_CENTER)
-	usaContainer.PackStart(usaLabel, true, true, 0)
-	regionList.Add(usaRow)
+	usaLabel.SetHAlign(gtk.AlignStart)
+	usaLabel.SetVAlign(gtk.AlignCenter)
+	usaLabel.SetHExpand(true)
+	usaContainer.Append(usaLabel)
+	regionList.Append(usaRow)
 
-	japanRow, err := gtk.ListBoxRowNew()
-	if err != nil {
-		return nil, err
-	}
+	japanRow := gtk.NewListBoxRow()
 	japanRow.SetSelectable(true)
 	japanRow.SetActivatable(true)
-	japanContainer, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
-	if err != nil {
-		return nil, err
-	}
+	japanContainer := gtk.NewBox(gtk.OrientationHorizontal, 0)
 	applySetupRowStyle(japanContainer)
-	japanRow.Add(japanContainer)
+	japanRow.SetChild(japanContainer)
 
-	japanCheck, err := gtk.CheckButtonNewWithLabel("")
-	if err != nil {
-		return nil, err
-	}
+	japanCheck := gtk.NewCheckButtonWithLabel("")
 	japanCheck.SetActive(true)
 	selectedRegionCheckboxes++
-	japanCheck.SetVAlign(gtk.ALIGN_CENTER)
+	japanCheck.SetVAlign(gtk.AlignCenter)
 	SetupCheckButtonAccessibility(japanCheck, "Include games from the Japan region")
-	japanContainer.PackStart(japanCheck, false, false, 0)
+	japanContainer.Append(japanCheck)
 
-	japanLabel, err := gtk.LabelNew("")
-	if err != nil {
-		return nil, err
-	}
+	japanLabel := gtk.NewLabel("")
 	japanLabel.SetMarkup("<span font='12' weight='600'>Japan</span>")
-	japanLabel.SetHAlign(gtk.ALIGN_START)
-	japanLabel.SetVAlign(gtk.ALIGN_CENTER)
-	japanContainer.PackStart(japanLabel, true, true, 0)
-	regionList.Add(japanRow)
+	japanLabel.SetHAlign(gtk.AlignStart)
+	japanLabel.SetVAlign(gtk.AlignCenter)
+	japanLabel.SetHExpand(true)
+	japanContainer.Append(japanLabel)
+	regionList.Append(japanRow)
 
 	updateNextButton := func() {
-		count := selectedCount(europeCheck.GetActive(), usaCheck.GetActive(), japanCheck.GetActive())
-		nextButton.SetSensitive(count > 0)
-		assistant.SetPageComplete(page2, count > 0)
+		complete[1] = selectedCount(europeCheck.Active(), usaCheck.Active(), japanCheck.Active()) > 0
+		refreshNext()
 	}
 
-	europeCheck.Connect("toggled", updateNextButton)
-	usaCheck.Connect("toggled", updateNextButton)
-	japanCheck.Connect("toggled", updateNextButton)
+	europeCheck.ConnectToggled(updateNextButton)
+	usaCheck.ConnectToggled(updateNextButton)
+	japanCheck.ConnectToggled(updateNextButton)
 	configureSetupOptionList(regionList,
 		setupOptionRow{row: europeRow, check: europeCheck},
 		setupOptionRow{row: usaRow, check: usaCheck},
 		setupOptionRow{row: japanRow, check: japanCheck},
 	)
 
-	page3, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
-	if err != nil {
-		return nil, err
-	}
-	page3.SetBorderWidth(SETUP_PAGE_BORDER_WIDTH)
-	page3.SetSpacing(SETUP_PAGE_SPACING)
+	page3 := setupPageBox(SETUP_PAGE_SPACING)
 
-	page3Label, err := gtk.LabelNew("")
-	if err != nil {
-		return nil, err
-	}
+	page3Label := gtk.NewLabel("")
 	page3Label.SetMarkup("<span font='14' weight='bold'>Where do you want to play your games?</span>")
-	page3Label.SetHAlign(gtk.ALIGN_START)
-	page3.PackStart(page3Label, false, false, 0)
+	page3Label.SetHAlign(gtk.AlignStart)
+	page3.Append(page3Label)
 
-	page3Desc, err := gtk.LabelNew("")
-	if err != nil {
-		return nil, err
-	}
+	page3Desc := gtk.NewLabel("")
 	page3Desc.SetMarkup("<span font='11' alpha='80%'>Select one or both platforms. CEMU requires decryption, while Wii U keeps files encrypted for console use.</span>")
-	page3Desc.SetHAlign(gtk.ALIGN_START)
-	page3Desc.SetLineWrap(true)
-	page3.PackStart(page3Desc, false, false, 0)
+	page3Desc.SetHAlign(gtk.AlignStart)
+	page3Desc.SetWrap(true)
+	page3.Append(page3Desc)
 
-	platformList, err := gtk.ListBoxNew()
-	if err != nil {
-		return nil, err
-	}
-	platformList.SetSelectionMode(gtk.SELECTION_SINGLE)
+	platformList := gtk.NewListBox()
+	platformList.SetSelectionMode(gtk.SelectionSingle)
 	platformList.SetActivateOnSingleClick(false)
-	page3.PackStart(platformList, true, true, 8)
+	platformList.SetVExpand(true)
+	platformList.SetMarginTop(8)
+	page3.Append(platformList)
 
-	cemuRow, err := gtk.ListBoxRowNew()
-	if err != nil {
-		return nil, err
-	}
+	cemuRow := gtk.NewListBoxRow()
 	cemuRow.SetSelectable(true)
 	cemuRow.SetActivatable(true)
-	cemuOuterContainer, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
-	if err != nil {
-		return nil, err
-	}
+	cemuOuterContainer := gtk.NewBox(gtk.OrientationHorizontal, 0)
 	applySetupRowStyle(cemuOuterContainer)
-	cemuRow.Add(cemuOuterContainer)
+	cemuRow.SetChild(cemuOuterContainer)
 
-	cemuCheck, err := gtk.CheckButtonNewWithLabel("")
-	if err != nil {
-		return nil, err
-	}
+	cemuCheck := gtk.NewCheckButtonWithLabel("")
 	cemuCheck.SetActive(true)
-	cemuCheck.SetVAlign(gtk.ALIGN_START)
+	cemuCheck.SetVAlign(gtk.AlignStart)
 	SetupCheckButtonAccessibility(cemuCheck, "Enable downloads for CEMU emulator with decryption")
-	cemuOuterContainer.PackStart(cemuCheck, false, false, 0)
+	cemuOuterContainer.Append(cemuCheck)
 
-	cemuTextBox, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
-	if err != nil {
-		return nil, err
-	}
+	cemuTextBox := gtk.NewBox(gtk.OrientationVertical, 0)
 	cemuTextBox.SetSpacing(SETUP_SUB_TEXT_SPACING)
+	cemuTextBox.SetHExpand(true)
 
-	cemuMainLabel, err := gtk.LabelNew("")
-	if err != nil {
-		return nil, err
-	}
+	cemuMainLabel := gtk.NewLabel("")
 	cemuMainLabel.SetMarkup("<span font='12' weight='600'>CEMU - Emulator</span>")
-	cemuMainLabel.SetHAlign(gtk.ALIGN_START)
-	cemuTextBox.PackStart(cemuMainLabel, false, false, 0)
+	cemuMainLabel.SetHAlign(gtk.AlignStart)
+	cemuTextBox.Append(cemuMainLabel)
 
-	cemuSubLabel, err := gtk.LabelNew("")
-	if err != nil {
-		return nil, err
-	}
+	cemuSubLabel := gtk.NewLabel("")
 	cemuSubLabel.SetMarkup("<span font='10' alpha='80%'>Decrypt game files for use in the CEMU emulator</span>")
-	cemuSubLabel.SetLineWrap(true)
-	cemuSubLabel.SetHAlign(gtk.ALIGN_START)
-	cemuTextBox.PackStart(cemuSubLabel, false, false, 0)
+	cemuSubLabel.SetWrap(true)
+	cemuSubLabel.SetHAlign(gtk.AlignStart)
+	cemuTextBox.Append(cemuSubLabel)
 
-	cemuOuterContainer.PackStart(cemuTextBox, true, true, 0)
-	platformList.Add(cemuRow)
+	cemuOuterContainer.Append(cemuTextBox)
+	platformList.Append(cemuRow)
 
-	wiiURow, err := gtk.ListBoxRowNew()
-	if err != nil {
-		return nil, err
-	}
+	wiiURow := gtk.NewListBoxRow()
 	wiiURow.SetSelectable(true)
 	wiiURow.SetActivatable(true)
-	wiiUOuterContainer, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
-	if err != nil {
-		return nil, err
-	}
+	wiiUOuterContainer := gtk.NewBox(gtk.OrientationHorizontal, 0)
 	applySetupRowStyle(wiiUOuterContainer)
-	wiiURow.Add(wiiUOuterContainer)
+	wiiURow.SetChild(wiiUOuterContainer)
 
-	wiiUCheck, err := gtk.CheckButtonNewWithLabel("")
-	if err != nil {
-		return nil, err
-	}
+	wiiUCheck := gtk.NewCheckButtonWithLabel("")
 	wiiUCheck.SetActive(true)
-	wiiUCheck.SetVAlign(gtk.ALIGN_START)
+	wiiUCheck.SetVAlign(gtk.AlignStart)
 	SetupCheckButtonAccessibility(wiiUCheck, "Enable downloads for Wii U console with encrypted files")
-	wiiUOuterContainer.PackStart(wiiUCheck, false, false, 0)
+	wiiUOuterContainer.Append(wiiUCheck)
 
-	wiiUTextBox, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
-	if err != nil {
-		return nil, err
-	}
+	wiiUTextBox := gtk.NewBox(gtk.OrientationVertical, 0)
 	wiiUTextBox.SetSpacing(SETUP_SUB_TEXT_SPACING)
+	wiiUTextBox.SetHExpand(true)
 
-	wiiUMainLabel, err := gtk.LabelNew("")
-	if err != nil {
-		return nil, err
-	}
+	wiiUMainLabel := gtk.NewLabel("")
 	wiiUMainLabel.SetMarkup("<span font='12' weight='600'>Wii U Console</span>")
-	wiiUMainLabel.SetHAlign(gtk.ALIGN_START)
-	wiiUTextBox.PackStart(wiiUMainLabel, false, false, 0)
+	wiiUMainLabel.SetHAlign(gtk.AlignStart)
+	wiiUTextBox.Append(wiiUMainLabel)
 
-	wiiUSubLabel, err := gtk.LabelNew("")
-	if err != nil {
-		return nil, err
-	}
+	wiiUSubLabel := gtk.NewLabel("")
 	wiiUSubLabel.SetMarkup("<span font='10' alpha='80%'>Keep encrypted game files for installation on a Wii U console</span>")
-	wiiUSubLabel.SetLineWrap(true)
-	wiiUSubLabel.SetHAlign(gtk.ALIGN_START)
-	wiiUTextBox.PackStart(wiiUSubLabel, false, false, 0)
+	wiiUSubLabel.SetWrap(true)
+	wiiUSubLabel.SetHAlign(gtk.AlignStart)
+	wiiUTextBox.Append(wiiUSubLabel)
 
-	wiiUOuterContainer.PackStart(wiiUTextBox, true, true, 0)
-	platformList.Add(wiiURow)
+	wiiUOuterContainer.Append(wiiUTextBox)
+	platformList.Append(wiiURow)
 	configureSetupOptionList(platformList,
 		setupOptionRow{row: cemuRow, check: cemuCheck},
 		setupOptionRow{row: wiiURow, check: wiiUCheck},
 	)
 	updatePlatformSelection := func() {
-		assistant.SetPageComplete(page3, cemuCheck.GetActive() || wiiUCheck.GetActive())
+		complete[2] = cemuCheck.Active() || wiiUCheck.Active()
+		refreshNext()
 	}
-	cemuCheck.Connect("toggled", updatePlatformSelection)
-	wiiUCheck.Connect("toggled", updatePlatformSelection)
+	cemuCheck.ConnectToggled(updatePlatformSelection)
+	wiiUCheck.ConnectToggled(updatePlatformSelection)
 
 	// --- Storage Page ---
-	pageStorage, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
-	if err != nil {
-		return nil, err
-	}
-	pageStorage.SetBorderWidth(SETUP_PAGE_BORDER_WIDTH)
-	pageStorage.SetSpacing(SETUP_PAGE_SPACING)
+	pageStorage := setupPageBox(SETUP_PAGE_SPACING)
 
-	pageStorageLabel, err := gtk.LabelNew("")
-	if err != nil {
-		return nil, err
-	}
-	pageStorageLabel.SetHAlign(gtk.ALIGN_START)
-	pageStorage.PackStart(pageStorageLabel, false, false, 0)
+	pageStorageLabel := gtk.NewLabel("")
+	pageStorageLabel.SetHAlign(gtk.AlignStart)
+	pageStorage.Append(pageStorageLabel)
 
-	pageStorageDesc, err := gtk.LabelNew("")
-	if err != nil {
-		return nil, err
-	}
-	pageStorageDesc.SetHAlign(gtk.ALIGN_START)
-	pageStorageDesc.SetLineWrap(true)
-	pageStorage.PackStart(pageStorageDesc, false, false, 0)
+	pageStorageDesc := gtk.NewLabel("")
+	pageStorageDesc.SetHAlign(gtk.AlignStart)
+	pageStorageDesc.SetWrap(true)
+	pageStorage.Append(pageStorageDesc)
 
-	downloadPathEntry, err := gtk.EntryNew()
-	if err != nil {
-		return nil, err
-	}
+	downloadPathEntry := gtk.NewEntry()
 	downloadPathEntry.SetPlaceholderText("Select download location...")
 	downloadPathEntry.SetWidthChars(30)
 	downloadPathEntry.SetHExpand(true)
@@ -482,10 +369,7 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	}
 	SetupEntryAccessibility(downloadPathEntry, "Download path", "Folder where downloaded game files will be saved.")
 
-	decryptPathEntry, err := gtk.EntryNew()
-	if err != nil {
-		return nil, err
-	}
+	decryptPathEntry := gtk.NewEntry()
 	decryptPathEntry.SetPlaceholderText("Select decrypted game location...")
 	decryptPathEntry.SetWidthChars(30)
 	decryptPathEntry.SetHExpand(true)
@@ -495,84 +379,57 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	SetupEntryAccessibility(decryptPathEntry, "Decrypted output path", "Optional folder where decrypted game files will be saved. Leave empty to use the download location.")
 
 	// Keeps both row labels the same width so the two entries line up.
-	pathLabelGroup, err := gtk.SizeGroupNew(gtk.SIZE_GROUP_HORIZONTAL)
-	if err != nil {
-		return nil, err
-	}
+	pathLabelGroup := gtk.NewSizeGroup(gtk.SizeGroupHorizontal)
 
-	newPathRow := func(labelText string, entry *gtk.Entry, browseTitle string, clearLabel string) (*gtk.Box, error) {
-		row, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 6)
-		if err != nil {
-			return nil, err
-		}
+	newPathRow := func(labelText string, entry *gtk.Entry, browseTitle string, clearLabel string) *gtk.Box {
+		row := gtk.NewBox(gtk.OrientationHorizontal, 6)
 		row.SetMarginTop(8)
 
-		label, err := gtk.LabelNew(labelText)
-		if err != nil {
-			return nil, err
-		}
-		label.SetHAlign(gtk.ALIGN_START)
+		label := gtk.NewLabel(labelText)
+		label.SetHAlign(gtk.AlignStart)
 		pathLabelGroup.AddWidget(label)
-		row.PackStart(label, false, false, 0)
-		row.PackStart(entry, true, true, 0)
+		row.Append(label)
+		entry.SetHExpand(true)
+		row.Append(entry)
 
-		// labelText is a display label such as "Download path:"; strip the
-		// punctuation so it reads properly in accessibility descriptions.
+		// Strip the trailing colon for the accessibility description.
 		pathName := strings.ToLower(strings.TrimSuffix(labelText, ":"))
 
-		browseButton, err := gtk.ButtonNewWithLabel("Browse")
-		if err != nil {
-			return nil, err
-		}
+		browseButton := gtk.NewButtonWithLabel("Browse")
 		SetupButtonAccessibility(browseButton, "Browse for "+pathName)
-		browseButton.Connect("clicked", func() {
-			selectedPath, err := dialog.Directory().Title(browseTitle).Browse()
-			if err == nil && selectedPath != "" {
-				entry.SetText(selectedPath)
-			}
+		browseButton.ConnectClicked(func() {
+			chooseFolder(win, browseTitle, "", func(selectedPath string) {
+				if selectedPath != "" {
+					entry.SetText(selectedPath)
+				}
+			})
 		})
 
-		clearButton, err := gtk.ButtonNewWithLabel(clearLabel)
-		if err != nil {
-			return nil, err
-		}
+		clearButton := gtk.NewButtonWithLabel(clearLabel)
 		SetupButtonAccessibility(clearButton, "Clear "+pathName)
-		addStyleClass(clearButton.GetStyleContext, "destructive-action")
-		clearButton.Connect("clicked", func() {
+		clearButton.AddCSSClass("destructive-action")
+		clearButton.ConnectClicked(func() {
 			entry.SetText("")
 		})
 
-		buttonBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
-		if err != nil {
-			return nil, err
-		}
-		addStyleClass(buttonBox.GetStyleContext, "linked")
-		buttonBox.PackStart(browseButton, true, true, 0)
-		buttonBox.PackStart(clearButton, true, true, 0)
-		row.PackStart(buttonBox, false, false, 0)
-		return row, nil
+		buttonBox := gtk.NewBox(gtk.OrientationHorizontal, 0)
+		buttonBox.AddCSSClass("linked")
+		buttonBox.Append(browseButton)
+		buttonBox.Append(clearButton)
+		row.Append(buttonBox)
+		return row
 	}
 
-	downloadPathRow, err := newPathRow("Download path:", downloadPathEntry, WINDOW_TITLE_PREFIX+"Select Download Path", "Clear")
-	if err != nil {
-		return nil, err
-	}
-	pageStorage.PackStart(downloadPathRow, false, false, 0)
+	downloadPathRow := newPathRow("Download path:", downloadPathEntry, WINDOW_TITLE_PREFIX+"Select Download Path", "Clear")
+	pageStorage.Append(downloadPathRow)
 
-	decryptPathRow, err := newPathRow("Decrypted output path:", decryptPathEntry, WINDOW_TITLE_PREFIX+"Select Decrypted Output Path", "Clear")
-	if err != nil {
-		return nil, err
-	}
-	pageStorage.PackStart(decryptPathRow, false, false, 0)
+	decryptPathRow := newPathRow("Decrypted output path:", decryptPathEntry, WINDOW_TITLE_PREFIX+"Select Decrypted Output Path", "Clear")
+	pageStorage.Append(decryptPathRow)
 
 	updateStoragePage := func() {
-		cemu := cemuCheck.GetActive()
-		wiiU := wiiUCheck.GetActive()
+		cemu := cemuCheck.Active()
+		wiiU := wiiUCheck.Active()
 		decryptOnly := cemu && !wiiU
-		downloadPath, _ := downloadPathEntry.GetText()
-		decryptPath, _ := decryptPathEntry.GetText()
-		downloadPath = strings.TrimSpace(downloadPath)
-		decryptPath = strings.TrimSpace(decryptPath)
 
 		switch {
 		case decryptOnly:
@@ -591,105 +448,64 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 
 		downloadPathRow.SetVisible(!decryptOnly)
 		decryptPathRow.SetVisible(cemu)
-		storageComplete := (wiiU && downloadPath != "") || (decryptOnly && decryptPath != "") || (cemu && wiiU && downloadPath != "")
-		assistant.SetPageComplete(pageStorage, storageComplete)
 	}
-	downloadPathEntry.Connect("changed", updateStoragePage)
-	decryptPathEntry.Connect("changed", updateStoragePage)
-	cemuCheck.Connect("toggled", updateStoragePage)
-	wiiUCheck.Connect("toggled", updateStoragePage)
+	downloadPathEntry.ConnectChanged(updateStoragePage)
+	decryptPathEntry.ConnectChanged(updateStoragePage)
+	cemuCheck.ConnectToggled(updateStoragePage)
+	wiiUCheck.ConnectToggled(updateStoragePage)
 
-	storageSpacer, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
-	if err != nil {
-		return nil, err
-	}
-	pageStorage.PackStart(storageSpacer, true, true, 0)
+	storageSpacer := gtk.NewBox(gtk.OrientationVertical, 0)
+	storageSpacer.SetVExpand(true)
+	pageStorage.Append(storageSpacer)
 
 	// --- Finish Page ---
-	page4, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
-	if err != nil {
-		return nil, err
-	}
-	page4.SetBorderWidth(SETUP_PAGE_BORDER_WIDTH)
-	page4.SetSpacing(SETUP_PAGE_SPACING_LARGE)
+	page4 := setupPageBox(SETUP_PAGE_SPACING_LARGE)
 
-	assistant.AppendPage(page1)
-	assistant.AppendPage(page2)
-	assistant.AppendPage(page3)
-	assistant.AppendPage(pageStorage)
-	assistant.AppendPage(page4)
-
-	page4Label, err := gtk.LabelNew("")
-	if err != nil {
-		return nil, err
-	}
+	page4Label := gtk.NewLabel("")
 	page4Label.SetMarkup("<span font='18' weight='bold'>All Set!</span>")
-	page4Label.SetHAlign(gtk.ALIGN_START)
-	page4.PackStart(page4Label, false, false, 0)
+	page4Label.SetHAlign(gtk.AlignStart)
+	page4.Append(page4Label)
 
-	page4SubLabel, err := gtk.LabelNew("")
-	if err != nil {
-		return nil, err
-	}
+	page4SubLabel := gtk.NewLabel("")
 	page4SubLabel.SetMarkup("<span font='11' alpha='80%'>WiiUDownloader is now configured and ready to use. You can start downloading games immediately or adjust settings in the preferences menu.</span>")
-	page4SubLabel.SetLineWrap(true)
-	page4SubLabel.SetHAlign(gtk.ALIGN_START)
-	page4.PackStart(page4SubLabel, false, false, 0)
+	page4SubLabel.SetWrap(true)
+	page4SubLabel.SetHAlign(gtk.AlignStart)
+	page4.Append(page4SubLabel)
 
-	spacer4, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
-	if err != nil {
-		return nil, err
-	}
-	page4.PackStart(spacer4, true, true, 0)
+	spacer4 := gtk.NewBox(gtk.OrientationVertical, 0)
+	spacer4.SetVExpand(true)
+	page4.Append(spacer4)
 
-	summaryLabel, err := gtk.LabelNew("")
-	if err != nil {
-		return nil, err
-	}
+	summaryLabel := gtk.NewLabel("")
 	summaryLabel.SetMarkup("<span font='10' weight='600'>Configuration Summary:</span>")
-	summaryLabel.SetHAlign(gtk.ALIGN_START)
-	page4.PackStart(summaryLabel, false, false, 0)
+	summaryLabel.SetHAlign(gtk.AlignStart)
+	page4.Append(summaryLabel)
 
-	summaryBox, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
-	if err != nil {
-		return nil, err
-	}
+	summaryBox := gtk.NewBox(gtk.OrientationVertical, 0)
 	summaryBox.SetSpacing(SETUP_SUMMARY_SPACING)
 	summaryBox.SetMarginTop(SETUP_SUMMARY_MARGIN)
 	summaryBox.SetMarginStart(SETUP_SUMMARY_MARGIN)
-	page4.PackStart(summaryBox, false, false, 0)
+	page4.Append(summaryBox)
 
-	summaryRegions, err := gtk.LabelNew("")
-	if err != nil {
-		return nil, err
-	}
+	summaryRegions := gtk.NewLabel("")
 	summaryRegions.SetMarkup("<span font='10' alpha='85%'>✓ Regions: Europe, USA, Japan</span>")
-	summaryRegions.SetHAlign(gtk.ALIGN_START)
-	summaryBox.PackStart(summaryRegions, false, false, 0)
+	summaryRegions.SetHAlign(gtk.AlignStart)
+	summaryBox.Append(summaryRegions)
 
-	summaryPlatforms, err := gtk.LabelNew("")
-	if err != nil {
-		return nil, err
-	}
+	summaryPlatforms := gtk.NewLabel("")
 	summaryPlatforms.SetMarkup("<span font='10' alpha='85%'>✓ Platforms: CEMU + Wii U</span>")
-	summaryPlatforms.SetHAlign(gtk.ALIGN_START)
-	summaryBox.PackStart(summaryPlatforms, false, false, 0)
+	summaryPlatforms.SetHAlign(gtk.AlignStart)
+	summaryBox.Append(summaryPlatforms)
 
-	summaryDownloads, err := gtk.LabelNew("")
-	if err != nil {
-		return nil, err
-	}
+	summaryDownloads := gtk.NewLabel("")
 	summaryDownloads.SetMarkup("<span font='10' alpha='85%'>✓ Downloads: same as download</span>")
-	summaryDownloads.SetHAlign(gtk.ALIGN_START)
-	summaryBox.PackStart(summaryDownloads, false, false, 0)
+	summaryDownloads.SetHAlign(gtk.AlignStart)
+	summaryBox.Append(summaryDownloads)
 
-	summaryDecrypted, err := gtk.LabelNew("")
-	if err != nil {
-		return nil, err
-	}
-	summaryDecrypted.SetHAlign(gtk.ALIGN_START)
+	summaryDecrypted := gtk.NewLabel("")
+	summaryDecrypted.SetHAlign(gtk.AlignStart)
 	summaryDecrypted.SetVisible(false)
-	summaryBox.PackStart(summaryDecrypted, false, false, 0)
+	summaryBox.Append(summaryDecrypted)
 
 	pages := []struct {
 		widget *gtk.Box
@@ -703,108 +519,166 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	}
 
 	lastPageIndex := len(pages) - 1
-
-	titles := make([]string, 0, len(pages))
 	for _, p := range pages {
-		titles = append(titles, p.title)
-		assistant.SetPageComplete(p.widget, p.widget != pageStorage)
-		assistant.SetPageType(p.widget, gtk.ASSISTANT_PAGE_CUSTOM)
-		assistant.SetPageTitle(p.widget, p.title)
+		stack.AddNamed(p.widget, p.title)
 	}
-	pinSetupStepBarWidth(assistant, titles)
 
-	applyTitle := func() {
-		pageTitle := "Initial Setup"
-		if page := assistant.GetCurrentPage(); page >= 0 && page < len(pages) {
-			pageTitle = pages[page].title
-		}
-		want := WINDOW_TITLE_PREFIX + pageTitle
-		if current, _ := assistant.GetTitle(); current != want {
-			assistant.SetTitle(want)
-		}
+	stepList := gtk.NewListBox()
+	stepList.AddCSSClass("navigation-sidebar")
+	stepList.AddCSSClass("setup-sidebar")
+	stepList.SetSelectionMode(gtk.SelectionSingle)
+	stepList.SetActivateOnSingleClick(true)
+	SetupListViewAccessibility(stepList)
+
+	// A size group keeps every title the width of the widest one, so the sidebar
+	// cannot grow as the bold "current step" moves between pages.
+	stepLabelGroup := gtk.NewSizeGroup(gtk.SizeGroupHorizontal)
+
+	stepRows := make([]*gtk.ListBoxRow, 0, len(pages))
+	for i, page := range pages {
+		row := gtk.NewListBoxRow()
+		rowBox := gtk.NewBox(gtk.OrientationHorizontal, 10)
+		rowBox.AddCSSClass("setup-step-row")
+		badge := gtk.NewLabel(fmt.Sprintf("%d", i+1))
+		badge.AddCSSClass("setup-step-badge")
+		label := gtk.NewLabel(page.title)
+		label.SetHAlign(gtk.AlignStart)
+		label.SetHExpand(true)
+		stepLabelGroup.AddWidget(label)
+		rowBox.Append(badge)
+		rowBox.Append(label)
+		row.SetChild(rowBox)
+		stepList.Append(row)
+		stepRows = append(stepRows, row)
 	}
-	assistant.Connect("notify::title", applyTitle)
-	applyTitle()
+
+	sidebar := gtk.NewBox(gtk.OrientationVertical, 0)
+	sidebar.AddCSSClass("setup-sidebar-box")
+	sidebar.Append(stepList)
+
+	contentBox := gtk.NewBox(gtk.OrientationVertical, 0)
+	contentBox.SetHExpand(true)
+	contentBox.SetVExpand(true)
+	contentBox.Append(stack)
+
+	body := gtk.NewBox(gtk.OrientationHorizontal, 0)
+	body.SetVExpand(true)
+	body.Append(sidebar)
+	body.Append(contentBox)
+
+	root := gtk.NewBox(gtk.OrientationVertical, 0)
+	root.Append(body)
+	root.Append(actionRow)
+
+	view := adw.NewToolbarView()
+	view.AddTopBar(headerBar)
+	view.SetContent(root)
+	adwWin.SetContent(view)
+
+	showPage := func(index int) {}
+	applyTitle := func(index int) {
+		pageTitle := "Initial Setup"
+		if index >= 0 && index < len(pages) {
+			pageTitle = pages[index].title
+		}
+		win.SetTitle(WINDOW_TITLE_PREFIX + pageTitle)
+		windowTitle.SetTitle(pageTitle)
+		windowTitle.SetSubtitle(fmt.Sprintf("Step %d of %d", index+1, len(pages)))
+	}
 	updatePlatformSelection()
 	updateStoragePage()
 
 	completeSetup := func() {
 		config.DidInitialSetup = true
-		selectedRegions := selectedRegionMask(europeCheck.GetActive(), usaCheck.GetActive(), japanCheck.GetActive())
+		selectedRegions := selectedRegionMask(europeCheck.Active(), usaCheck.Active(), japanCheck.Active())
 		config.SelectedRegion = selectedRegions
-		cemu := cemuCheck.GetActive()
-		wiiU := wiiUCheck.GetActive()
+		cemu := cemuCheck.Active()
+		wiiU := wiiUCheck.Active()
 		config.DecryptContents, config.DeleteEncryptedContents = platformSelectionToConfig(cemu, wiiU)
-		downloadPath, _ := downloadPathEntry.GetText()
-		decryptPath, _ := decryptPathEntry.GetText()
-		config.LastSelectedPath, config.DecryptOutputPath = storagePathsForPlatforms(cemu, wiiU, downloadPath, decryptPath)
+		config.LastSelectedPath, config.DecryptOutputPath = storagePathsForPlatforms(cemu, wiiU, downloadPathEntry.Text(), decryptPathEntry.Text())
 
 		if err := config.Save(); err != nil {
 			ShowErrorDialog(nil, fmt.Errorf("Failed to save config: %w", err))
 			return
 		}
-		closeAssistantWindow(assistant, performPostSetup)
+		closeAssistantWindow(win, performPostSetup)
 	}
 
-	assistant.Connect("apply", completeSetup)
-
-	skipButton.Connect("clicked", func() {
+	skipButton.ConnectClicked(func() {
 		config.DidInitialSetup = true
 		if err := config.Save(); err != nil {
 			ShowErrorDialog(nil, fmt.Errorf("Failed to save config: %w", err))
 			return
 		}
-		closeAssistantWindow(assistant, performPostSetup)
+		closeAssistantWindow(win, performPostSetup)
 	})
 
-	backButton.Connect("clicked", func() {
-		assistant.SetCurrentPage(previousSetupPageIndex(assistant.GetCurrentPage()))
+	backButton.ConnectClicked(func() {
+		showPage(previousSetupPageIndex(currentPage))
 	})
 
-	nextButton.Connect("clicked", func() {
-		assistant.SetCurrentPage(nextSetupPageIndex(assistant.GetCurrentPage(), lastPageIndex))
+	nextButton.ConnectClicked(func() {
+		if currentPage >= lastPageIndex {
+			completeSetup()
+			return
+		}
+		showPage(nextSetupPageIndex(currentPage, lastPageIndex))
 	})
 
-	finishButton.Connect("clicked", func() {
-		completeSetup()
-	})
+	for index, row := range stepRows {
+		step := index
+		stepList.ConnectRowActivated(func(r *gtk.ListBoxRow) {
+			if r == nil || step == currentPage {
+				return
+			}
+			for earlier := 0; earlier < step; earlier++ {
+				if !complete[earlier] {
+					stepList.SelectRow(stepRows[currentPage])
+					return
+				}
+			}
+			showPage(step)
+		})
+		_ = row
+	}
 
-	assistant.Connect("prepare", func(assistant *gtk.Assistant, page *gtk.Widget) {
-		pageNum := assistant.GetCurrentPage()
+	showPage = func(index int) {
+		if index < 0 || index >= len(pages) {
+			index = currentPage
+		}
+		pageNum := index
+		currentPage = index
+		stack.SetVisibleChildName(pages[index].title)
+		applyTitle(index)
+		stepList.SelectRow(stepRows[index])
 
-		setSetupButtonsVisible(skipButton, backButton, nextButton, finishButton, false, false, false, false)
+		finishStep := pageNum >= len(pages)-1
+		nextButton.SetLabel("Next")
+		if finishStep {
+			nextButton.SetLabel("Finish")
+		}
+		backButton.SetSensitive(pageNum > 0)
+		refreshNext()
 
-		isFinishPage := pageNum == 4
-
-		if pageNum == 0 {
-			setSetupButtonsVisible(skipButton, backButton, nextButton, finishButton, true, false, true, false)
+		switch {
+		case pageNum == 0:
 			nextButton.GrabFocus()
-		} else if pageNum == 1 {
-			setSetupButtonsVisible(skipButton, backButton, nextButton, finishButton, false, true, true, false)
-			count := selectedCount(europeCheck.GetActive(), usaCheck.GetActive(), japanCheck.GetActive())
-			nextButton.SetSensitive(count > 0)
+		case pageNum == 1:
 			focusSetupOptionList(regionList)
-		} else if pageNum == 2 {
-			setSetupButtonsVisible(skipButton, backButton, nextButton, finishButton, false, true, true, false)
-			nextButton.SetSensitive(true)
+		case pageNum == 2:
 			focusSetupOptionList(platformList)
-		} else if pageNum == 3 {
-			setSetupButtonsVisible(skipButton, backButton, nextButton, finishButton, false, true, true, false)
-			nextButton.SetSensitive(true)
-			if cemuCheck.GetActive() && !wiiUCheck.GetActive() {
+		case pageNum == 3:
+			if cemuCheck.Active() && !wiiUCheck.Active() {
 				decryptPathEntry.GrabFocus()
 			} else {
 				downloadPathEntry.GrabFocus()
 			}
-		} else if isFinishPage {
-			setSetupButtonsVisible(skipButton, backButton, nextButton, finishButton, false, true, false, true)
-			setSummaryLabel(summaryRegions, "✓ Regions: ", selectedRegionsSummary(europeCheck.GetActive(), usaCheck.GetActive(), japanCheck.GetActive()))
-			setSummaryLabel(summaryPlatforms, "✓ Platforms: ", selectedPlatformsSummary(cemuCheck.GetActive(), wiiUCheck.GetActive()))
-			cemu := cemuCheck.GetActive()
-			wiiU := wiiUCheck.GetActive()
-			downloadPath, _ := downloadPathEntry.GetText()
-			decryptPath, _ := decryptPathEntry.GetText()
-			lastPath, outputPath := storagePathsForPlatforms(cemu, wiiU, downloadPath, decryptPath)
+		case finishStep:
+			setSummaryLabel(summaryRegions, "✓ Regions: ", selectedRegionsSummary(europeCheck.Active(), usaCheck.Active(), japanCheck.Active()))
+			setSummaryLabel(summaryPlatforms, "✓ Platforms: ", selectedPlatformsSummary(cemuCheck.Active(), wiiUCheck.Active()))
+			cemu := cemuCheck.Active()
+			wiiU := wiiUCheck.Active()
+			lastPath, outputPath := storagePathsForPlatforms(cemu, wiiU, downloadPathEntry.Text(), decryptPathEntry.Text())
 			lastPath = strings.TrimSpace(lastPath)
 			outputPath = strings.TrimSpace(outputPath)
 			if cemu && !wiiU {
@@ -820,17 +694,29 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 				}
 				setSummaryLabel(summaryDecrypted, "✓ Decrypted: ", decryptedPath)
 			}
-			finishButton.GrabFocus()
+			nextButton.GrabFocus()
 		}
-	})
+	}
+
+	// Derived, never poked directly: a toggle handler on a hidden page can no
+	// longer reach out and disable the Next button of the page on screen.
+	refreshNext = func() {
+		nextButton.SetSensitive(currentPage >= lastPageIndex || complete[currentPage])
+	}
 
 	initialSetupAssistantWindow := InitialSetupAssistantWindow{
-		assistantWindow:   assistant,
+		window:            win,
+		adwWindow:         adwWin,
+		headerBar:         headerBar,
+		stack:             stack,
+		stepList:          stepList,
+		stepRows:          stepRows,
+		pageTitles:        pageTitles(pages),
+		setPage:           showPage,
 		config:            config,
 		skipButton:        skipButton,
 		nextButton:        nextButton,
 		backButton:        backButton,
-		finishButton:      finishButton,
 		postSetupCallback: nil,
 	}
 
@@ -839,6 +725,11 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 			initialSetupAssistantWindow.postSetupCallback()
 		}
 	}
+
+	// GtkStack makes its first child visible but leaves the sidebar, the window
+	// subtitle and the button states untouched, so the wizard used to open
+	// unselected and only initialise itself on the first Back click.
+	initialSetupAssistantWindow.setPage(0)
 
 	return &initialSetupAssistantWindow, nil
 }
@@ -870,18 +761,20 @@ func configureSetupOptionList(list *gtk.ListBox, options ...setupOptionRow) {
 	}
 
 	list.SetCanFocus(true)
-	list.Connect("row-activated", func(_ *gtk.ListBox, row *gtk.ListBoxRow) {
+	list.ConnectRowActivated(func(row *gtk.ListBoxRow) {
 		toggleSetupOptionForRow(row, options)
 	})
-	list.Connect("key-press-event", func(_ *gtk.ListBox, event *gdk.Event) bool {
-		keyEvent := gdk.EventKeyNewFromEvent(event)
-		if !isKeyboardActivationKey(keyEvent.KeyVal()) {
+
+	// GTK4 replaced "key-press-event" with event controllers.
+	keyController := gtk.NewEventControllerKey()
+	keyController.ConnectKeyPressed(func(keyval, keycode uint, state gdk.ModifierType) bool {
+		if !isKeyboardActivationKey(keyval) {
 			return false
 		}
 
-		row := list.GetSelectedRow()
+		row := list.SelectedRow()
 		if row == nil {
-			row = list.GetRowAtIndex(0)
+			row = list.RowAtIndex(0)
 			if row == nil {
 				return false
 			}
@@ -890,12 +783,13 @@ func configureSetupOptionList(list *gtk.ListBox, options ...setupOptionRow) {
 
 		return toggleSetupOptionForRow(row, options)
 	})
+	list.AddController(keyController)
 
 	for _, option := range options {
 		if option.row == nil {
 			continue
 		}
-		option.row.ToWidget().SetCanFocus(true)
+		option.row.SetCanFocus(true)
 	}
 }
 
@@ -904,7 +798,7 @@ func toggleSetupOptionForRow(row *gtk.ListBoxRow, options []setupOptionRow) bool
 		return false
 	}
 
-	rowIndex := row.GetIndex()
+	rowIndex := row.Index()
 	if rowIndex < 0 || rowIndex >= len(options) {
 		return false
 	}
@@ -914,7 +808,7 @@ func toggleSetupOptionForRow(row *gtk.ListBoxRow, options []setupOptionRow) bool
 		return false
 	}
 
-	option.check.SetActive(!option.check.GetActive())
+	option.check.SetActive(!option.check.Active())
 	return true
 }
 
@@ -923,8 +817,8 @@ func focusSetupOptionList(list *gtk.ListBox) {
 		return
 	}
 
-	if list.GetSelectedRow() == nil {
-		if firstRow := list.GetRowAtIndex(0); firstRow != nil {
+	if list.SelectedRow() == nil {
+		if firstRow := list.RowAtIndex(0); firstRow != nil {
 			list.SelectRow(firstRow)
 		}
 	}
@@ -949,11 +843,11 @@ func previousSetupPageIndex(currentPage int) int {
 }
 
 func (assistant *InitialSetupAssistantWindow) ShowAll() {
-	assistant.assistantWindow.ShowAll()
+	assistant.window.Present()
 }
 
 func (assistant *InitialSetupAssistantWindow) Hide() {
-	assistant.assistantWindow.Hide()
+	assistant.window.SetVisible(false)
 }
 
 func (assistant *InitialSetupAssistantWindow) SetPostSetupCallback(cb func()) {
@@ -1021,20 +915,22 @@ func setSummaryLabel(label *gtk.Label, prefix, value string) {
 	label.SetVisible(true)
 }
 
-func setSetupButtonsVisible(skipButton, backButton, nextButton, finishButton *gtk.Button, skip, back, next, finish bool) {
-	skipButton.SetVisible(skip)
-	backButton.SetVisible(back)
-	nextButton.SetVisible(next)
-	finishButton.SetVisible(finish)
-}
-
-func closeAssistantWindow(assistant *gtk.Assistant, callback func()) {
-	assistant.Hide()
+func closeAssistantWindow(win *gtk.Window, callback func()) {
+	win.SetVisible(false)
 	if callback != nil {
 		callback()
 	}
-	assistant.Emit("close", glib.TYPE_BOOLEAN, nil)
-	assistant.SetDestroyWithParent(true)
+}
+
+func pageTitles(pages []struct {
+	widget *gtk.Box
+	title  string
+}) []string {
+	titles := make([]string, 0, len(pages))
+	for _, p := range pages {
+		titles = append(titles, p.title)
+	}
+	return titles
 }
 
 func applySetupRowStyle(box *gtk.Box) {
@@ -1043,56 +939,4 @@ func applySetupRowStyle(box *gtk.Box) {
 	box.SetMarginTop(SETUP_ROW_VERTICAL_MARGIN)
 	box.SetMarginBottom(SETUP_ROW_VERTICAL_MARGIN)
 	box.SetSpacing(SETUP_ROW_SPACING)
-}
-
-func pinSetupStepBarWidth(assistant *gtk.Assistant, titles []string) {
-	width := widestSetupStepBar(titles)
-	if width <= 0 {
-		return
-	}
-	provider, err := gtk.CssProviderNew()
-	if err != nil {
-		return
-	}
-	if err := provider.LoadFromData(fmt.Sprintf("assistant .sidebar { min-width: %dpx; }", width)); err != nil {
-		return
-	}
-	screen := assistant.GetScreen()
-	if screen == nil {
-		screen, _ = gdk.ScreenGetDefault()
-	}
-	if screen == nil {
-		return
-	}
-	gtk.AddProviderForScreen(screen, provider, gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
-}
-
-func widestSetupStepBar(titles []string) int {
-	bar, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
-	if err != nil {
-		return 0
-	}
-	// The bar's own border is part of the width it can reach.
-	addStyleClass(bar.GetStyleContext, "sidebar")
-
-	for _, title := range titles {
-		row, err := gtk.LabelNew(title)
-		if err != nil {
-			return 0
-		}
-		addStyleClass(row.GetStyleContext, "setup-step-row")
-		addStyleClass(row.GetStyleContext, "highlight") // bold, the widest a row can get
-		bar.Add(row)
-	}
-
-	offscreen, err := gtk.OffscreenWindowNew()
-	if err != nil {
-		return 0
-	}
-	defer offscreen.Destroy()
-	offscreen.Add(bar)
-	offscreen.ShowAll()
-
-	width, _ := bar.GetPreferredWidth()
-	return width
 }

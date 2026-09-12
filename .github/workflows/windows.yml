@@ -1,8 +1,15 @@
 name: MSYS2
+
+# Branch/PR runs build and upload a downloadable zip only. Releases are
+# published exclusively from tag pushes (see the gated publish step below).
 on:
   push:
+    branches:
+      - "**"
     tags:
       - "*"
+  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -26,7 +33,7 @@ jobs:
           release: true
           update: true
           cache: true
-          install: zip git mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-gtk3 mingw-w64-ucrt-x86_64-pkg-config mingw-w64-ucrt-x86_64-go mingw-w64-ucrt-x86_64-ntldd-git mingw-w64-ucrt-x86_64-imagemagick curl
+          install: zip git mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-gtk4 mingw-w64-ucrt-x86_64-libadwaita mingw-w64-ucrt-x86_64-adwaita-icon-theme mingw-w64-ucrt-x86_64-pkg-config mingw-w64-ucrt-x86_64-go mingw-w64-ucrt-x86_64-ntldd-git mingw-w64-ucrt-x86_64-imagemagick curl
       - name: Build
         run: |
           go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest
@@ -47,11 +54,11 @@ jobs:
           rm -rf dist
           mkdir -p dist/lib dist/share/icons dist/share/glib-2.0/schemas
 
-          ${MSYSTEM_PREFIX}/bin/ntldd -R main.exe | tr '\\' '/' | grep -io "$(cygpath -m ${MSYSTEM_PREFIX}).\+\.dll" | sort -u | cygpath -f - -u | xargs -I {} cp "{}" dist/
+          ${MSYSTEM_PREFIX}/bin/ntldd -R main.exe | tr '\\' '/' | grep -io "$(cygpath -m ${MSYSTEM_PREFIX}).+\\.dll" | sort -u | cygpath -f - -u | xargs -I {} cp "{}" dist/
 
           cp -r /ucrt64/lib/gdk-pixbuf-2.0 ./dist/lib/gdk-pixbuf-2.0
 
-          find dist/lib/gdk-pixbuf-2.0/2.10.0/loaders/ -name "*.dll" -print0 | xargs -0 -I {} ${MSYSTEM_PREFIX}/bin/ntldd -R "{}" | tr '\\' '/' | grep -io "$(cygpath -m ${MSYSTEM_PREFIX}).\+\.dll" | sort -u | cygpath -f - -u | xargs -I {} cp -n "{}" dist/ || true
+          find dist/lib/gdk-pixbuf-2.0/2.10.0/loaders/ -name "*.dll" -print0 | xargs -0 -I {} ${MSYSTEM_PREFIX}/bin/ntldd -R "{}" | tr '\\' '/' | grep -io "$(cygpath -m ${MSYSTEM_PREFIX}).+\\.dll" | sort -u | cygpath -f - -u | xargs -I {} cp -n "{}" dist/ || true
 
           cp -r /ucrt64/share/icons/* ./dist/share/icons/
           cp -r /ucrt64/share/glib-2.0/schemas/* dist/share/glib-2.0/schemas/
@@ -64,6 +71,13 @@ jobs:
           rm -f libx265-*.dll
           zip -9 -r ../WiiUDownloader-Windows.zip .
       - name: Upload Windows Artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: WiiUDownloader-Windows
+          path: WiiUDownloader-Windows.zip
+          if-no-files-found: error
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/')
         uses: ncipollo/release-action@v1
         with:
           allowUpdates: True

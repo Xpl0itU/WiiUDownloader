@@ -6,14 +6,11 @@ import (
 	"log"
 	"math"
 	"os"
-	"runtime"
 	"strings"
-	"sync"
-	"sync/atomic"
 
-	"github.com/gotk3/gotk3/gdk"
-	"github.com/gotk3/gotk3/glib"
-	"github.com/gotk3/gotk3/gtk"
+	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
+	"github.com/diamondburned/gotk4/pkg/gdk/v4"
+	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 )
 
 func formatBytes(bytes uint64) string {
@@ -67,71 +64,37 @@ func normalizeFilename(filename string) string {
 	return result
 }
 
-var desiredDark atomic.Bool
-var guardConnected sync.Once
-
+// setDarkTheme drives libadwaita's style manager, which owns both the palette
+// and the dark variant of the stylesheet. Setting GTK_THEME instead (as the
+// GTK3 version did) overrides libadwaita's own CSS and breaks its widgets.
 func setDarkTheme(darkMode bool) {
-	desiredDark.Store(darkMode)
-
-	if runtime.GOOS == "darwin" {
-		if darkMode {
-			os.Setenv("GTK_THEME", "Adwaita:dark")
-		} else {
-			os.Setenv("GTK_THEME", "Adwaita")
-		}
+	scheme := adw.ColorSchemeForceLight
+	if darkMode {
+		scheme = adw.ColorSchemeForceDark
 	}
-
-	gSettings, err := gtk.SettingsGetDefault()
-	if err != nil || gSettings == nil {
+	if manager := adw.StyleManagerGetDefault(); manager != nil {
+		manager.SetColorScheme(scheme)
 		return
 	}
-
-	gSettings.SetProperty("gtk-application-prefer-dark-theme", darkMode)
-	gSettings.SetProperty("gtk-theme-name", "Adwaita")
-
-	if runtime.GOOS == "darwin" {
-		guardConnected.Do(func() {
-			gSettings.Connect("notify::gtk-theme-name", func() {
-				if cur := readThemeName(gSettings); cur == "Adwaita" {
-					return
-				}
-				gSettings.SetProperty("gtk-theme-name", "Adwaita")
-			})
-		})
+	// libadwaita unavailable: fall back to GTK's own preference.
+	if gSettings := gtk.SettingsGetDefault(); gSettings != nil {
+		gSettings.SetObjectProperty("gtk-application-prefer-dark-theme", darkMode)
 	}
-}
-
-func readThemeName(s *gtk.Settings) string {
-	v, err := s.GetProperty("gtk-theme-name")
-	if err != nil {
-		return ""
-	}
-	switch x := v.(type) {
-	case string:
-		return x
-	case *glib.Value:
-		if str, err := x.GetString(); err == nil {
-			return str
-		}
-	}
-	return ""
 }
 
 func applyStyling() {
-	provider, err := gtk.CssProviderNew()
-	if err != nil {
-		log.Printf("failed to create CSS provider: %v", err)
+	display := gdk.DisplayGetDefault()
+	if display == nil {
+		log.Printf("failed to get default display")
 		return
 	}
-	if err := provider.LoadFromData(styleCSS); err != nil {
+	provider := gtk.NewCSSProvider()
+	// Parse failures surface through the parsing-error signal.
+	provider.ConnectParsingError(func(_ *gtk.CSSSection, err error) {
 		log.Printf("failed to load CSS styling: %v", err)
-	}
-	screen, err := gdk.ScreenGetDefault()
-	if err != nil {
-		log.Printf("failed to get default screen: %v", err)
-		return
-	}
-	gtk.AddProviderForScreen(screen, provider, gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+	})
+	provider.LoadFromData(styleCSS)
+	gtk.StyleContextAddProviderForDisplay(display, provider, gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 }
 
 func isValidPath(path string) bool {
@@ -143,14 +106,10 @@ func isValidPath(path string) bool {
 }
 
 func ShowErrorDialog(window *gtk.Window, err error) {
-	flags := gtk.DIALOG_MODAL
-	if window == nil {
-		flags = 0
+	if err == nil {
+		return
 	}
-	dialog := gtk.MessageDialogNew(window, flags, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, "%s", err.Error())
-	dialog.SetTitle(WINDOW_TITLE_PREFIX + "Error")
-	dialog.Run()
-	dialog.Destroy()
+	showAlert(window, WINDOW_TITLE_PREFIX+"Error", err.Error())
 }
 
 const (

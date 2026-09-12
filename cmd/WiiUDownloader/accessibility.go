@@ -3,19 +3,15 @@ package main
 import (
 	"strings"
 
-	"github.com/gotk3/gotk3/gdk"
-	"github.com/gotk3/gotk3/gtk"
+	"github.com/diamondburned/gotk4/pkg/gdk/v4"
+	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 )
 
-func setTooltip(widget gtk.IWidget, text string) {
+func setTooltip(widget gtk.Widgetter, text string) {
 	if widget == nil {
 		return
 	}
-	obj := widget.ToWidget()
-	if obj == nil {
-		return
-	}
-	obj.SetProperty("tooltip-text", text)
+	gtk.BaseWidget(widget).SetTooltipText(text)
 }
 
 func composeAccessibleText(label, description, separator string) string {
@@ -32,15 +28,12 @@ func SetupButtonAccessibility(button *gtk.Button, description string) error {
 	if button == nil {
 		return nil
 	}
-	label, err := button.GetLabel()
-	if err != nil {
-		label = ""
-	}
-	setTooltip(button, composeAccessibleText(label, description, " - "))
+	setTooltip(button, composeAccessibleText(button.Label(), description, " - "))
 	return nil
 }
 
-func SetupEntryAccessibility(entry *gtk.Entry, label, description string) error {
+// SetupEntryAccessibility accepts any entry widget, including GtkSearchEntry.
+func SetupEntryAccessibility(entry gtk.Widgetter, label, description string) error {
 	if entry == nil {
 		return nil
 	}
@@ -56,47 +49,33 @@ func SetupLabelAccessibility(label *gtk.Label, _ string) error {
 	return nil
 }
 
+func SetupToggleButtonAccessibility(button *gtk.ToggleButton, description string) error {
+	if button == nil {
+		return nil
+	}
+	setTooltip(button, composeAccessibleText(button.Label(), description, ". "))
+	return nil
+}
+
 func SetupCheckButtonAccessibility(checkButton *gtk.CheckButton, description string) error {
 	if checkButton == nil {
 		return nil
 	}
-	label, err := checkButton.GetLabel()
-	if err != nil {
-		label = ""
-	}
-	setTooltip(checkButton, composeAccessibleText(label, description, ". "))
+	setTooltip(checkButton, composeAccessibleText(checkButton.Label(), description, ". "))
 	return nil
 }
 
-func SetupToggleButtonAccessibility(toggleButton *gtk.ToggleButton, description string) error {
-	if toggleButton == nil {
+// SetupListViewAccessibility makes a list widget keyboard-focusable.
+func SetupListViewAccessibility(list gtk.Widgetter) error {
+	if list == nil {
 		return nil
 	}
-	label, err := toggleButton.GetLabel()
-	if err != nil {
-		label = ""
-	}
-	setTooltip(toggleButton, composeAccessibleText(label, description, ". "))
-	return nil
-}
-
-func SetupTreeViewAccessibility(treeView *gtk.TreeView) error {
-	if treeView == nil {
-		return nil
-	}
-	treeView.SetCanFocus(true)
+	gtk.BaseWidget(list).SetCanFocus(true)
 	return nil
 }
 
 func SetupWindowAccessibility(window *gtk.Window, _ string) error {
 	if window == nil {
-		return nil
-	}
-	return nil
-}
-
-func SetupDialogAccessibility(dialog *gtk.Dialog, _ string) error {
-	if dialog == nil {
 		return nil
 	}
 	return nil

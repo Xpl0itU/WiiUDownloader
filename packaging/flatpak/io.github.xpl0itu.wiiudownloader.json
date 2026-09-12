@@ -1,8 +1,8 @@
 {
     "id": "io.github.xpl0itu.wiiudownloader",
-    "runtime": "org.freedesktop.Platform",
-    "runtime-version": "25.08",
-    "sdk": "org.freedesktop.Sdk",
+    "runtime": "org.gnome.Platform",
+    "runtime-version": "50",
+    "sdk": "org.gnome.Sdk",
     "command": "wiiudownloader",
     "finish-args": [
         "--share=network",

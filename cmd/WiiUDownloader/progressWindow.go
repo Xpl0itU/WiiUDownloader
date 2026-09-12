@@ -2,11 +2,13 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"sync"
 	"time"
 
-	"github.com/gotk3/gotk3/gdk"
-	"github.com/gotk3/gotk3/gtk"
+	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
+	"github.com/diamondburned/gotk4/pkg/gdk/v4"
+	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 )
 
 type DownloadError struct {
@@ -118,6 +120,94 @@ type ProgressWindow struct {
 	decProgress     float64
 	queueDone       int
 	queueTotal      int
+	// display records what the window last painted, and displayHook mirrors it
+	// into another surface (the queue pane's run bar). Guarded by progressMutex;
+	// the hook only ever runs on the main thread.
+	display     DownloadDisplayState
+	displayHook func()
+}
+
+// DownloadDisplayState is a run's progress in a form another surface can
+// mirror. Every field is plain data: reading it never touches a widget, so it
+// is safe from the download goroutine.
+//
+// Fraction is the current title (or decryption step), not the queue: the queue
+// count rides along in QueueText so the two can never fight over one bar.
+type DownloadDisplayState struct {
+	Title      string
+	Fraction   float64
+	Detail     string // bytes done, speed and ETA
+	QueueDone  int
+	QueueTotal int
+}
+
+// SetDisplayHook installs a callback fired on the main thread whenever the
+// window repaints. The inline queue-pane UI uses it to follow the run without
+// reading GTK widgets from the download goroutine.
+func (pw *ProgressWindow) SetDisplayHook(hook func()) {
+	pw.progressMutex.Lock()
+	pw.displayHook = hook
+	pw.progressMutex.Unlock()
+}
+
+// DisplayState returns what the window last painted.
+func (pw *ProgressWindow) DisplayState() DownloadDisplayState {
+	pw.progressMutex.Lock()
+	defer pw.progressMutex.Unlock()
+	state := pw.display
+	state.QueueDone, state.QueueTotal = pw.queueDone, pw.queueTotal
+	return state
+}
+
+// notifyDisplay records what was just painted and mirrors it. Every caller is
+// already inside an idle callback, so this is main-thread code.
+func (pw *ProgressWindow) notifyDisplay(state DownloadDisplayState) {
+	state.Fraction = clampFraction(state.Fraction)
+	pw.progressMutex.Lock()
+	pw.display = state
+	hook := pw.displayHook
+	pw.progressMutex.Unlock()
+	if hook != nil {
+		hook()
+	}
+}
+
+// transferDetail describes what has been fetched: bytes done, the rate and the
+// time left. The window puts it in its bar text and the run bar in its detail
+// line, so both surfaces always agree.
+func transferDetail(total, toDownload int64, speed float64) string {
+	detail := fmt.Sprintf("%s / %s", formatBytes(uint64(total)), formatBytes(uint64(toDownload)))
+	if speed <= 0 {
+		return detail
+	}
+	detail += fmt.Sprintf(", %s/s", formatBytes(uint64(int64(speed))))
+	if toDownload > total {
+		remaining := time.Duration(float64(toDownload-total)/speed) * time.Second
+		detail += fmt.Sprintf(", ~%s left", formatDuration(remaining))
+	}
+	return detail
+}
+
+// ProgressFraction reports the overall fraction from the byte counters, rather
+// than reading it back off the progress bar.
+func (pw *ProgressWindow) ProgressFraction() float64 {
+	pw.progressMutex.Lock()
+	defer pw.progressMutex.Unlock()
+	if pw.totalToDownload <= 0 {
+		return 0
+	}
+	total := pw.totalDownloaded
+	for _, v := range pw.progressPerFile {
+		total += v
+	}
+	return clampFraction(float64(total) / float64(pw.totalToDownload))
+}
+
+// Paused reports the transfer pause state; safe from any goroutine.
+func (pw *ProgressWindow) Paused() bool {
+	pw.controlMutex.Lock()
+	defer pw.controlMutex.Unlock()
+	return pw.paused
 }
 
 func formatDuration(d time.Duration) string {
@@ -130,9 +220,8 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%dh %02dm", int(d.Hours()), int(d.Minutes())%60)
 }
 
-// SetQueueProgress records how many titles of the queue run have completed
-// and updates the dedicated queue indicator label plus the window title;
-// total <= 0 hides the indicator.
+// SetQueueProgress updates the queue indicator and window title; total <= 0 hides
+// the indicator.
 func (pw *ProgressWindow) SetQueueProgress(done, total int) {
 	pw.progressMutex.Lock()
 	pw.queueDone, pw.queueTotal = done, total
@@ -151,6 +240,8 @@ func (pw *ProgressWindow) SetQueueProgress(done, total int) {
 			}
 			pw.Window.SetTitle(title)
 		}
+		// The queue moving is its own reason to repaint a mirroring surface.
+		pw.notifyDisplay(pw.DisplayState())
 	})
 }
 
@@ -167,9 +258,19 @@ func queueProgressText(done, total int) string {
 	return fmt.Sprintf("Title %d/%d", done+1, total)
 }
 
+// SetTitleState satisfies DownloadUI: the window shows per-file progress itself,
+// so it has no per-row state to repaint.
+func (pw *ProgressWindow) SetTitleState(uint64, queueRowState) {}
+
+// Present and Hide are the DownloadUI names for the window's visibility.
+func (pw *ProgressWindow) Present() { pw.Window.Present() }
+func (pw *ProgressWindow) Hide()    { pw.Window.SetVisible(false) }
+
 func (pw *ProgressWindow) SetGameTitle(title string) {
 	uiIdleAdd(func() {
 		pw.gameLabel.SetText(title)
+		// A new title: nothing fetched yet for it.
+		pw.notifyDisplay(DownloadDisplayState{Title: title})
 	})
 }
 
@@ -199,26 +300,18 @@ func (pw *ProgressWindow) UpdateDownloadProgress(downloaded int64, filename stri
 		for _, v := range pw.progressPerFile {
 			total += v
 		}
+		toDownload := pw.totalToDownload
 		pw.progressMutex.Unlock()
 
 		now := time.Now()
 		pw.speedAverager.Sample(total, now)
 		speed := pw.speedAverager.GetAverageSpeed()
+		detail := transferDetail(total, toDownload, speed)
 
-		etaText := ""
-		if speed > 0 && pw.totalToDownload > total {
-			remaining := time.Duration(float64(pw.totalToDownload-total)/speed) * time.Second
-			etaText = fmt.Sprintf(", ~%s left", formatDuration(remaining))
-		}
-
-		pw.bar.SetFraction(float64(total) / float64(pw.totalToDownload))
-		pw.bar.SetText(fmt.Sprintf(
-			"Downloading... (%s/%s, %s/s%s)",
-			formatBytes(uint64(total)),
-			formatBytes(uint64(pw.totalToDownload)),
-			formatBytes(uint64(int64(speed))),
-			etaText,
-		))
+		fraction := clampFraction(float64(total) / float64(toDownload))
+		pw.setFraction(fraction)
+		pw.bar.SetText(fmt.Sprintf("Downloading... (%s)", detail))
+		pw.notifyDisplay(DownloadDisplayState{Title: pw.gameLabel.Text(), Fraction: fraction, Detail: detail})
 
 		return false
 	})
@@ -241,10 +334,33 @@ func (pw *ProgressWindow) UpdateDecryptionProgress(progress float64) {
 		pw.decPending = false
 		pw.progressMutex.Unlock()
 
-		pw.bar.SetFraction(prog)
+		pw.setFraction(prog)
 		pw.bar.SetText(fmt.Sprintf("Decrypting (%.2f%%)", prog*PERCENT_SCALE))
+		pw.notifyDisplay(DownloadDisplayState{
+			Title:    pw.gameLabel.Text(),
+			Fraction: prog,
+			Detail:   fmt.Sprintf("Decrypting (%d%%)", int(math.Round(prog*PERCENT_SCALE))),
+		})
 		return false
 	})
+}
+
+// setFraction keeps the bar's accessible valuenow valid: a 0/0 total would
+// otherwise hand GTK a NaN fraction and it logs an error on every update.
+// clampFraction keeps NaN (a 0/0 total) and out-of-range values away from GTK,
+// which otherwise logs an invalid "valuenow" for the progress bar.
+func clampFraction(fraction float64) float64 {
+	if math.IsNaN(fraction) || fraction < 0 {
+		return 0
+	}
+	if fraction > 1 {
+		return 1
+	}
+	return fraction
+}
+
+func (pw *ProgressWindow) setFraction(fraction float64) {
+	pw.bar.SetFraction(clampFraction(fraction))
 }
 
 func (pw *ProgressWindow) Cancelled() bool {
@@ -273,16 +389,33 @@ func (pw *ProgressWindow) SetCancelled() {
 
 	uiIdleAddBool(func() bool {
 		pw.setTransferControlsSensitive(false)
-		if pw.pauseButton != nil {
-			pw.pauseButton.SetLabel("Pause")
-		}
+		pw.setPauseState(false)
 		pw.gameLabel.SetText("Cancelling...")
+		pw.notifyDisplay(DownloadDisplayState{Title: "Cancelling...", Fraction: pw.ProgressFraction()})
 		return false
 	})
 }
 
-// Done implements the event-driven cancellation half of ProgressReporter:
-// the returned channel is closed exactly once when SetCancelled is called.
+// setPauseState updates the pause button's icon and label together: the button
+// holds an AdwButtonContent, so GtkButton.SetLabel no longer reaches the text.
+func (pw *ProgressWindow) setPauseState(paused bool) {
+	if pw.pauseButton == nil {
+		return
+	}
+	content, ok := pw.pauseButton.Child().(*adw.ButtonContent)
+	if !ok {
+		return
+	}
+	if paused {
+		content.SetIconName("media-playback-start-symbolic")
+		content.SetLabel("Resume")
+		return
+	}
+	content.SetIconName("media-playback-pause-symbolic")
+	content.SetLabel("Pause")
+}
+
+// Done returns a channel closed once when SetCancelled is called.
 func (pw *ProgressWindow) Done() <-chan struct{} {
 	if pw == nil {
 		return nil
@@ -317,13 +450,7 @@ func (pw *ProgressWindow) TogglePaused() {
 	pw.controlMutex.Unlock()
 
 	uiIdleAddBool(func() bool {
-		if pw.pauseButton != nil {
-			if paused {
-				pw.pauseButton.SetLabel("Resume")
-			} else {
-				pw.pauseButton.SetLabel("Pause")
-			}
-		}
+		pw.setPauseState(paused)
 		return false
 	})
 }
@@ -353,11 +480,10 @@ func (pw *ProgressWindow) resetTransferState() {
 func (pw *ProgressWindow) ResetTotals() {
 	uiIdleAdd(func() {
 		pw.setTransferControlsSensitive(true)
-		if pw.pauseButton != nil {
-			pw.pauseButton.SetLabel("Pause")
-		}
-		pw.bar.SetFraction(0)
+		pw.setPauseState(false)
+		pw.setFraction(0)
 		pw.bar.SetText("Preparing...")
+		pw.notifyDisplay(DownloadDisplayState{Title: pw.gameLabel.Text()})
 	})
 	pw.resetTransferState()
 	pw.progressMutex.Lock()
@@ -419,100 +545,75 @@ func (pw *ProgressWindow) ClearErrors() {
 }
 
 func createProgressWindow(parent *gtk.Window) (*ProgressWindow, error) {
-	win, err := gtk.WindowNew(gtk.WINDOW_TOPLEVEL)
-	if err != nil {
-		return nil, err
-	}
+	win := adw.NewWindow()
 	win.SetTitle(WINDOW_TITLE_PREFIX + "Downloading")
-	win.SetTypeHint(gdk.WINDOW_TYPE_HINT_DIALOG)
 	win.SetModal(false)
+	// The GTK-facing helpers take a *gtk.Window; this is the same object.
+	parentWindow := &win.Window
 	if parent != nil {
 		win.SetTransientFor(parent)
-		win.SetPosition(gtk.WIN_POS_CENTER_ON_PARENT)
-	} else {
-		win.SetPosition(gtk.WIN_POS_CENTER)
 	}
-	SetupWindowAccessibility(win, "Download Progress")
+	SetupWindowAccessibility(parentWindow, "Download Progress")
 	win.SetDeletable(false)
 
-	box, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 12)
-	if err != nil {
-		return nil, err
-	}
+	header := adw.NewHeaderBar()
+
+	box := gtk.NewBox(gtk.OrientationVertical, 12)
 	box.SetMarginBottom(18)
 	box.SetMarginEnd(18)
 	box.SetMarginStart(18)
 	box.SetMarginTop(18)
-	win.Add(box)
 
-	gameLabel, err := gtk.LabelNew("")
-	if err != nil {
-		return nil, err
-	}
-	addStyleClass(gameLabel.GetStyleContext, "title")
+	toolbar := adw.NewToolbarView()
+	toolbar.AddTopBar(header)
+	toolbar.SetContent(box)
+	win.SetContent(toolbar)
+
+	gameLabel := gtk.NewLabel("")
+	// Namespaced on purpose: libadwaita gives every preferences-row title the
+	// CSS class "title", so a global .title rule would restyle the settings.
+	gameLabel.AddCSSClass("progress-title")
 	SetupLabelAccessibility(gameLabel, "Game Title")
 
-	queueLabel, err := gtk.LabelNew("")
-	if err != nil {
-		return nil, err
-	}
-	addStyleClass(queueLabel.GetStyleContext, "queue-position-label")
-	queueLabel.SetHAlign(gtk.ALIGN_CENTER)
+	queueLabel := gtk.NewLabel("")
+	queueLabel.AddCSSClass("queue-position-label")
+	queueLabel.SetHAlign(gtk.AlignCenter)
 	queueLabel.SetVisible(false)
 
-	titleBox, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 2)
-	if err != nil {
-		return nil, err
-	}
-	titleBox.PackStart(gameLabel, false, false, 0)
-	titleBox.PackStart(queueLabel, false, false, 0)
-	box.PackStart(titleBox, false, false, 0)
+	titleBox := gtk.NewBox(gtk.OrientationVertical, 2)
+	titleBox.Append(gameLabel)
+	titleBox.Append(queueLabel)
+	box.Append(titleBox)
 
-	progressBar, err := gtk.ProgressBarNew()
-	if err != nil {
-		return nil, err
-	}
+	progressBar := gtk.NewProgressBar()
 	progressBar.SetShowText(true)
-	progressBar.ToWidget().SetProperty("tooltip-text", "Download progress bar - Shows current download status, speed, and bytes downloaded")
-	box.PackStart(progressBar, false, false, 0)
+	progressBar.SetTooltipText("Download progress bar - Shows current download status, speed, and bytes downloaded")
+	box.Append(progressBar)
 
-	cancelButton, err := gtk.ButtonNew()
-	if err != nil {
-		return nil, err
-	}
-	cancelIcon, _ := gtk.ImageNewFromIconName("process-stop-symbolic", gtk.ICON_SIZE_BUTTON)
-	cancelLabel, _ := gtk.LabelNew("Cancel")
-	cancelBtnBox, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 6)
-	cancelBtnBox.PackStart(cancelIcon, false, false, 0)
-	cancelBtnBox.PackStart(cancelLabel, false, false, 0)
-	cancelBtnBox.SetHAlign(gtk.ALIGN_CENTER)
-	cancelButton.Add(cancelBtnBox)
+	cancelContent := adw.NewButtonContent()
+	cancelContent.SetIconName("process-stop-symbolic")
+	cancelContent.SetLabel("Cancel")
+	cancelButton := gtk.NewButton()
+	cancelButton.SetChild(cancelContent)
 	SetupButtonAccessibility(cancelButton, "Stop the current download operation")
-	addStyleClass(cancelButton.GetStyleContext, "destructive-action")
+	cancelButton.AddCSSClass("destructive-action")
 
-	pauseButton, err := gtk.ButtonNew()
-	if err != nil {
-		return nil, err
-	}
-	pauseIcon, _ := gtk.ImageNewFromIconName("media-playback-pause-symbolic", gtk.ICON_SIZE_BUTTON)
-	pauseLabel, _ := gtk.LabelNew("Pause")
-	pauseBtnBox, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 6)
-	pauseBtnBox.PackStart(pauseIcon, false, false, 0)
-	pauseBtnBox.PackStart(pauseLabel, false, false, 0)
-	pauseBtnBox.SetHAlign(gtk.ALIGN_CENTER)
-	pauseButton.Add(pauseBtnBox)
+	pauseContent := adw.NewButtonContent()
+	pauseContent.SetIconName("media-playback-pause-symbolic")
+	pauseContent.SetLabel("Pause")
+	pauseButton := gtk.NewButton()
+	pauseButton.SetChild(pauseContent)
 	SetupButtonAccessibility(pauseButton, "Temporarily pause or resume downloads")
 
-	bottomhBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 0)
-	if err != nil {
-		return nil, err
-	}
-	addStyleClass(bottomhBox.GetStyleContext, "linked")
-	bottomhBox.PackStart(pauseButton, true, true, 0)
-	bottomhBox.PackStart(cancelButton, true, true, 0)
-	box.PackEnd(bottomhBox, false, false, 0)
+	bottomhBox := gtk.NewBox(gtk.OrientationHorizontal, 0)
+	bottomhBox.AddCSSClass("linked")
+	bottomhBox.SetHAlign(gtk.AlignEnd)
+	bottomhBox.Append(pauseButton)
+	bottomhBox.Append(cancelButton)
+	box.Append(bottomhBox)
+
 	progressWindow := ProgressWindow{
-		Window:        win,
+		Window:        parentWindow,
 		gameLabel:     gameLabel,
 		queueLabel:    queueLabel,
 		bar:           progressBar,
@@ -526,21 +627,20 @@ func createProgressWindow(parent *gtk.Window) (*ProgressWindow, error) {
 	}
 	progressWindow.controlCond = sync.NewCond(&progressWindow.controlMutex)
 
-	progressWindow.pauseButton.Connect("clicked", func() {
+	progressWindow.pauseButton.ConnectClicked(func() {
 		progressWindow.TogglePaused()
 	})
 
-	progressWindow.cancelButton.Connect("clicked", func() {
+	progressWindow.cancelButton.ConnectClicked(func() {
 		progressWindow.SetCancelled()
 	})
 
-	progressWindow.cancelButton.Connect("key-press-event", func(button *gtk.Button, event *gdk.Event) bool {
-		keyEvent := gdk.EventKeyNewFromEvent(event)
-		if keyEvent.KeyVal() == gdk.KEY_Return || keyEvent.KeyVal() == gdk.KEY_KP_Enter {
-			return true
-		}
-		return false
+	// Swallow Return/Enter so it cannot activate the button by accident.
+	cancelKeyController := gtk.NewEventControllerKey()
+	cancelKeyController.ConnectKeyPressed(func(keyval, keycode uint, state gdk.ModifierType) bool {
+		return keyval == gdk.KEY_Return || keyval == gdk.KEY_KP_Enter
 	})
+	progressWindow.cancelButton.AddController(cancelKeyController)
 
 	return &progressWindow, nil
 }

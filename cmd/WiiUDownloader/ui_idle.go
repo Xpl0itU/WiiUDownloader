@@ -1,22 +1,11 @@
 package main
 
-// #cgo pkg-config: glib-2.0
-// #include <glib.h>
-// #include <stdlib.h>
-//
-// extern gboolean goIdleCallback(gpointer data);
-// extern void goIdleDestroy(gpointer data);
-//
-// static inline guint go_idle_add_full(gpointer data) {
-//   return g_idle_add_full(G_PRIORITY_DEFAULT_IDLE, goIdleCallback, data, goIdleDestroy);
-// }
-import "C"
-
 import (
-	"runtime/cgo"
-	"unsafe"
+	glib "github.com/diamondburned/gotk4/pkg/glib/v2"
 )
 
+// uiIdleAdd schedules f on the GTK main loop. It is safe to call from any
+// goroutine; f itself always runs on the main thread.
 func uiIdleAdd(f func()) uint {
 	if f == nil {
 		return 0
@@ -27,47 +16,11 @@ func uiIdleAdd(f func()) uint {
 	})
 }
 
+// uiIdleAddBool schedules f on the GTK main loop and repeats it for as long as
+// it returns true.
 func uiIdleAddBool(f func() bool) uint {
 	if f == nil {
 		return 0
 	}
-	handle := cgo.NewHandle(f)
-	ptr := C.malloc(C.size_t(unsafe.Sizeof(uintptr(0))))
-	if ptr == nil {
-		handle.Delete()
-		return 0
-	}
-	*(*uintptr)(ptr) = uintptr(handle)
-	id := C.go_idle_add_full(C.gpointer(ptr))
-	if id == 0 {
-		handle.Delete()
-		C.free(ptr)
-	}
-	return uint(id)
-}
-
-//export goIdleCallback
-func goIdleCallback(data unsafe.Pointer) C.gboolean {
-	if data == nil {
-		return C.FALSE
-	}
-	handle := cgo.Handle(*(*uintptr)(data))
-	fn, ok := handle.Value().(func() bool)
-	if !ok {
-		return C.FALSE
-	}
-	if fn() {
-		return C.TRUE
-	}
-	return C.FALSE
-}
-
-//export goIdleDestroy
-func goIdleDestroy(data unsafe.Pointer) {
-	if data == nil {
-		return
-	}
-	handle := cgo.Handle(*(*uintptr)(data))
-	handle.Delete()
-	C.free(data)
+	return uint(glib.IdleAdd(f))
 }

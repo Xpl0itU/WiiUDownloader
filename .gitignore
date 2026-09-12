@@ -21,3 +21,26 @@ WiiUDownloader.icns
 *.tmd
 
 # DELETE BEFORE SHIPPING
+release-fail/
+
+# Build artifacts
+*.bin
+*.exe
+*.AppImage
+*.AppImage.zsync
+dist/
+docs/
+
+# Test & cache
+test_cache/
+*.cache
+*_test.go
+loadedlibs.txt*
+app.log
+
+# Backup files
+*.backup
+*.bak*
+.bak2
+
+.smoke

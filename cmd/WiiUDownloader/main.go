@@ -14,8 +14,10 @@ import (
 	"time"
 
 	wiiudownloader "github.com/Xpl0itU/WiiUDownloader"
-	"github.com/gotk3/gotk3/glib"
-	"github.com/gotk3/gotk3/gtk"
+	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
+	"github.com/diamondburned/gotk4/pkg/gio/v2"
+	glib "github.com/diamondburned/gotk4/pkg/glib/v2"
+	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 )
 
 const (
@@ -46,28 +48,22 @@ func main() {
 	if config == nil {
 		config = getDefaultConfig()
 	}
-	if runtime.GOOS == "darwin" {
-		if config.DarkMode {
-			os.Setenv("GTK_THEME", "Adwaita:dark")
-		} else {
-			os.Setenv("GTK_THEME", "Adwaita")
-		}
-	}
 
 	configureMacOSEnvironment()
-	gtk.Init(nil)
+	// adw.Init also initializes GTK; it must run before any widget is built.
+	adw.Init()
 
 	setDarkTheme(config.DarkMode)
 
-	app, err := gtk.ApplicationNew("io.github.xpl0itu.wiiudownloader", glib.APPLICATION_FLAGS_NONE)
-	if err != nil {
-		showFatalDialogAndLog("Error creating application", err)
-		return
+	if os.Getenv("WIIU_UI_SMOKE") != "" {
+		os.Exit(runUISmoke())
 	}
 
+	app := adw.NewApplication("io.github.xploitu.wiiudownloader", gio.ApplicationFlagsNone)
+
 	if runtime.GOOS == "darwin" {
-		quitAction := glib.SimpleActionNew("quit", nil)
-		quitAction.Connect("activate", func() {
+		quitAction := gio.NewSimpleAction("quit", nil)
+		quitAction.ConnectActivate(func(*glib.Variant) {
 			app.Quit()
 		})
 		app.AddAction(quitAction)
@@ -78,10 +74,8 @@ func main() {
 	if configErr != nil {
 		log.Printf("error loading config: %v", configErr)
 		uiIdleAdd(func() {
-			errorDialog := gtk.MessageDialogNew(nil, 0, gtk.MESSAGE_WARNING, gtk.BUTTONS_OK, "Error loading config: %v\n\nStarting with default settings.", configErr)
-			errorDialog.SetTitle(WINDOW_TITLE_PREFIX + "Configuration Warning")
-			errorDialog.Run()
-			errorDialog.Destroy()
+			showAlert(nil, WINDOW_TITLE_PREFIX+"Configuration Warning",
+				fmt.Sprintf("Error loading config: %v\n\nStarting with default settings.", configErr))
 		})
 	}
 
@@ -92,7 +86,7 @@ func main() {
 		})
 	}
 
-	app.Connect("activate", func(app *gtk.Application) {
+	app.ConnectActivate(func() {
 		if !config.DidInitialSetup {
 			assistant, err := NewInitialSetupAssistantWindow(config)
 			if err != nil {
@@ -100,17 +94,17 @@ func main() {
 				return
 			}
 			assistant.SetPostSetupCallback(func() {
-				showMainWindow(app, win)
+				showMainWindow(&app.Application, win)
 			})
-			app.AddWindow(assistant.assistantWindow)
-			assistant.assistantWindow.ShowAll()
+			app.AddWindow(assistant.window)
+			assistant.window.Present()
 			if win.window != nil {
-				win.window.Hide()
+				win.window.SetVisible(false)
 			}
 			return
 		}
 
-		showMainWindow(app, win)
+		showMainWindow(&app.Application, win)
 	})
 
 	app.Run(os.Args)
@@ -221,7 +215,7 @@ func showMainWindow(app *gtk.Application, win *MainWindow) {
 	win.BuildUI()
 	app.AddWindow(win.window)
 	if win.window != nil {
-		win.window.ShowAll()
+		win.window.Present()
 		if !win.showDonationBar {
 			win.setDonationBarVisible(false)
 		}
@@ -232,10 +226,8 @@ func showMainWindow(app *gtk.Application, win *MainWindow) {
 
 func showFatalDialogAndLog(prefix string, err error) {
 	log.Printf("%s: %v", prefix, err)
-	d := gtk.MessageDialogNew(nil, 0, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, "%s: %v", prefix, err)
-	d.SetTitle(WINDOW_TITLE_PREFIX + "Error")
-	d.Run()
-	d.Destroy()
+	showAlert(nil, WINDOW_TITLE_PREFIX+"Error",
+		fmt.Sprintf("%s: %v", prefix, err))
 }
 
 func bundledLoadersCachePath(bundlePath string) (string, bool) {

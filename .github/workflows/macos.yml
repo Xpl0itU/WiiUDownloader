@@ -1,8 +1,15 @@
 name: macOS
+
+# Branch/PR runs build and upload a downloadable .app only. The universal DMG is
+# assembled and released exclusively from tag pushes (see the release job's if).
 on:
   push:
+    branches:
+      - "**"
     tags:
       - "*"
+  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -27,7 +34,7 @@ jobs:
       - name: Install Homebrew Dependencies
         uses: tecolicom/actions-use-homebrew-tools@v1
         with:
-          tools: create-dmg dylibbundler gtk+3 librsvg shared-mime-info adwaita-icon-theme
+          tools: create-dmg dylibbundler gtk4 libadwaita librsvg shared-mime-info adwaita-icon-theme
           cache: yes
       - name: Install Go
         uses: actions/setup-go@v7
@@ -56,9 +63,12 @@ jobs:
         with:
           name: WiiUDownloader-App-${{ matrix.os }}
           path: out/WiiUDownloader.app
+          if-no-files-found: error
 
   release:
     name: Release Universal Binary
+    # Tag pushes only: branch/PR runs stop after the build job's artifacts.
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: macos-14
     needs: build
     steps:

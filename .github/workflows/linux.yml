@@ -1,8 +1,15 @@
 name: Linux
+
+# Branch/PR runs build and upload downloadable artifacts only. Releases are
+# published exclusively from tag pushes (see the gated release job below).
 on:
   push:
+    branches:
+      - "**"
     tags:
       - "*"
+  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -33,19 +40,81 @@ jobs:
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
           docker build . --file Dockerfile.linux --tag builder --build-arg ARCH=${{ matrix.arch }}
-      - name: Build artifacts
+      - name: Build WiiUDownloader (GTK4)
         run: |
           docker run --rm -v "${PWD}":/project builder bash -lc "curl --insecure -Lo db.go -H 'User-Agent: NUSspliBuilder/2.1' 'https://napi.v10lator.de/db?t=go' && if grep -q 'var titleEntry =' db.go; then if grep -q 'type TitleEntry struct' db.go; then sed -i '/type TitleEntry struct/,/}/d' db.go; fi && sed -i 's/var titleEntry =/func init() { TitleDatabase =/' db.go && echo '}' >> db.go; fi && go build -C cmd/WiiUDownloader -o ../../WiiUDownloader ."
-      - name: Prepare Flatpak output directory
-        run: mkdir -p dist/flatpak
-      - name: Deploy WiiUDownloader
+      - name: Verify core module compiles
         run: |
-          CHECKRT_PLUGIN=""
-          if [ "${{ matrix.arch }}" = "x86_64" ]; then CHECKRT_PLUGIN="--plugin checkrt"; fi
-          docker run --privileged --rm -e DEPLOY_GTK_VERSION=3 -e OUTPUT="WiiUDownloader-Linux-${{ matrix.arch }}.AppImage" -e UPDATE_INFORMATION="gh-releases-zsync|Xpl0itU|WiiUDownloader|latest|WiiUDownloader-Linux-${{ matrix.arch }}.AppImage.zsync" -v "${PWD}":/project builder linuxdeploy.AppImage --plugin gtk $CHECKRT_PLUGIN --output=appimage --create-desktop-file --executable=WiiUDownloader --appdir dist --icon-file data/WiiUDownloader.png
+          docker run --rm -v "${PWD}":/project builder bash -lc "go build ./..."
+      - name: Upload WiiUDownloader binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: WiiUDownloader-Linux-${{ matrix.arch }}-bin
+          path: WiiUDownloader
+          if-no-files-found: error
+      - name: Prepare output directories
+        run: mkdir -p dist/flatpak
       - name: Build Flatpak bundle
         run: ./scripts/build-flatpak.sh
-      - name: Upload Linux Artifact
+      - name: Upload Flatpak bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: WiiUDownloader-Linux-${{ matrix.arch }}-flatpak
+          path: dist/flatpak/WiiUDownloader-Linux-*.flatpak
+          if-no-files-found: error
+
+  # AnyLinux AppImage: everything (GTK4, libadwaita, glibc, the dynamic linker)
+  # is bundled by quick-sharun, so it runs on any distro, not just recent glibc.
+  appimage:
+    runs-on: ${{ matrix.runner }}
+    container: ghcr.io/pkgforge-dev/archlinux:latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-latest
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v7
+        with:
+          submodules: "recursive"
+      - name: Preparing container
+        uses: pkgforge-dev/anylinux-setup-action@v3
+      - name: Install dependencies
+        run: /bin/sh ./packaging/appimage/get-dependencies.sh
+      - name: Make AppImage
+        env:
+          VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: /bin/sh ./packaging/appimage/make-appimage.sh
+      - name: Upload AppImage
+        uses: actions/upload-artifact@v7
+        with:
+          name: WiiUDownloader-Linux-${{ matrix.arch }}-appimage
+          path: dist/*.AppImage*
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    # Tag pushes only: branch/PR runs stop after the artifacts above.
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [build, appimage]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download every Linux artifact
+        uses: actions/download-artifact@v8
+        with:
+          pattern: WiiUDownloader-Linux-*
+          path: artifacts
+          merge-multiple: true
+      - name: Collect release files
+        run: |
+          mkdir -p release
+          find artifacts -type f \( -name '*.AppImage' -o -name '*.AppImage.zsync' -o -name '*.flatpak' \) -exec cp {} release/ \;
+          ls -la release
+      - name: Publish release
         uses: ncipollo/release-action@v1
         with:
           allowUpdates: True
@@ -53,7 +122,5 @@ jobs:
           omitBody: True
           omitBodyDuringUpdate: True
           omitNameDuringUpdate: True
-          artifacts: |
-            WiiUDownloader-*.AppImage
-            dist/flatpak/WiiUDownloader-Linux-*.flatpak
+          artifacts: "release/*"
           token: ${{ secrets.GITHUB_TOKEN }}

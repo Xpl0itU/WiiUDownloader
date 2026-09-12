@@ -1,50 +1,52 @@
 headerbar {
 	padding: 6px;
 }
-treeview.view {
+columnview {
 	padding: 6px;
 }
-.button, button {
-	padding: 5px 12px;
-}
-entry {
-	padding: 5px 10px;
+/* Button and entry metrics come from libadwaita now; overriding their padding
+   only made the preference rows look inflated. */
+/* Toolbar icon buttons: the icon is the whole hit target, so nothing can be
+   squeezed or clipped away when the row gets tight. */
+menubutton.flat > button {
+	padding: 2px;
 }
 button.category-toggle {
-	border-radius: 8px;
-	padding: 5px 12px;
+	/* Bigger than a plain toolbar button, like the GTK3 radio row. */
+	padding: 6px 14px;
+	font-weight: 500;
 	transition: all 0.2s ease-in-out;
 }
 checkbutton {
 	padding: 4px 8px;
 }
-button.category-toggle:hover,
-radio.category-toggle:hover {
+/* GTK4's .linked only squares off the corners; it no longer draws a divider
+   between buttons. Draw one ourselves so the pills stay readable. */
+box.linked > button.category-toggle + button.category-toggle {
+	box-shadow: inset 1px 0 @borders;
+}
+button.category-toggle:hover {
 	background: shade(@theme_bg_color, 0.95);
 }
 button.category-toggle:checked,
-radio.category-toggle:checked,
-button.category-toggle:active,
-radio.category-toggle:active {
+button.category-toggle:active {
 	background: @theme_selected_bg_color;
 	background-color: #3584e4; /* Explicit fallback blue (Adwaita blue) */
 	color: @theme_selected_fg_color;
 	color: white;
 }
-.settings-window label {
-	font-weight: 600;
-}
-.settings-grid entry {
-	padding: 6px 10px;
-}
-.settings-grid button {
-	padding: 6px 10px;
-}
+/* AdwPreferencesRow already ships libadwaita's typography; the old
+   hand-laid grid made every label bold and oversized. */
+/* Warm tint and ko-fi orange so the ask is hard to miss in any theme. */
 .gratitude-footer {
-	border-top: 2px solid #00a2ed;
-	background: shade(@theme_bg_color, 0.94);
-	padding: 16px;
+	border-top: 2px solid #ff813f;
+	background: alpha(#ff813f, 0.10);
+	padding: 18px 22px;
 	font-size: 1.1em;
+}
+.gratitude-subline {
+	font-size: 1em;
+	margin-top: 2px;
 }
 button.kofi-btn {
 	background-image: none;
@@ -66,7 +68,7 @@ button.kofi-btn:hover {
 .supporter-count {
 	font-size: 0.9em;
 	color: @theme_unfocused_fg_color;
-	margin-left: 8px;
+	margin-top: 2px;
 }
 .donation-highlight {
 	border-top: 2px solid #00a2ed;
@@ -74,27 +76,58 @@ button.kofi-btn:hover {
 	padding: 16px;
 	font-size: 1.2em;
 }
-.success-flash {
-	background-color: #00a2ed;
-	color: white;
-}
 .total-size-label {
 	font-weight: bold;
 	font-size: 1.1em;
 	padding: 8px 12px;
 	color: @theme_fg_color;
 }
+.bottom-bar {
+	padding: 6px 4px;
+	border-top: 1px solid @borders;
+	background: @theme_bg_color;
+}
+.queue-run-bar {
+	padding-top: 8px;
+	border-top: 1px solid @borders;
+}
+/* The title is the headline of the run bar; the count and the transfer detail
+   sit under it as secondary lines. */
+.queue-run-label {
+	font-weight: 500;
+}
+.queue-run-count {
+	font-size: 0.85em;
+	font-weight: 500;
+	color: @theme_unfocused_fg_color;
+}
+.queue-run-detail {
+	font-size: 0.85em;
+	color: @theme_unfocused_fg_color;
+}
 .queue-pane-vbox {
 	background: @theme_bg_color;
 }
-notebook {
-	padding: 0;
+.queue-pane-vbox columnview > listview > row > cell {
+	padding-top: 6px;
+	padding-bottom: 6px;
 }
-notebook stack {
-	background: @theme_bg_color;
-	padding: 12px;
+.queue-pane-vbox columnview button {
+	min-height: 0;
+	padding: 5px 10px;
 }
-.title {
+/* A little more room each side of the labels than stock button padding gives. */
+button.remove-from-queue-button,
+button.download-queue-button {
+	padding-left: 12px;
+	padding-right: 12px;
+}
+
+/* Never style libadwaita's own class names (title, subtitle, heading, body,
+   caption, dimmed, header, prefixes, suffixes, editable-area, ...): libadwaita
+   puts "title" on every preferences-row title, so a global .title rule silently
+   resizes the whole settings window. Keep custom classes namespaced. */
+.progress-title {
 	font-size: 1.2em;
 	font-weight: 500;
 }
@@ -103,49 +136,75 @@ notebook stack {
 	font-weight: 500;
 	color: @theme_unfocused_fg_color;
 }
-.subtitle {
-	font-size: 0.95em;
-	color: @theme_unfocused_fg_color;
-}
-.dim-label {
-	color: @theme_unfocused_fg_color;
-	opacity: 0.7;
-}
 .sidebar {
 	background-color: @theme_bg_color;
 	border-right: 1px solid shade(@theme_bg_color, 0.9);
 }
-assistant .sidebar {
-	background-color: @theme_base_color;
+
+/* --- setup wizard --- */
+.setup-sidebar-box {
+	background-color: @secondary_sidebar_bg_color;
 	border-right: 1px solid @borders;
-	padding: 6px 0;
+	padding: 8px 6px;
 }
-/* .setup-step-row is the offscreen probe the setup assistant measures to pin
-   the step bar width, so it has to share these declarations. */
-assistant .sidebar label,
+/* Row padding lives on the row's box, so the selection highlight spans it. */
 .setup-step-row {
-	padding: 10px 14px;
-	/* Reserved so the text does not shift when a row becomes current. */
-	border-left: 3px solid transparent;
+	padding: 8px 12px;
 }
-/* Only the current step is bold. The assistant pins the bar to the widest bold
-   row up front, so this cannot resize the sidebar mid-wizard. */
-assistant .sidebar label.highlight,
-.setup-step-row.highlight {
-	background-color: alpha(@theme_fg_color, 0.15);
-	border-left-color: @theme_selected_bg_color;
-	color: @theme_fg_color;
+.setup-step-badge {
+	min-width: 24px;
+	min-height: 24px;
+	border-radius: 999px;
+	background-color: alpha(currentColor, 0.12);
+	font-size: 0.85em;
 	font-weight: bold;
+}
+.setup-step-row label {
+	font-weight: 500;
+}
+/* libadwaita paints the selected navigation row; only the weight and the badge
+   colour need to change on top of it. The step labels sit in a size group, so
+   going bold cannot resize the sidebar mid-wizard. */
+list.setup-sidebar > row:selected .setup-step-row label {
+	font-weight: bold;
+}
+list.setup-sidebar > row:selected .setup-step-badge {
+	background-color: @accent_bg_color;
+	color: @accent_fg_color;
+}
+.setup-actions {
+	padding: 10px 14px;
+	border-top: 1px solid @borders;
+}
+/* Linked groups give each button its own action colour. Adwaita ships
+   suggested (blue) and destructive (red); confirm (green) and warn (amber) are
+   declared here. */
+.linked button.confirm-action,
+.linked button.warn-action {
+	background-image: none;
+	color: #ffffff;
+}
+.linked button.confirm-action {
+	background-color: #2ec27e;
+}
+.linked button.confirm-action:hover {
+	background-color: #3fd08e;
+}
+.linked button.warn-action {
+	background-color: #e5a50a;
+}
+.linked button.warn-action:hover {
+	background-color: #f0b429;
 }
 .linked button {
 	border-radius: 0;
 }
 .linked button:first-child {
-	border-top-left-radius: 6px;
-	border-bottom-left-radius: 6px;
+	border-top-left-radius: 8px;
+	border-bottom-left-radius: 8px;
 }
 .linked button:last-child {
-	border-top-right-radius: 6px;
-	border-bottom-right-radius: 6px;
+	border-top-right-radius: 8px;
+	border-bottom-right-radius: 8px;
 	border-left: none;
 }

@@ -7,34 +7,48 @@ import (
 	"path/filepath"
 
 	wiiudownloader "github.com/Xpl0itU/WiiUDownloader"
-	"github.com/Xpl0itU/dialog"
-	"github.com/gotk3/gotk3/gtk"
 )
 
 func (mw *MainWindow) onDownloadQueueButtonClicked() {
 	if mw.queuePane.IsQueueEmpty() {
 		return
 	}
-	progressWindow, err := createProgressWindow(mw.window)
-	if err != nil {
-		return
-	}
-	mw.progressWindow = progressWindow
+
 	config, err := loadConfig()
-
 	if err != nil {
 		return
 	}
 
-	selectedPath, err := mw.resolveDownloadPath(config)
-	if err != nil {
-		uiIdleAdd(func() {
-			mw.progressWindow.Window.Hide()
-		})
+	if config.RememberLastPath && isValidPath(config.LastSelectedPath) {
+		mw.startDownloadRun(config.LastSelectedPath, config)
 		return
 	}
 
-	mw.progressWindow.Window.ShowAll()
+	// GTK4 removed gtk_dialog_run(), so the folder chooser is asynchronous and
+	// the run starts from its callback.
+	chooseFolder(mw.window, WINDOW_TITLE_PREFIX+"Select Download Path", config.LastSelectedPath, func(chosen string) {
+		if chosen == "" {
+			return
+		}
+		config.LastSelectedPath = chosen
+		if saveErr := config.Save(); saveErr != nil {
+			ShowErrorDialog(mw.window, saveErr)
+		}
+		mw.startDownloadRun(chosen, config)
+	})
+}
+
+// startDownloadRun opens the download UI and drains the queue in the
+// background. Where that UI lives (progress window or inline in the queue pane)
+// is Config.UseInlineDownloadUI's call, not this function's.
+func (mw *MainWindow) startDownloadRun(selectedPath string, config *Config) {
+	downloadUI := mw.newDownloadUI(config)
+	if downloadUI == nil {
+		return
+	}
+	mw.downloadUI = downloadUI
+	downloadUI.Present()
+
 	decryptContents := mw.decryptContents
 	deleteEncryptedContents := mw.getDeleteEncryptedContents()
 
@@ -55,34 +69,13 @@ func (mw *MainWindow) onDownloadQueueButtonClicked() {
 			return
 		}
 
-		errors := mw.progressWindow.GetErrors()
+		errors := downloadUI.GetErrors()
 		if shouldShowQueueErrorSummary(runErr, errors) {
 			uiIdleAdd(func() {
 				mw.showErrorsDialog(errors)
 			})
 		}
 	}()
-}
-
-func (mw *MainWindow) resolveDownloadPath(config *Config) (string, error) {
-	if config.RememberLastPath && isValidPath(config.LastSelectedPath) {
-		return config.LastSelectedPath, nil
-	}
-	builder := dialog.Directory().Title(WINDOW_TITLE_PREFIX + "Select Download Path")
-	if isValidPath(config.LastSelectedPath) {
-		builder.SetStartDir(config.LastSelectedPath)
-	}
-	chosen, err := builder.Browse()
-	if err != nil {
-		return "", err
-	}
-	config.LastSelectedPath = chosen
-	if saveErr := config.Save(); saveErr != nil {
-		uiIdleAdd(func() {
-			ShowErrorDialog(mw.window, saveErr)
-		})
-	}
-	return chosen, nil
 }
 
 func shouldShowQueueErrorSummary(runErr error, errors []DownloadError) bool {
@@ -94,29 +87,43 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string, decryptContent
 		return nil
 	}
 
-	mw.progressWindow.ResetTotalsAndErrors()
+	downloadUI := mw.downloadUI
+	if downloadUI == nil {
+		return nil
+	}
+	downloadUI.ResetTotalsAndErrors()
 
 	totalInQueue := mw.queuePane.GetTitleQueueSize()
-	mw.progressWindow.SetQueueProgress(0, totalInQueue)
+	downloadUI.SetQueueProgress(0, totalInQueue)
 
 	var firstErr error
 	for i, title := range mw.queuePane.GetTitleQueue() {
-		if mw.progressWindow.Cancelled() {
+		if downloadUI.Cancelled() {
 			break
 		}
-		mw.progressWindow.SetQueueProgress(i, totalInQueue)
+		downloadUI.SetQueueProgress(i, totalInQueue)
+		downloadUI.SetTitleState(title.TitleID, queueStateDownloading)
 
 		tidStr := fmt.Sprintf("%016x", title.TitleID)
 		titlePath := filepath.Join(selectedPath, fmt.Sprintf("%s [%s] [%s]", normalizeFilename(title.Name), wiiudownloader.GetFormattedKind(title.TitleID), tidStr))
 		if title.Version >= 0 {
 			titlePath = fmt.Sprintf("%s [v%d]", titlePath, title.Version)
 		}
-		downloadErr := wiiudownloader.DownloadTitle(tidStr, titlePath, title.Version, decryptContents, mw.progressWindow, deleteEncryptedContents, mw.client, config.DecryptOutputPath)
+		downloadErr := wiiudownloader.DownloadTitle(tidStr, titlePath, title.Version, decryptContents, downloadUI, deleteEncryptedContents, mw.client, config.DecryptOutputPath)
 
-		step := nextQueueStep(downloadErr, mw.progressWindow.Cancelled(), config.ContinueOnError)
+		cancelled := downloadUI.Cancelled()
+		step := nextQueueStep(downloadErr, cancelled, config.ContinueOnError)
+		switch {
+		case step.remove:
+			downloadUI.SetTitleState(title.TitleID, queueStateDone)
+		case cancelled:
+			downloadUI.SetTitleState(title.TitleID, queueStateCancelled)
+		default:
+			downloadUI.SetTitleState(title.TitleID, queueStateFailed)
+		}
 		if step.record {
 			errorType := detectErrorType(downloadErr.Error())
-			mw.progressWindow.AddErrorWithType(title.Name, downloadErr.Error(), tidStr, errorType, title.Version)
+			downloadUI.AddErrorWithType(title.Name, downloadErr.Error(), tidStr, errorType, title.Version)
 		}
 		if step.remove {
 			mw.queuePane.RemoveTitle(title)
@@ -130,11 +137,11 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string, decryptContent
 	}
 
 	uiIdleAdd(func() {
-		mw.progressWindow.Window.Hide()
+		downloadUI.Hide()
 		mw.updateTitlesInQueue()
 
-		errors := mw.progressWindow.GetErrors()
-		if len(errors) == 0 && !mw.progressWindow.Cancelled() {
+		errors := downloadUI.GetErrors()
+		if len(errors) == 0 && !downloadUI.Cancelled() {
 			decryptPathToShow := ""
 			if decryptContents && config.DecryptOutputPath != "" {
 				decryptPathToShow = config.DecryptOutputPath
@@ -247,21 +254,15 @@ func (mw *MainWindow) onSetVersionRequested(entries []wiiudownloader.TitleEntry)
 		return
 	}
 	if len(entries) > 1 {
-		infoDialog := gtk.MessageDialogNew(mw.window, gtk.DIALOG_MODAL, gtk.MESSAGE_INFO, gtk.BUTTONS_OK, "Please select a single title to set its version.")
-		infoDialog.SetTitle(WINDOW_TITLE_PREFIX + "Set Title Version")
-		infoDialog.Run()
-		infoDialog.Destroy()
+		showAlert(mw.window, WINDOW_TITLE_PREFIX+"Set Title Version", "Please select a single title to set its version.")
 		return
 	}
 
 	entry := entries[0]
-	version, ok := showVersionSelectionDialog(mw.window, entry)
-	if !ok {
-		return
-	}
-
-	mw.queuePane.SetTitleVersion(entry.TitleID, version)
-	updated := entry
-	updated.Version = version
-	go mw.fetchTitleSize(updated)
+	showVersionSelectionDialog(mw.window, entry, func(version int) {
+		mw.queuePane.SetTitleVersion(entry.TitleID, version)
+		updated := entry
+		updated.Version = version
+		go mw.fetchTitleSize(updated)
+	})
 }

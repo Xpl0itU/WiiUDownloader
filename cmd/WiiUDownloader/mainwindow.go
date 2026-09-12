@@ -87,6 +87,8 @@ type MainWindow struct {
 	childStore                      *gtk.ListStore
 	donationBar                     *gtk.Box
 	donationLabel                   *gtk.Label
+	supporterLabels                 []*gtk.Label
+	supporterCount                  int
 	showDonationBar                 bool
 	sizeFetchSemaphore              chan struct{}
 }
@@ -129,6 +131,7 @@ func NewMainWindow(entries []wiiudownloader.TitleEntry, client *http.Client, con
 		currentRegion:      wiiudownloader.MCP_REGION_EUROPE | wiiudownloader.MCP_REGION_JAPAN | wiiudownloader.MCP_REGION_USA,
 		lastSearchText:     "",
 		client:             client,
+		supporterCount:     fallbackSupporterCount,
 		sizeFetchSemaphore: make(chan struct{}, MAX_CONCURRENT_SIZE_FETCHES),
 	}
 
@@ -141,6 +144,9 @@ func NewMainWindow(entries []wiiudownloader.TitleEntry, client *http.Client, con
 	searchEntry.Connect("changed", mainWindow.onSearchEntryChanged)
 
 	mainWindow.queuePane.SetDownloadCallback(mainWindow.onDownloadQueueButtonClicked)
+
+	// Best effort; on failure the manually-set fallback count stays.
+	go mainWindow.refreshSupporterCount()
 
 	return &mainWindow
 }
@@ -921,10 +927,9 @@ func (mw *MainWindow) setupDonationBar() {
 
 		btnBox, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 4)
 		btnBox.PackStart(button, false, false, 0)
-		supporterLabel, _ := gtk.LabelNew("180+ supporters chipped in")
-		addStyleClass(supporterLabel.GetStyleContext, "supporter-count")
-		supporterLabel.SetHAlign(gtk.ALIGN_CENTER)
-		btnBox.PackStart(supporterLabel, false, false, 0)
+		if supporterLabel := mw.newSupporterLabel(); supporterLabel != nil {
+			btnBox.PackStart(supporterLabel, false, false, 0)
+		}
 		bar.PackEnd(btnBox, false, false, 0)
 	}
 
@@ -1084,10 +1089,9 @@ func (mw *MainWindow) showSuccessDialog(count int, downloadPath string, decryptO
 		})
 		donationBox.PackStart(kofiBtn, false, false, 6)
 
-		supporterSmall, _ := gtk.LabelNew("180+ supporters chipped in")
-		addStyleClass(supporterSmall.GetStyleContext, "supporter-count")
-		supporterSmall.SetHAlign(gtk.ALIGN_CENTER)
-		donationBox.PackStart(supporterSmall, false, false, 0)
+		if supporterSmall := mw.newSupporterLabel(); supporterSmall != nil {
+			donationBox.PackStart(supporterSmall, false, false, 0)
+		}
 
 		contentArea.PackStart(donationBox, false, false, 0)
 	}

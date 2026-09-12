@@ -28,8 +28,6 @@ jobs:
     steps:
       - name: Check out repository code
         uses: actions/checkout@v7
-        with:
-          submodules: "recursive"
       - name: Docker caching
         uses: ScribeMD/docker-cache@0.5.0
         id: cache
@@ -79,8 +77,6 @@ jobs:
     steps:
       - name: Check out repository code
         uses: actions/checkout@v7
-        with:
-          submodules: "recursive"
       - name: Preparing container
         uses: pkgforge-dev/anylinux-setup-action@v3
       - name: Install dependencies

@@ -29,8 +29,6 @@ jobs:
     steps:
       - name: Check out repository code
         uses: actions/checkout@v7
-        with:
-          submodules: "recursive"
       - name: Install Homebrew Dependencies
         uses: tecolicom/actions-use-homebrew-tools@v1
         with:

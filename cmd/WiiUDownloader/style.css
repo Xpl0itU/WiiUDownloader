@@ -115,6 +115,21 @@ notebook stack {
 	background-color: @theme_bg_color;
 	border-right: 1px solid shade(@theme_bg_color, 0.9);
 }
+assistant .sidebar {
+	background-color: @theme_base_color;
+	border-right: 1px solid @borders;
+	padding: 6px 0;
+}
+assistant .sidebar label {
+	padding: 10px 14px;
+	border-left: 3px solid transparent;
+}
+assistant .sidebar label.highlight {
+	background-color: alpha(@theme_fg_color, 0.15);
+	border-left-color: @theme_selected_bg_color;
+	color: @theme_fg_color;
+	font-weight: bold;
+}
 .linked button {
 	border-radius: 0;
 }

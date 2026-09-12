@@ -494,6 +494,12 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	}
 	SetupEntryAccessibility(decryptPathEntry, "Decrypted output path", "Optional folder where decrypted game files will be saved. Leave empty to use the download location.")
 
+	// Keeps both row labels the same width so the two entries line up.
+	pathLabelGroup, err := gtk.SizeGroupNew(gtk.SIZE_GROUP_HORIZONTAL)
+	if err != nil {
+		return nil, err
+	}
+
 	newPathRow := func(labelText string, entry *gtk.Entry, browseTitle string, clearLabel string) (*gtk.Box, error) {
 		row, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 6)
 		if err != nil {
@@ -506,6 +512,7 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 			return nil, err
 		}
 		label.SetHAlign(gtk.ALIGN_START)
+		pathLabelGroup.AddWidget(label)
 		row.PackStart(label, false, false, 0)
 		row.PackStart(entry, true, true, 0)
 
@@ -664,13 +671,21 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	summaryPlatforms.SetHAlign(gtk.ALIGN_START)
 	summaryBox.PackStart(summaryPlatforms, false, false, 0)
 
-	summaryStorage, err := gtk.LabelNew("")
+	summaryDownloads, err := gtk.LabelNew("")
 	if err != nil {
 		return nil, err
 	}
-	summaryStorage.SetMarkup("<span font='10' alpha='85%'>✓ Decrypt output: same as download</span>")
-	summaryStorage.SetHAlign(gtk.ALIGN_START)
-	summaryBox.PackStart(summaryStorage, false, false, 0)
+	summaryDownloads.SetMarkup("<span font='10' alpha='85%'>✓ Downloads: same as download</span>")
+	summaryDownloads.SetHAlign(gtk.ALIGN_START)
+	summaryBox.PackStart(summaryDownloads, false, false, 0)
+
+	summaryDecrypted, err := gtk.LabelNew("")
+	if err != nil {
+		return nil, err
+	}
+	summaryDecrypted.SetHAlign(gtk.ALIGN_START)
+	summaryDecrypted.SetVisible(false)
+	summaryBox.PackStart(summaryDecrypted, false, false, 0)
 
 	pages := []struct {
 		widget *gtk.Box
@@ -763,22 +778,27 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 			}
 		} else if isFinishPage {
 			setSetupButtonsVisible(skipButton, backButton, nextButton, finishButton, false, true, false, true)
-			summaryRegions.SetMarkup("<span font='10' alpha='85%'>✓ Regions: " + selectedRegionsSummary(europeCheck.GetActive(), usaCheck.GetActive(), japanCheck.GetActive()) + "</span>")
-			summaryPlatforms.SetMarkup("<span font='10' alpha='85%'>✓ Platforms: " + selectedPlatformsSummary(cemuCheck.GetActive(), wiiUCheck.GetActive()) + "</span>")
+			setSummaryLabel(summaryRegions, "✓ Regions: ", selectedRegionsSummary(europeCheck.GetActive(), usaCheck.GetActive(), japanCheck.GetActive()))
+			setSummaryLabel(summaryPlatforms, "✓ Platforms: ", selectedPlatformsSummary(cemuCheck.GetActive(), wiiUCheck.GetActive()))
 			cemu := cemuCheck.GetActive()
 			wiiU := wiiUCheck.GetActive()
 			downloadPath, _ := downloadPathEntry.GetText()
 			decryptPath, _ := decryptPathEntry.GetText()
 			lastPath, outputPath := storagePathsForPlatforms(cemu, wiiU, downloadPath, decryptPath)
+			lastPath = strings.TrimSpace(lastPath)
+			outputPath = strings.TrimSpace(outputPath)
 			if cemu && !wiiU {
-				summaryStorage.SetMarkup("<span font='10' alpha='85%'>✓ Games: " + glib.MarkupEscapeText(lastPath) + "</span>")
-			} else if wiiU && cemu {
-				if outputPath == "" {
-					outputPath = "same as download"
-				}
-				summaryStorage.SetMarkup("<span font='10' alpha='85%'>✓ Downloads: " + glib.MarkupEscapeText(lastPath) + "\n✓ Decrypted: " + glib.MarkupEscapeText(outputPath) + "</span>")
+				setSummaryLabel(summaryDownloads, "✓ Games: ", lastPath)
 			} else {
-				summaryStorage.SetMarkup("<span font='10' alpha='85%'>✓ Downloads: " + glib.MarkupEscapeText(lastPath) + "</span>")
+				setSummaryLabel(summaryDownloads, "✓ Downloads: ", lastPath)
+			}
+			summaryDecrypted.SetVisible(false)
+			if cemu && wiiU {
+				decryptedPath := outputPath
+				if decryptedPath == "" && lastPath != "" {
+					decryptedPath = "same as download"
+				}
+				setSummaryLabel(summaryDecrypted, "✓ Decrypted: ", decryptedPath)
 			}
 			finishButton.GrabFocus()
 		}
@@ -970,6 +990,15 @@ func selectedPlatformsSummary(cemu, wiiU bool) string {
 		platforms += "Wii U"
 	}
 	return platforms
+}
+
+func setSummaryLabel(label *gtk.Label, prefix, value string) {
+	if value == "" {
+		label.SetVisible(false)
+		return
+	}
+	label.SetMarkup("<span font='10' alpha='85%'>" + prefix + glib.MarkupEscapeText(value) + "</span>")
+	label.SetVisible(true)
 }
 
 func setSetupButtonsVisible(skipButton, backButton, nextButton, finishButton *gtk.Button, skip, back, next, finish bool) {

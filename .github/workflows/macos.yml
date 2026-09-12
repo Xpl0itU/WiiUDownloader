@@ -34,7 +34,7 @@ jobs:
       - name: Install Homebrew Dependencies
         uses: tecolicom/actions-use-homebrew-tools@v1
         with:
-          tools: create-dmg dylibbundler gtk4 libadwaita librsvg shared-mime-info adwaita-icon-theme
+          tools: create-dmg dylibbundler gtk4 libadwaita librsvg shared-mime-info adwaita-icon-theme gobject-introspection
           cache: yes
       - name: Install Go
         uses: actions/setup-go@v7

@@ -27,7 +27,7 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 	if err != nil {
 		return nil, err
 	}
-	win.SetTitle("WiiUDownloader - Settings")
+	win.SetTitle(WINDOW_TITLE_PREFIX + "Settings")
 	win.SetDecorated(true)
 	win.SetPosition(gtk.WIN_POS_CENTER)
 	win.SetDefaultSize(SETTINGS_WINDOW_WIDTH, SETTINGS_WINDOW_HEIGHT)
@@ -93,9 +93,9 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 	if err != nil {
 		return nil, err
 	}
-	SetupButtonAccessibility(downloadPathButton, "Open file browser to select download directory")
+	SetupButtonAccessibility(downloadPathButton, "Browse for download path")
 	downloadPathButton.Connect("clicked", func() {
-		selectedPath, err := dialog.Directory().Title("Select Download Path").Browse()
+		selectedPath, err := dialog.Directory().Title(WINDOW_TITLE_PREFIX + "Select Download Path").Browse()
 		if err != nil {
 			return
 		}
@@ -135,9 +135,9 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 	if err != nil {
 		return nil, err
 	}
-	SetupButtonAccessibility(decryptOutputPathButton, "Browse for decrypted files output directory")
+	SetupButtonAccessibility(decryptOutputPathButton, "Browse for decrypted output path")
 	decryptOutputPathButton.Connect("clicked", func() {
-		selectedPath, err := dialog.Directory().Title("Select Decrypted Files Output Path").Browse()
+		selectedPath, err := dialog.Directory().Title(WINDOW_TITLE_PREFIX + "Select Decrypted Output Path").Browse()
 		if err != nil {
 			return
 		}
@@ -207,7 +207,7 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 	interfaceGrid.SetMarginStart(12)
 	interfaceGrid.SetMarginEnd(12)
 
-	darkModeCheck, err := gtk.CheckButtonNewWithLabel("Dark Mode")
+	darkModeCheck, err := gtk.CheckButtonNewWithLabel("Dark mode")
 	if err != nil {
 		return nil, err
 	}
@@ -275,6 +275,7 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 		}
 		if newPath != "" && !isValidPath(newPath) {
 			errorDialog := gtk.MessageDialogNew(win, gtk.DIALOG_MODAL, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, INVALID_DOWNLOAD_PATH_ERROR_MESSAGE)
+			errorDialog.SetTitle(WINDOW_TITLE_PREFIX + "Error")
 			defer errorDialog.Destroy()
 			errorDialog.Run()
 			return
@@ -347,6 +348,7 @@ func setButtonsSensitive(sensitive bool, buttons ...*gtk.Button) {
 
 func confirmCloseWithoutSaving(parent *gtk.Window) bool {
 	confirm := gtk.MessageDialogNew(parent, gtk.DIALOG_MODAL, gtk.MESSAGE_WARNING, gtk.BUTTONS_YES_NO, UNSAVED_CHANGES_CONFIRM_MESSAGE)
+	confirm.SetTitle(WINDOW_TITLE_PREFIX + "Unsaved Changes")
 	response := confirm.Run()
 	confirm.Destroy()
 	return response == gtk.RESPONSE_YES

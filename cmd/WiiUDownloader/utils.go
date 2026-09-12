@@ -148,6 +148,7 @@ func ShowErrorDialog(window *gtk.Window, err error) {
 		flags = 0
 	}
 	dialog := gtk.MessageDialogNew(window, flags, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, "%s", err.Error())
+	dialog.SetTitle(WINDOW_TITLE_PREFIX + "Error")
 	dialog.Run()
 	dialog.Destroy()
 }

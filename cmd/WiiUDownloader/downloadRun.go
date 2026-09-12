@@ -68,7 +68,7 @@ func (mw *MainWindow) resolveDownloadPath(config *Config) (string, error) {
 	if config.RememberLastPath && isValidPath(config.LastSelectedPath) {
 		return config.LastSelectedPath, nil
 	}
-	builder := dialog.Directory().Title("Select a path to save the games to")
+	builder := dialog.Directory().Title(WINDOW_TITLE_PREFIX + "Select Download Path")
 	if isValidPath(config.LastSelectedPath) {
 		builder.SetStartDir(config.LastSelectedPath)
 	}
@@ -247,7 +247,8 @@ func (mw *MainWindow) onSetVersionRequested(entries []wiiudownloader.TitleEntry)
 		return
 	}
 	if len(entries) > 1 {
-		infoDialog := gtk.MessageDialogNew(mw.window, gtk.DIALOG_MODAL, gtk.MESSAGE_INFO, gtk.BUTTONS_OK, "Please select a single title to set its version")
+		infoDialog := gtk.MessageDialogNew(mw.window, gtk.DIALOG_MODAL, gtk.MESSAGE_INFO, gtk.BUTTONS_OK, "Please select a single title to set its version.")
+		infoDialog.SetTitle(WINDOW_TITLE_PREFIX + "Set Title Version")
 		infoDialog.Run()
 		infoDialog.Destroy()
 		return

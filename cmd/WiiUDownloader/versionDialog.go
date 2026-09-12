@@ -17,7 +17,7 @@ func showVersionSelectionDialog(parent *gtk.Window, title wiiudownloader.TitleEn
 	}
 	defer dialog.Destroy()
 
-	dialog.SetTitle("Select Title Version")
+	dialog.SetTitle(WINDOW_TITLE_PREFIX + "Select Title Version")
 	dialog.SetModal(true)
 	if parent != nil {
 		dialog.SetTransientFor(parent)
@@ -32,11 +32,11 @@ func showVersionSelectionDialog(parent *gtk.Window, title wiiudownloader.TitleEn
 		log.Printf("failed to get version dialog content area: %v", err)
 		return wiiudownloader.VersionLatest, false
 	}
-	contentArea.SetSpacing(12)
-	contentArea.SetMarginTop(18)
-	contentArea.SetMarginBottom(18)
-	contentArea.SetMarginStart(18)
-	contentArea.SetMarginEnd(18)
+	contentArea.SetSpacing(DIALOG_CONTENT_SPACING)
+	contentArea.SetMarginTop(DIALOG_CONTENT_MARGIN)
+	contentArea.SetMarginBottom(DIALOG_CONTENT_MARGIN)
+	contentArea.SetMarginStart(DIALOG_CONTENT_MARGIN)
+	contentArea.SetMarginEnd(DIALOG_CONTENT_MARGIN)
 
 	titleLabel, err := gtk.LabelNew("")
 	if err == nil {

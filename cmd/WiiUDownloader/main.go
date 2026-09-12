@@ -33,6 +33,11 @@ const (
 	FALLBACK_DNS_RESOLVER_ENDPOINT = "1.1.1.1:53"
 )
 
+const (
+	APP_NAME            = "WiiUDownloader"
+	WINDOW_TITLE_PREFIX = APP_NAME + " - "
+)
+
 func main() {
 	runtime.LockOSThread()
 	runtime.GOMAXPROCS(runtime.NumCPU())
@@ -74,6 +79,7 @@ func main() {
 		log.Printf("error loading config: %v", configErr)
 		uiIdleAdd(func() {
 			errorDialog := gtk.MessageDialogNew(nil, 0, gtk.MESSAGE_WARNING, gtk.BUTTONS_OK, "Error loading config: %v\n\nStarting with default settings.", configErr)
+			errorDialog.SetTitle(WINDOW_TITLE_PREFIX + "Configuration Warning")
 			errorDialog.Run()
 			errorDialog.Destroy()
 		})
@@ -227,6 +233,7 @@ func showMainWindow(app *gtk.Application, win *MainWindow) {
 func showFatalDialogAndLog(prefix string, err error) {
 	log.Printf("%s: %v", prefix, err)
 	d := gtk.MessageDialogNew(nil, 0, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, "%s: %v", prefix, err)
+	d.SetTitle(WINDOW_TITLE_PREFIX + "Error")
 	d.Run()
 	d.Destroy()
 }

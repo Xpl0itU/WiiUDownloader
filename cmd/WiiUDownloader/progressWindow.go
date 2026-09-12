@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -146,9 +145,9 @@ func (pw *ProgressWindow) SetQueueProgress(done, total int) {
 			pw.queueLabel.SetVisible(text != "")
 		}
 		if pw.Window != nil {
-			title := "WiiUDownloader - Downloading"
+			title := WINDOW_TITLE_PREFIX + "Downloading"
 			if text != "" {
-				title += fmt.Sprintf(" (%s)", strings.ToLower(text))
+				title += fmt.Sprintf(" (%s)", text)
 			}
 			pw.Window.SetTitle(title)
 		}
@@ -424,7 +423,7 @@ func createProgressWindow(parent *gtk.Window) (*ProgressWindow, error) {
 	if err != nil {
 		return nil, err
 	}
-	win.SetTitle("WiiUDownloader - Downloading")
+	win.SetTitle(WINDOW_TITLE_PREFIX + "Downloading")
 	win.SetTypeHint(gdk.WINDOW_TYPE_HINT_DIALOG)
 	win.SetModal(false)
 	if parent != nil {
@@ -451,7 +450,7 @@ func createProgressWindow(parent *gtk.Window) (*ProgressWindow, error) {
 		return nil, err
 	}
 	addStyleClass(gameLabel.GetStyleContext, "title")
-	SetupLabelAccessibility(gameLabel, "Game title label")
+	SetupLabelAccessibility(gameLabel, "Game Title")
 
 	queueLabel, err := gtk.LabelNew("")
 	if err != nil {

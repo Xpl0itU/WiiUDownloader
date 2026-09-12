@@ -46,7 +46,7 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	assistant.Connect("cancel", func() {
 		assistant.Destroy()
 	})
-	assistant.SetTitle("WiiUDownloader - Initial Setup")
+	assistant.SetTitle(WINDOW_TITLE_PREFIX + "Initial Setup")
 	assistant.SetDefaultSize(INITIAL_SETUP_WINDOW_WIDTH, INITIAL_SETUP_WINDOW_HEIGHT)
 	assistant.SetPosition(gtk.WIN_POS_CENTER)
 	assistant.SetModal(true)
@@ -516,11 +516,15 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 		row.PackStart(label, false, false, 0)
 		row.PackStart(entry, true, true, 0)
 
+		// labelText is a display label such as "Download path:"; strip the
+		// punctuation so it reads properly in accessibility descriptions.
+		pathName := strings.ToLower(strings.TrimSuffix(labelText, ":"))
+
 		browseButton, err := gtk.ButtonNewWithLabel("Browse")
 		if err != nil {
 			return nil, err
 		}
-		SetupButtonAccessibility(browseButton, "Browse for "+strings.ToLower(labelText))
+		SetupButtonAccessibility(browseButton, "Browse for "+pathName)
 		browseButton.Connect("clicked", func() {
 			selectedPath, err := dialog.Directory().Title(browseTitle).Browse()
 			if err == nil && selectedPath != "" {
@@ -532,7 +536,7 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 		if err != nil {
 			return nil, err
 		}
-		SetupButtonAccessibility(clearButton, "Clear "+strings.ToLower(labelText))
+		SetupButtonAccessibility(clearButton, "Clear "+pathName)
 		addStyleClass(clearButton.GetStyleContext, "destructive-action")
 		clearButton.Connect("clicked", func() {
 			entry.SetText("")
@@ -549,13 +553,13 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 		return row, nil
 	}
 
-	downloadPathRow, err := newPathRow("Download path:", downloadPathEntry, "Select Download Path", "Clear")
+	downloadPathRow, err := newPathRow("Download path:", downloadPathEntry, WINDOW_TITLE_PREFIX+"Select Download Path", "Clear")
 	if err != nil {
 		return nil, err
 	}
 	pageStorage.PackStart(downloadPathRow, false, false, 0)
 
-	decryptPathRow, err := newPathRow("Decrypted path:", decryptPathEntry, "Select Decrypted Files Output Path", "Clear")
+	decryptPathRow, err := newPathRow("Decrypted output path:", decryptPathEntry, WINDOW_TITLE_PREFIX+"Select Decrypted Output Path", "Clear")
 	if err != nil {
 		return nil, err
 	}
@@ -700,11 +704,27 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 
 	lastPageIndex := len(pages) - 1
 
+	titles := make([]string, 0, len(pages))
 	for _, p := range pages {
+		titles = append(titles, p.title)
 		assistant.SetPageComplete(p.widget, p.widget != pageStorage)
 		assistant.SetPageType(p.widget, gtk.ASSISTANT_PAGE_CUSTOM)
 		assistant.SetPageTitle(p.widget, p.title)
 	}
+	pinSetupStepBarWidth(assistant, titles)
+
+	applyTitle := func() {
+		pageTitle := "Initial Setup"
+		if page := assistant.GetCurrentPage(); page >= 0 && page < len(pages) {
+			pageTitle = pages[page].title
+		}
+		want := WINDOW_TITLE_PREFIX + pageTitle
+		if current, _ := assistant.GetTitle(); current != want {
+			assistant.SetTitle(want)
+		}
+	}
+	assistant.Connect("notify::title", applyTitle)
+	applyTitle()
 	updatePlatformSelection()
 	updateStoragePage()
 
@@ -1023,4 +1043,56 @@ func applySetupRowStyle(box *gtk.Box) {
 	box.SetMarginTop(SETUP_ROW_VERTICAL_MARGIN)
 	box.SetMarginBottom(SETUP_ROW_VERTICAL_MARGIN)
 	box.SetSpacing(SETUP_ROW_SPACING)
+}
+
+func pinSetupStepBarWidth(assistant *gtk.Assistant, titles []string) {
+	width := widestSetupStepBar(titles)
+	if width <= 0 {
+		return
+	}
+	provider, err := gtk.CssProviderNew()
+	if err != nil {
+		return
+	}
+	if err := provider.LoadFromData(fmt.Sprintf("assistant .sidebar { min-width: %dpx; }", width)); err != nil {
+		return
+	}
+	screen := assistant.GetScreen()
+	if screen == nil {
+		screen, _ = gdk.ScreenGetDefault()
+	}
+	if screen == nil {
+		return
+	}
+	gtk.AddProviderForScreen(screen, provider, gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+}
+
+func widestSetupStepBar(titles []string) int {
+	bar, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 0)
+	if err != nil {
+		return 0
+	}
+	// The bar's own border is part of the width it can reach.
+	addStyleClass(bar.GetStyleContext, "sidebar")
+
+	for _, title := range titles {
+		row, err := gtk.LabelNew(title)
+		if err != nil {
+			return 0
+		}
+		addStyleClass(row.GetStyleContext, "setup-step-row")
+		addStyleClass(row.GetStyleContext, "highlight") // bold, the widest a row can get
+		bar.Add(row)
+	}
+
+	offscreen, err := gtk.OffscreenWindowNew()
+	if err != nil {
+		return 0
+	}
+	defer offscreen.Destroy()
+	offscreen.Add(bar)
+	offscreen.ShowAll()
+
+	width, _ := bar.GetPreferredWidth()
+	return width
 }

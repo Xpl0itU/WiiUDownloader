@@ -120,11 +120,18 @@ assistant .sidebar {
 	border-right: 1px solid @borders;
 	padding: 6px 0;
 }
-assistant .sidebar label {
+/* .setup-step-row is the offscreen probe the setup assistant measures to pin
+   the step bar width, so it has to share these declarations. */
+assistant .sidebar label,
+.setup-step-row {
 	padding: 10px 14px;
+	/* Reserved so the text does not shift when a row becomes current. */
 	border-left: 3px solid transparent;
 }
-assistant .sidebar label.highlight {
+/* Only the current step is bold. The assistant pins the bar to the widest bold
+   row up front, so this cannot resize the sidebar mid-wizard. */
+assistant .sidebar label.highlight,
+.setup-step-row.highlight {
 	background-color: alpha(@theme_fg_color, 0.15);
 	border-left-color: @theme_selected_bg_color;
 	color: @theme_fg_color;

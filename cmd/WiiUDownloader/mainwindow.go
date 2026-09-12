@@ -45,6 +45,8 @@ const (
 	ERROR_DIALOG_WIDTH            = 600
 	ERROR_DIALOG_HEIGHT           = 400
 	DIALOG_MARGIN                 = 10
+	DIALOG_CONTENT_SPACING        = 12
+	DIALOG_CONTENT_MARGIN         = 12
 	RELATED_ROW_HORIZONTAL_MARGIN = 16
 	RELATED_ROW_VERTICAL_MARGIN   = 12
 	RELATED_ROW_SPACING           = 12
@@ -98,7 +100,7 @@ func NewMainWindow(entries []wiiudownloader.TitleEntry, client *http.Client, con
 		log.Fatalln("Unable to create window:", err)
 	}
 
-	win.SetTitle("WiiUDownloader")
+	win.SetTitle(APP_NAME)
 	win.SetDefaultSize(MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT)
 	win.SetDecorated(true)
 	win.SetPosition(gtk.WIN_POS_CENTER)
@@ -370,17 +372,17 @@ func (mw *MainWindow) BuildUI() {
 	if err != nil {
 		log.Fatalln("Unable to create menu item:", err)
 	}
-	decryptContentsMenuItem, err := gtk.MenuItemNewWithLabel("Decrypt contents")
+	decryptContentsMenuItem, err := gtk.MenuItemNewWithLabel("Decrypt Contents")
 	if err != nil {
 		log.Fatalln("Unable to create menu item:", err)
 	}
-	decryptContentsMenuItem.ToWidget().SetProperty("tooltip-text", "Decrypt contents - Select a game directory to decrypt its contents")
+	decryptContentsMenuItem.ToWidget().SetProperty("tooltip-text", "Decrypt Contents - Select a game directory to decrypt its contents")
 	decryptContentsMenuItem.Connect("activate", func() {
 		mw.progressWindow, err = createProgressWindow(mw.window)
 		if err != nil {
 			return
 		}
-		selectedPath, err := dialog.Directory().Title("Select the game path").Browse()
+		selectedPath, err := dialog.Directory().Title(WINDOW_TITLE_PREFIX + "Select Game Folder").Browse()
 		if err != nil {
 			uiIdleAdd(func() {
 				mw.progressWindow.Window.Hide()
@@ -399,13 +401,13 @@ func (mw *MainWindow) BuildUI() {
 	})
 	toolsSubMenu.Append(decryptContentsMenuItem)
 
-	generateFakeTicketCert, err := gtk.MenuItemNewWithLabel("Generate fake ticket and cert")
+	generateFakeTicketCert, err := gtk.MenuItemNewWithLabel("Generate Fake Ticket and Cert")
 	if err != nil {
 		log.Fatalln("Unable to create menu item:", err)
 	}
-	generateFakeTicketCert.ToWidget().SetProperty("tooltip-text", "Generate fake ticket and cert - Create ticket and certificate files for a game")
+	generateFakeTicketCert.ToWidget().SetProperty("tooltip-text", "Generate Fake Ticket and Cert - Create ticket and certificate files for a game")
 	generateFakeTicketCert.Connect("activate", func() {
-		tmdPath, err := dialog.File().Title("Select the game's tmd file").Filter("tmd", "tmd").Load()
+		tmdPath, err := dialog.File().Title(WINDOW_TITLE_PREFIX+"Select TMD File").Filter("tmd", "tmd").Load()
 		if err != nil {
 			return
 		}
@@ -470,6 +472,7 @@ func (mw *MainWindow) BuildUI() {
 
 			uiIdleAdd(func() {
 				infoDialog := gtk.MessageDialogNew(mw.window, gtk.DIALOG_MODAL, gtk.MESSAGE_INFO, gtk.BUTTONS_OK, "Successfully generated fake ticket and cert.")
+				infoDialog.SetTitle(WINDOW_TITLE_PREFIX + "Success")
 				infoDialog.Run()
 				infoDialog.Destroy()
 			})
@@ -489,21 +492,22 @@ func (mw *MainWindow) BuildUI() {
 
 	toolsMenu.SetSubmenu(toolsSubMenu)
 	menuBar.Append(toolsMenu)
-	configSubMenu, err := gtk.MenuNew()
+	settingsSubMenu, err := gtk.MenuNew()
 	if err != nil {
 		log.Fatalln("Unable to create menu:", err)
 	}
-	configMenuOption, err := gtk.MenuItemNewWithLabel("Settings")
+	settingsMenu, err := gtk.MenuItemNewWithLabel("Settings")
 	if err != nil {
 		log.Fatalln("Unable to create menu item:", err)
 	}
-	configMenuOption.SetSubmenu(configSubMenu)
-	configOption, err := gtk.MenuItemNewWithLabel("Settings")
+	settingsMenu.SetSubmenu(settingsSubMenu)
+
+	openSettingsItem, err := gtk.MenuItemNewWithLabel("Open Settings")
 	if err != nil {
 		log.Fatalln("Unable to create menu item:", err)
 	}
-	configOption.ToWidget().SetProperty("tooltip-text", "Settings - Configure download path and other preferences")
-	configOption.Connect("activate", func() {
+	openSettingsItem.ToWidget().SetProperty("tooltip-text", "Open Settings - Configure download path and other preferences")
+	openSettingsItem.Connect("activate", func() {
 		config, err := loadConfig()
 		if err != nil {
 			return
@@ -518,8 +522,8 @@ func (mw *MainWindow) BuildUI() {
 		}
 		mw.configWindow.Window.ShowAll()
 	})
-	configSubMenu.Append(configOption)
-	menuBar.Append(configMenuOption)
+	settingsSubMenu.Append(openSettingsItem)
+	menuBar.Append(settingsMenu)
 	mainvBox.PackStart(menuBar, false, false, 0)
 	tophBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 6)
 	if err != nil {
@@ -813,7 +817,7 @@ func (mw *MainWindow) showSuccessDialog(count int, downloadPath string, decryptO
 	}
 	defer dialog.Destroy()
 
-	dialog.SetTitle("WiiUDownloader - Download Complete")
+	dialog.SetTitle(WINDOW_TITLE_PREFIX + "Download Complete")
 	dialog.SetModal(true)
 	dialog.SetTransientFor(mw.window)
 	dialog.SetPosition(gtk.WIN_POS_CENTER_ON_PARENT)
@@ -824,11 +828,11 @@ func (mw *MainWindow) showSuccessDialog(count int, downloadPath string, decryptO
 	if err != nil {
 		return
 	}
-	contentArea.SetSpacing(12)
-	contentArea.SetMarginStart(18)
-	contentArea.SetMarginEnd(18)
-	contentArea.SetMarginTop(12)
-	contentArea.SetMarginBottom(12)
+	contentArea.SetSpacing(DIALOG_CONTENT_SPACING)
+	contentArea.SetMarginStart(DIALOG_CONTENT_MARGIN)
+	contentArea.SetMarginEnd(DIALOG_CONTENT_MARGIN)
+	contentArea.SetMarginTop(DIALOG_CONTENT_MARGIN)
+	contentArea.SetMarginBottom(DIALOG_CONTENT_MARGIN)
 
 	// Header
 	header, _ := gtk.LabelNew("")
@@ -1254,12 +1258,12 @@ func (mw *MainWindow) showRelatedTitlesDialog(originals, candidates []wiiudownlo
 	}
 	defer dialog.Destroy()
 
-	dialog.SetTitle("Add Related Content")
+	dialog.SetTitle(WINDOW_TITLE_PREFIX + "Add Related Content")
 	dialog.SetModal(true)
 	dialog.SetTransientFor(mw.window)
 	dialog.SetPosition(gtk.WIN_POS_CENTER_ON_PARENT)
 	dialog.SetDefaultSize(RELATED_DIALOG_WIDTH, RELATED_DIALOG_HEIGHT)
-	SetupDialogAccessibility(dialog, "Add related content")
+	SetupDialogAccessibility(dialog, "Add Related Content")
 
 	dialog.AddButton("Skip", gtk.RESPONSE_CANCEL)
 	dialog.AddButton("Add Selected", gtk.RESPONSE_ACCEPT)
@@ -1269,7 +1273,11 @@ func (mw *MainWindow) showRelatedTitlesDialog(originals, candidates []wiiudownlo
 	if err != nil {
 		return nil, false
 	}
-	contentArea.SetSpacing(8)
+	contentArea.SetSpacing(DIALOG_CONTENT_SPACING)
+	contentArea.SetMarginTop(DIALOG_CONTENT_MARGIN)
+	contentArea.SetMarginBottom(DIALOG_CONTENT_MARGIN)
+	contentArea.SetMarginStart(DIALOG_CONTENT_MARGIN)
+	contentArea.SetMarginEnd(DIALOG_CONTENT_MARGIN)
 
 	headerLabel, err := gtk.LabelNew("")
 	if err != nil {
@@ -1277,8 +1285,6 @@ func (mw *MainWindow) showRelatedTitlesDialog(originals, candidates []wiiudownlo
 	}
 	headerLabel.SetMarkup("<span font='14' weight='bold'>Related content found</span>")
 	headerLabel.SetHAlign(gtk.ALIGN_START)
-	headerLabel.SetMarginTop(DIALOG_MARGIN)
-	headerLabel.SetMarginStart(DIALOG_MARGIN)
 	contentArea.PackStart(headerLabel, false, false, 0)
 
 	descLabel, err := gtk.LabelNew(fmt.Sprintf("You added %d title(s). Select related Game/DLC/Update items to add to the queue.", len(originals)))
@@ -1287,8 +1293,6 @@ func (mw *MainWindow) showRelatedTitlesDialog(originals, candidates []wiiudownlo
 	}
 	descLabel.SetHAlign(gtk.ALIGN_START)
 	descLabel.SetLineWrap(true)
-	descLabel.SetMarginStart(DIALOG_MARGIN)
-	descLabel.SetMarginEnd(DIALOG_MARGIN)
 	contentArea.PackStart(descLabel, false, false, 0)
 
 	scrolledWindow, err := gtk.ScrolledWindowNew(nil, nil)
@@ -1296,9 +1300,6 @@ func (mw *MainWindow) showRelatedTitlesDialog(originals, candidates []wiiudownlo
 		return nil, false
 	}
 	scrolledWindow.SetPolicy(gtk.POLICY_NEVER, gtk.POLICY_AUTOMATIC)
-	scrolledWindow.SetMarginStart(DIALOG_MARGIN)
-	scrolledWindow.SetMarginEnd(DIALOG_MARGIN)
-	scrolledWindow.SetMarginBottom(DIALOG_MARGIN)
 	contentArea.PackStart(scrolledWindow, true, true, 0)
 
 	listBox, err := gtk.ListBoxNew()
@@ -1447,6 +1448,7 @@ func (mw *MainWindow) showError(err error) {
 		mw.progressWindow.Window.Hide()
 	})
 	errorDialog := gtk.MessageDialogNew(mw.window, gtk.DIALOG_MODAL, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, "%s", err.Error())
+	errorDialog.SetTitle(WINDOW_TITLE_PREFIX + "Error")
 	errorDialog.Run()
 	errorDialog.Destroy()
 }
@@ -1459,7 +1461,7 @@ func (mw *MainWindow) showErrorsDialog(errors []DownloadError) {
 	}
 	defer dialog.Destroy()
 
-	dialog.SetTitle("Download Errors")
+	dialog.SetTitle(WINDOW_TITLE_PREFIX + "Download Errors")
 	dialog.SetModal(true)
 	dialog.SetTransientFor(mw.window)
 	dialog.SetPosition(gtk.WIN_POS_CENTER_ON_PARENT)
@@ -1469,14 +1471,16 @@ func (mw *MainWindow) showErrorsDialog(errors []DownloadError) {
 	if err != nil {
 		return
 	}
+	contentArea.SetSpacing(DIALOG_CONTENT_SPACING)
+	contentArea.SetMarginTop(DIALOG_CONTENT_MARGIN)
+	contentArea.SetMarginBottom(DIALOG_CONTENT_MARGIN)
+	contentArea.SetMarginStart(DIALOG_CONTENT_MARGIN)
+	contentArea.SetMarginEnd(DIALOG_CONTENT_MARGIN)
 
 	headerLabel, err := gtk.LabelNew(fmt.Sprintf("The following %d title(s) failed to download:", len(errors)))
 	if err != nil {
 		return
 	}
-	headerLabel.SetMarginTop(DIALOG_MARGIN)
-	headerLabel.SetMarginBottom(DIALOG_MARGIN)
-	headerLabel.SetMarginStart(DIALOG_MARGIN)
 	contentArea.PackStart(headerLabel, false, false, 0)
 
 	scrolledWindow, err := gtk.ScrolledWindowNew(nil, nil)
@@ -1484,8 +1488,6 @@ func (mw *MainWindow) showErrorsDialog(errors []DownloadError) {
 		return
 	}
 	scrolledWindow.SetPolicy(gtk.POLICY_NEVER, gtk.POLICY_AUTOMATIC)
-	scrolledWindow.SetMarginStart(DIALOG_MARGIN)
-	scrolledWindow.SetMarginEnd(DIALOG_MARGIN)
 	contentArea.PackStart(scrolledWindow, true, true, 0)
 
 	listBox, err := gtk.ListBoxNew()
@@ -1569,8 +1571,8 @@ func (mw *MainWindow) showErrorsDialog(errors []DownloadError) {
 		contentArea.PackStart(infoBox, false, false, 0)
 	}
 
-	dialog.AddButton("Add failed to queue", gtk.RESPONSE_APPLY)
-	dialog.AddButton("Close", gtk.RESPONSE_OK)
+	dialog.AddButton("Add Failed to Queue", gtk.RESPONSE_APPLY)
+	dialog.AddButton("Close", gtk.RESPONSE_CLOSE)
 
 	contentArea.ShowAll()
 	response := dialog.Run()
@@ -1604,7 +1606,7 @@ func (mw *MainWindow) showAddByTitleIDDialog() {
 	}
 	defer dialog.Destroy()
 
-	dialog.SetTitle("Add by Title ID")
+	dialog.SetTitle(WINDOW_TITLE_PREFIX + "Add by Title ID")
 	dialog.SetTransientFor(mw.window)
 	dialog.SetModal(true)
 	dialog.AddButton("Cancel", gtk.RESPONSE_CANCEL)
@@ -1614,11 +1616,11 @@ func (mw *MainWindow) showAddByTitleIDDialog() {
 	if err != nil {
 		return
 	}
-	contentArea.SetSpacing(10)
-	contentArea.SetMarginTop(10)
-	contentArea.SetMarginBottom(10)
-	contentArea.SetMarginStart(10)
-	contentArea.SetMarginEnd(10)
+	contentArea.SetSpacing(DIALOG_CONTENT_SPACING)
+	contentArea.SetMarginTop(DIALOG_CONTENT_MARGIN)
+	contentArea.SetMarginBottom(DIALOG_CONTENT_MARGIN)
+	contentArea.SetMarginStart(DIALOG_CONTENT_MARGIN)
+	contentArea.SetMarginEnd(DIALOG_CONTENT_MARGIN)
 
 	label, _ := gtk.LabelNew("Enter Title ID (16-character hex):")
 	contentArea.PackStart(label, false, false, 0)

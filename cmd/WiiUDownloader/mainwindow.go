@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -686,60 +685,6 @@ func (mw *MainWindow) PostShowInit() {
 	mw.downloadQueueButton.GrabDefault()
 }
 
-func (mw *MainWindow) onDownloadQueueButtonClicked() {
-	if mw.queuePane.IsQueueEmpty() {
-		return
-	}
-	progressWindow, err := createProgressWindow(mw.window)
-	if err != nil {
-		return
-	}
-	mw.progressWindow = progressWindow
-	dialog := dialog.Directory().Title("Select a path to save the games to")
-	config, err := loadConfig()
-
-	if err != nil {
-		return
-	}
-
-	selectedPath, err := mw.resolveDownloadPath(config, dialog.SetStartDir, dialog.Browse)
-	if err != nil {
-		uiIdleAdd(func() {
-			mw.progressWindow.Window.Hide()
-		})
-		return
-	}
-
-	mw.progressWindow.Window.ShowAll()
-	decryptContents := mw.decryptContents
-	deleteEncryptedContents := mw.getDeleteEncryptedContents()
-
-	go func() {
-		uiIdleAdd(func() {
-			mw.setDownloadControlsSensitive(false)
-		})
-
-		defer uiIdleAdd(func() {
-			mw.setDownloadControlsSensitive(true)
-		})
-
-		runErr := mw.onDownloadQueueClicked(selectedPath, decryptContents, deleteEncryptedContents, config)
-		if runErr != nil {
-			uiIdleAdd(func() {
-				mw.showError(runErr)
-			})
-			return
-		}
-
-		errors := mw.progressWindow.GetErrors()
-		if shouldShowQueueErrorSummary(runErr, errors) {
-			uiIdleAdd(func() {
-				mw.showErrorsDialog(errors)
-			})
-		}
-	}()
-}
-
 func (mw *MainWindow) onRegionChange(button *gtk.CheckButton, region uint8) {
 	mw.currentRegion = updateRegionMask(mw.currentRegion, region, button.GetActive())
 	if mw.filterModel != nil {
@@ -832,30 +777,6 @@ func (mw *MainWindow) setDownloadControlsSensitive(sensitive bool) {
 	mw.queuePane.removeFromQueueButton.SetSensitive(sensitive)
 }
 
-func (mw *MainWindow) resolveDownloadPath(config *Config, setStartDir func(string) *dialog.DirectoryBuilder, browse func() (string, error)) (string, error) {
-	if config.RememberLastPath && isValidPath(config.LastSelectedPath) {
-		return config.LastSelectedPath, nil
-	}
-	if isValidPath(config.LastSelectedPath) {
-		setStartDir(config.LastSelectedPath)
-	}
-	chosen, err := browse()
-	if err != nil {
-		return "", err
-	}
-	config.LastSelectedPath = chosen
-	if saveErr := config.Save(); saveErr != nil {
-		uiIdleAdd(func() {
-			ShowErrorDialog(mw.window, saveErr)
-		})
-	}
-	return chosen, nil
-}
-
-func shouldShowQueueErrorSummary(runErr error, errors []DownloadError) bool {
-	return runErr == nil && len(errors) > 0
-}
-
 func (mw *MainWindow) onDecryptContentsMenuItemClicked(selectedPath string) error {
 	config, loadErr := loadConfig()
 	if loadErr != nil {
@@ -882,71 +803,6 @@ func (mw *MainWindow) onDecryptContentsMenuItemClicked(selectedPath string) erro
 		}
 	})
 	return err
-}
-
-func (mw *MainWindow) setupDonationBar() {
-	bar, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 12)
-	if err != nil {
-		log.Println("Unable to create donation bar:", err)
-		return
-	}
-	bar.SetMarginTop(0)
-	bar.SetMarginBottom(0)
-	bar.SetMarginStart(0)
-	bar.SetMarginEnd(0)
-	addStyleClass(bar.GetStyleContext, "gratitude-footer")
-
-	label, err := gtk.LabelNew("")
-	if err != nil {
-		log.Println("Unable to create label:", err)
-		return
-	}
-	label.SetHAlign(gtk.ALIGN_START)
-	label.SetLineWrap(true)
-	label.SetLineWrapMode(pango.WRAP_WORD)
-	bar.PackStart(label, true, true, 0)
-	mw.donationLabel = label
-
-	button, err := gtk.ButtonNew()
-	if err != nil {
-		log.Println("Unable to create button:", err)
-	} else {
-		addStyleClass(button.GetStyleContext, "kofi-btn")
-
-		kofiIcon, _ := gtk.ImageNewFromIconName(supportMeIconName(), gtk.ICON_SIZE_BUTTON)
-		kofiLabel, _ := gtk.LabelNew("Buy me a coffee")
-		kofiBtnBox, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 6)
-		kofiBtnBox.SetHAlign(gtk.ALIGN_CENTER)
-		kofiBtnBox.PackStart(kofiIcon, false, false, 0)
-		kofiBtnBox.PackStart(kofiLabel, false, false, 0)
-		button.Add(kofiBtnBox)
-
-		button.Connect("clicked", func() {
-			openURL("https://ko-fi.com/dathinkingchair")
-		})
-
-		btnBox, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 4)
-		btnBox.PackStart(button, false, false, 0)
-		if supporterLabel := mw.newSupporterLabel(); supporterLabel != nil {
-			btnBox.PackStart(supporterLabel, false, false, 0)
-		}
-		bar.PackEnd(btnBox, false, false, 0)
-	}
-
-	mw.donationBar = bar
-	mw.updateDonationBar(false)
-	mw.setDonationBarVisible(mw.showDonationBar)
-}
-
-func (mw *MainWindow) updateDonationBar(success bool) {
-	if mw.donationLabel == nil || mw.donationBar == nil {
-		return
-	}
-	text := "<span size='large'><b>Games worth $40+ are free here.</b> <span foreground='#ff813f'>A coffee keeps them coming.</span></span>"
-	if success {
-		text = "<span size='large'><span foreground='#16a34a'><b>Downloads complete.</b></span> You saved hours. <span foreground='#ff813f'>A coffee keeps them coming.</span></span>"
-	}
-	mw.donationLabel.SetMarkup(text)
 }
 
 func (mw *MainWindow) showSuccessDialog(count int, downloadPath string, decryptOutputPath string) {
@@ -1072,22 +928,10 @@ func (mw *MainWindow) showSuccessDialog(count int, downloadPath string, decryptO
 		nudgeLabel.SetJustify(gtk.JUSTIFY_CENTER)
 		donationBox.PackStart(nudgeLabel, false, false, 6)
 
-		kofiBtn, _ := gtk.ButtonNew()
-		addStyleClass(kofiBtn.GetStyleContext, "kofi-btn")
-		kofiBtn.SetHAlign(gtk.ALIGN_CENTER)
-
-		kofiIcon, _ := gtk.ImageNewFromIconName(supportMeIconName(), gtk.ICON_SIZE_BUTTON)
-		kofiLabel, _ := gtk.LabelNew("Buy me a coffee")
-		kofiBtnBox, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 6)
-		kofiBtnBox.SetHAlign(gtk.ALIGN_CENTER)
-		kofiBtnBox.PackStart(kofiIcon, false, false, 0)
-		kofiBtnBox.PackStart(kofiLabel, false, false, 0)
-		kofiBtn.Add(kofiBtnBox)
-
-		kofiBtn.Connect("clicked", func() {
-			openURL("https://ko-fi.com/dathinkingchair")
-		})
-		donationBox.PackStart(kofiBtn, false, false, 6)
+		if kofiBtn := newKofiButton(); kofiBtn != nil {
+			kofiBtn.SetHAlign(gtk.ALIGN_CENTER)
+			donationBox.PackStart(kofiBtn, false, false, 6)
+		}
 
 		if supporterSmall := mw.newSupporterLabel(); supporterSmall != nil {
 			donationBox.PackStart(supporterSmall, false, false, 0)
@@ -1098,13 +942,6 @@ func (mw *MainWindow) showSuccessDialog(count int, downloadPath string, decryptO
 
 	contentArea.ShowAll()
 	dialog.Run()
-}
-
-func (mw *MainWindow) setDonationBarVisible(visible bool) {
-	mw.showDonationBar = visible
-	if mw.donationBar != nil {
-		mw.donationBar.SetVisible(visible)
-	}
 }
 
 func openURL(url string) {
@@ -1517,7 +1354,7 @@ func (mw *MainWindow) showRelatedTitlesDialog(originals, candidates []wiiudownlo
 		if err != nil {
 			continue
 		}
-		mainLabel.SetMarkup(fmt.Sprintf("<span font='12' weight='600'>%s</span>", escapeMarkup(candidate.Name)))
+		mainLabel.SetMarkup(fmt.Sprintf("<span font='12' weight='600'>%s</span>", glib.MarkupEscapeText(candidate.Name)))
 		mainLabel.SetHAlign(gtk.ALIGN_START)
 		textBox.PackStart(mainLabel, false, false, 0)
 
@@ -1527,8 +1364,8 @@ func (mw *MainWindow) showRelatedTitlesDialog(originals, candidates []wiiudownlo
 		}
 		subLabel.SetMarkup(fmt.Sprintf(
 			"<span font='10' alpha='80%%'>%s | %s | %016x</span>",
-			escapeMarkup(wiiudownloader.GetFormattedKind(candidate.TitleID)),
-			escapeMarkup(wiiudownloader.GetFormattedRegion(candidate.Region)),
+			glib.MarkupEscapeText(wiiudownloader.GetFormattedKind(candidate.TitleID)),
+			glib.MarkupEscapeText(wiiudownloader.GetFormattedRegion(candidate.Region)),
 			candidate.TitleID,
 		))
 		subLabel.SetLineWrap(true)
@@ -1677,7 +1514,7 @@ func (mw *MainWindow) showErrorsDialog(errors []DownloadError) {
 		if err != nil {
 			continue
 		}
-		titleLabel.SetMarkup(fmt.Sprintf("<b>%s</b> [%s]", escapeMarkup(dlErr.Title), dlErr.TidStr))
+		titleLabel.SetMarkup(fmt.Sprintf("<b>%s</b> [%s]", glib.MarkupEscapeText(dlErr.Title), dlErr.TidStr))
 		titleLabel.SetXAlign(0)
 		box.PackStart(titleLabel, false, false, 0)
 
@@ -1686,7 +1523,7 @@ func (mw *MainWindow) showErrorsDialog(errors []DownloadError) {
 			if err != nil {
 				continue
 			}
-			errorTypeLabel.SetMarkup(fmt.Sprintf("<i>Error Type: %s</i>", escapeMarkup(dlErr.ErrorType)))
+			errorTypeLabel.SetMarkup(fmt.Sprintf("<i>Error Type: %s</i>", glib.MarkupEscapeText(dlErr.ErrorType)))
 			errorTypeLabel.SetXAlign(0)
 			box.PackStart(errorTypeLabel, false, false, 0)
 		}
@@ -1757,182 +1594,6 @@ func (mw *MainWindow) showErrorsDialog(errors []DownloadError) {
 			mw.updateTitlesInQueue()
 		}
 	}
-}
-
-func (mw *MainWindow) onDownloadQueueClicked(selectedPath string, decryptContents, deleteEncryptedContents bool, config *Config) error {
-	if mw.queuePane.IsQueueEmpty() {
-		return nil
-	}
-
-	mw.progressWindow.ResetTotalsAndErrors()
-
-	totalInQueue := mw.queuePane.GetTitleQueueSize()
-	mw.progressWindow.SetQueueProgress(0, totalInQueue)
-
-	var firstErr error
-	for i, title := range mw.queuePane.GetTitleQueue() {
-		if mw.progressWindow.Cancelled() {
-			break
-		}
-		mw.progressWindow.SetQueueProgress(i, totalInQueue)
-
-		tidStr := fmt.Sprintf("%016x", title.TitleID)
-		titlePath := filepath.Join(selectedPath, fmt.Sprintf("%s [%s] [%s]", normalizeFilename(title.Name), wiiudownloader.GetFormattedKind(title.TitleID), tidStr))
-		if title.Version >= 0 {
-			titlePath = fmt.Sprintf("%s [v%d]", titlePath, title.Version)
-		}
-		downloadErr := wiiudownloader.DownloadTitle(tidStr, titlePath, title.Version, decryptContents, mw.progressWindow, deleteEncryptedContents, mw.client, config.DecryptOutputPath)
-
-		step := nextQueueStep(downloadErr, mw.progressWindow.Cancelled(), config.ContinueOnError)
-		if step.record {
-			errorType := detectErrorType(downloadErr.Error())
-			mw.progressWindow.AddErrorWithType(title.Name, downloadErr.Error(), tidStr, errorType, title.Version)
-		}
-		if step.remove {
-			mw.queuePane.RemoveTitle(title)
-		}
-		if step.returned != nil {
-			firstErr = step.returned
-		}
-		if step.stop {
-			break
-		}
-	}
-
-	uiIdleAdd(func() {
-		mw.progressWindow.Window.Hide()
-		mw.updateTitlesInQueue()
-
-		errors := mw.progressWindow.GetErrors()
-		if len(errors) == 0 && !mw.progressWindow.Cancelled() {
-			decryptPathToShow := ""
-			if decryptContents && config.DecryptOutputPath != "" {
-				decryptPathToShow = config.DecryptOutputPath
-			}
-			mw.showSuccessDialog(totalInQueue, selectedPath, decryptPathToShow)
-		}
-	})
-
-	return firstErr
-}
-
-type queueStep struct {
-	remove   bool  // remove the title from the queue
-	stop     bool  // stop processing further titles
-	record   bool  // record the error in the progress window
-	returned error // non-nil: abort the whole run with this error
-}
-
-func nextQueueStep(downloadErr error, cancelled, continueOnError bool) queueStep {
-	if downloadErr == nil || downloadErr == context.Canceled {
-		return queueStep{remove: true}
-	}
-	if cancelled {
-		return queueStep{stop: true}
-	}
-	if continueOnError {
-		return queueStep{remove: true, record: true}
-	}
-	return queueStep{record: true, stop: true, returned: downloadErr}
-}
-
-func (mw *MainWindow) collectTIDs(titles []wiiudownloader.TitleEntry) []uint64 {
-	tids := make([]uint64, len(titles))
-	for i, t := range titles {
-		tids[i] = t.TitleID
-	}
-	return tids
-}
-
-func dedupeTitles(titles []wiiudownloader.TitleEntry, inQueue func(uint64) bool) []wiiudownloader.TitleEntry {
-	seen := make(map[uint64]struct{}, len(titles))
-	out := make([]wiiudownloader.TitleEntry, 0, len(titles))
-	for _, entry := range titles {
-		if _, dup := seen[entry.TitleID]; dup {
-			continue
-		}
-		if inQueue != nil && inQueue(entry.TitleID) {
-			continue
-		}
-		seen[entry.TitleID] = struct{}{}
-		out = append(out, entry)
-	}
-	return out
-}
-
-func (mw *MainWindow) addTitlesToQueue(titles []wiiudownloader.TitleEntry) {
-	toAdd := dedupeTitles(titles, func(tid uint64) bool {
-		return mw.queuePane.IsTitleInQueue(wiiudownloader.TitleEntry{TitleID: tid})
-	})
-	if len(toAdd) == 0 {
-		return
-	}
-
-	for i, entry := range toAdd {
-		// Database entries default to 0 meaning "latest"; remap so v0 is selectable.
-		if entry.Version == 0 {
-			entry.Version = wiiudownloader.VersionLatest
-			toAdd[i] = entry
-		}
-		mw.queuePane.SetTitleLoadingNoUpdate(entry.TitleID)
-	}
-	mw.queuePane.AddTitles(toAdd)
-
-	config, _ := loadConfig()
-	if !config.GetSizeOnQueue {
-		return
-	}
-
-	for _, entry := range toAdd {
-		go mw.fetchTitleSize(entry)
-	}
-}
-
-func (mw *MainWindow) fetchTitleSize(entry wiiudownloader.TitleEntry) {
-	mw.sizeFetchSemaphore <- struct{}{}
-	defer func() { <-mw.sizeFetchSemaphore }()
-
-	if !mw.queuePane.IsTitleInQueue(entry) {
-		return
-	}
-
-	size, err := wiiudownloader.FetchTMDSize(entry.TitleID, entry.Version, mw.client)
-
-	if !mw.queuePane.IsTitleInQueue(entry) {
-		return
-	}
-
-	uiIdleAdd(func() {
-		if err != nil {
-			log.Printf("Failed to fetch size for %016x: %v", entry.TitleID, err)
-			mw.queuePane.SetTitleError(entry.TitleID)
-		} else {
-			mw.queuePane.SetTitleSize(entry.TitleID, size)
-		}
-	})
-}
-
-func (mw *MainWindow) onSetVersionRequested(entries []wiiudownloader.TitleEntry) {
-	if len(entries) == 0 {
-		return
-	}
-	if len(entries) > 1 {
-		infoDialog := gtk.MessageDialogNew(mw.window, gtk.DIALOG_MODAL, gtk.MESSAGE_INFO, gtk.BUTTONS_OK, "Please select a single title to set its version")
-		infoDialog.Run()
-		infoDialog.Destroy()
-		return
-	}
-
-	entry := entries[0]
-	version, ok := showVersionSelectionDialog(mw.window, entry)
-	if !ok {
-		return
-	}
-
-	mw.queuePane.SetTitleVersion(entry.TitleID, version)
-	updated := entry
-	updated.Version = version
-	go mw.fetchTitleSize(updated)
 }
 
 func (mw *MainWindow) showAddByTitleIDDialog() {

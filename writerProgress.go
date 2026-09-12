@@ -15,17 +15,13 @@ type WriterProgress struct {
 	filename             string
 }
 
-type pauseWaiter interface {
-	WaitIfPaused() bool
-}
-
 func newWriterProgress(writer io.Writer, progressReporter ProgressReporter, filename string) *WriterProgress {
 	return &WriterProgress{writer: writer, progressReporter: progressReporter, updateProgressTicker: time.NewTicker(WRITER_PROGRESS_FLUSH_INTERVAL), downloadToReport: 0, filename: filename}
 }
 
 func (r *WriterProgress) Write(p []byte) (n int, err error) {
 	if r.progressReporter != nil {
-		if waiter, ok := r.progressReporter.(pauseWaiter); ok {
+		if waiter, ok := r.progressReporter.(pauseAwareReporter); ok {
 			if !waiter.WaitIfPaused() {
 				return 0, errCancel
 			}

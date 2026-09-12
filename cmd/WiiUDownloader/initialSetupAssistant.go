@@ -771,14 +771,14 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 			decryptPath, _ := decryptPathEntry.GetText()
 			lastPath, outputPath := storagePathsForPlatforms(cemu, wiiU, downloadPath, decryptPath)
 			if cemu && !wiiU {
-				summaryStorage.SetMarkup("<span font='10' alpha='85%'>✓ Games: " + escapeMarkup(lastPath) + "</span>")
+				summaryStorage.SetMarkup("<span font='10' alpha='85%'>✓ Games: " + glib.MarkupEscapeText(lastPath) + "</span>")
 			} else if wiiU && cemu {
 				if outputPath == "" {
 					outputPath = "same as download"
 				}
-				summaryStorage.SetMarkup("<span font='10' alpha='85%'>✓ Downloads: " + escapeMarkup(lastPath) + "\n✓ Decrypted: " + escapeMarkup(outputPath) + "</span>")
+				summaryStorage.SetMarkup("<span font='10' alpha='85%'>✓ Downloads: " + glib.MarkupEscapeText(lastPath) + "\n✓ Decrypted: " + glib.MarkupEscapeText(outputPath) + "</span>")
 			} else {
-				summaryStorage.SetMarkup("<span font='10' alpha='85%'>✓ Downloads: " + escapeMarkup(lastPath) + "</span>")
+				summaryStorage.SetMarkup("<span font='10' alpha='85%'>✓ Downloads: " + glib.MarkupEscapeText(lastPath) + "</span>")
 			}
 			finishButton.GrabFocus()
 		}

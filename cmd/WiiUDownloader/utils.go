@@ -1,6 +1,7 @@
 package main
 
 import (
+	_ "embed"
 	"fmt"
 	"log"
 	"math"
@@ -122,139 +123,7 @@ func applyStyling() {
 		log.Printf("failed to create CSS provider: %v", err)
 		return
 	}
-	css := `
-	headerbar {
-		padding: 6px;
-	}
-	treeview.view {
-		padding: 6px;
-	}
-	.button, button {
-		padding: 5px 12px;
-	}
-	entry {
-		padding: 5px 10px;
-	}
-	button.category-toggle {
-		border-radius: 8px;
-		padding: 5px 12px;
-		transition: all 0.2s ease-in-out;
-	}
-	checkbutton {
-		padding: 4px 8px;
-	}
-	button.category-toggle:hover,
-	radio.category-toggle:hover {
-		background: shade(@theme_bg_color, 0.95);
-	}
-	button.category-toggle:checked,
-	radio.category-toggle:checked,
-	button.category-toggle:active,
-	radio.category-toggle:active {
-		background: @theme_selected_bg_color;
-		background-color: #3584e4; /* Explicit fallback blue (Adwaita blue) */
-		color: @theme_selected_fg_color;
-		color: white;
-	}
-	.settings-window label {
-		font-weight: 600;
-	}
-	.settings-grid entry {
-		padding: 6px 10px;
-	}
-	.settings-grid button {
-		padding: 6px 10px;
-	}
-	.gratitude-footer {
-		border-top: 2px solid #00a2ed;
-		background: shade(@theme_bg_color, 0.94);
-		padding: 16px;
-		font-size: 1.1em;
-	}
-	button.kofi-btn {
-		background-image: none;
-		background-color: #ff813f;
-		color: #ffffff;
-		font-weight: bold;
-		border-radius: 8px;
-		padding: 6px 16px;
-		font-size: 1.1em;
-		transition: all 0.2s ease-in-out;
-	}
-	button.kofi-btn:hover {
-		background-image: none;
-		background-color: #ff9359;
-	}
-	.kofi-btn {
-		box-shadow: 0 1px 2px rgba(0,0,0,0.12);
-	}
-	.supporter-count {
-		font-size: 0.9em;
-		color: @theme_unfocused_fg_color;
-		margin-left: 8px;
-	}
-	.donation-highlight {
-		border-top: 2px solid #00a2ed;
-		background: shade(@theme_bg_color, 0.96);
-		padding: 16px;
-		font-size: 1.2em;
-	}
-	.success-flash {
-		background-color: #00a2ed;
-		color: white;
-	}
-	.total-size-label {
-		font-weight: bold;
-		font-size: 1.1em;
-		padding: 8px 12px;
-		color: @theme_fg_color;
-	}
-	.queue-pane-vbox {
-		background: @theme_bg_color;
-	}
-	notebook {
-		padding: 0;
-	}
-	notebook stack {
-		background: @theme_bg_color;
-		padding: 12px;
-	}
-	.title {
-		font-size: 1.2em;
-		font-weight: 500;
-	}
-	.queue-position-label {
-		font-size: 0.85em;
-		font-weight: 500;
-		color: @theme_unfocused_fg_color;
-	}
-	.subtitle {
-		font-size: 0.95em;
-		color: @theme_unfocused_fg_color;
-	}
-	.dim-label {
-		color: @theme_unfocused_fg_color;
-		opacity: 0.7;
-	}
-	.sidebar {
-		background-color: @theme_bg_color;
-		border-right: 1px solid shade(@theme_bg_color, 0.9);
-	}
-	.linked button {
-		border-radius: 0;
-	}
-	.linked button:first-child {
-		border-top-left-radius: 6px;
-		border-bottom-left-radius: 6px;
-	}
-	.linked button:last-child {
-		border-top-right-radius: 6px;
-		border-bottom-right-radius: 6px;
-		border-left: none;
-	}
-	`
-
-	if err := provider.LoadFromData(css); err != nil {
+	if err := provider.LoadFromData(styleCSS); err != nil {
 		log.Printf("failed to load CSS styling: %v", err)
 	}
 	screen, err := gdk.ScreenGetDefault()
@@ -283,21 +152,13 @@ func ShowErrorDialog(window *gtk.Window, err error) {
 	dialog.Destroy()
 }
 
-func escapeMarkup(text string) string {
-	text = strings.ReplaceAll(text, "&", "&amp;")
-	text = strings.ReplaceAll(text, "<", "&lt;")
-	text = strings.ReplaceAll(text, ">", "&gt;")
-	text = strings.ReplaceAll(text, "\"", "&quot;")
-	return text
-}
+const (
+	queueDownloadIcon = "folder-download-symbolic"
+	supportMeIcon     = "starred-symbolic"
+)
 
-func queueDownloadIconName() string {
-	return "folder-download-symbolic"
-}
-
-func supportMeIconName() string {
-	return "starred-symbolic"
-}
+//go:embed style.css
+var styleCSS string
 
 func detectErrorType(errorMsg string) string {
 	errorLower := strings.ToLower(errorMsg)

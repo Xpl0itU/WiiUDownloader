@@ -5,13 +5,10 @@ import (
 	"log"
 
 	wiiudownloader "github.com/Xpl0itU/WiiUDownloader"
+	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
 )
 
-// showVersionSelectionDialog prompts the user to choose between the latest
-// title version or a specific one (including version 0). It returns the
-// selected version and true when the user accepts. wiiudownloader.VersionLatest
-// is returned for the latest version.
 func showVersionSelectionDialog(parent *gtk.Window, title wiiudownloader.TitleEntry) (int, bool) {
 	dialog, err := gtk.DialogNew()
 	if err != nil {
@@ -43,7 +40,7 @@ func showVersionSelectionDialog(parent *gtk.Window, title wiiudownloader.TitleEn
 
 	titleLabel, err := gtk.LabelNew("")
 	if err == nil {
-		titleText := fmt.Sprintf("%s (%s) - %016x", escapeMarkup(title.Name), escapeMarkup(wiiudownloader.GetFormattedRegion(title.Region)), title.TitleID)
+		titleText := fmt.Sprintf("%s (%s) - %016x", glib.MarkupEscapeText(title.Name), glib.MarkupEscapeText(wiiudownloader.GetFormattedRegion(title.Region)), title.TitleID)
 		titleLabel.SetMarkup(fmt.Sprintf("<span size='large' weight='bold'>%s</span>", titleText))
 		titleLabel.SetHAlign(gtk.ALIGN_START)
 		titleLabel.SetLineWrap(true)

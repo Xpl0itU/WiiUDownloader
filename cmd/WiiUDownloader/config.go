@@ -106,7 +106,7 @@ func loadConfig() (*Config, error) {
 			}
 		}
 
-		if umErr := decodeConfig(data, globalConfig); umErr != nil {
+		if umErr := json.Unmarshal(data, globalConfig); umErr != nil {
 			log.Printf("error parsing config file: %v, resetting to defaults\n", umErr)
 			if createErr := createDefaultConfigFile(); createErr != nil {
 				err = fmt.Errorf("error resetting corrupt config file: %w", createErr)
@@ -122,10 +122,6 @@ func loadConfig() (*Config, error) {
 	})
 
 	return globalConfig, err
-}
-
-func decodeConfig(data []byte, c *Config) error {
-	return json.Unmarshal(data, c)
 }
 
 func (c *Config) saveTo(path string) error {

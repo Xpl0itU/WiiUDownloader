@@ -11,10 +11,6 @@ func NewCursor(data []byte) *Cursor {
 	return &Cursor{data: data}
 }
 
-func (c *Cursor) Pos() int {
-	return c.pos
-}
-
 func (c *Cursor) Remaining() int {
 	return len(c.data) - c.pos
 }

@@ -166,7 +166,7 @@ func NewQueuePane() (*QueuePane, error) {
 		return nil, err
 	}
 	downloadLabel, err := gtk.LabelNew("Download Queue")
-	downloadIcon, err := gtk.ImageNewFromIconName(queueDownloadIconName(), gtk.ICON_SIZE_BUTTON)
+	downloadIcon, err := gtk.ImageNewFromIconName(queueDownloadIcon, gtk.ICON_SIZE_BUTTON)
 	if err == nil {
 		downloadLabel.SetJustify(gtk.JUSTIFY_CENTER)
 		downloadLabel.SetEllipsize(pango.ELLIPSIZE_END)

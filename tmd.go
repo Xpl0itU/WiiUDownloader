@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	TMD_VERSION_WII  = 0x00
-	TMD_VERSION_WIIU = 0x01
+	TMD_VERSION_WII  = tmdfmt.VersionWii
+	TMD_VERSION_WIIU = tmdfmt.VersionWiiU
 )
 
 type TMD struct {
@@ -42,16 +42,16 @@ func ParseTMD(data []byte) (*TMD, error) {
 		TitleVersion: parsed.TitleVersion,
 		ContentCount: parsed.ContentCount,
 		Contents:     make([]Content, len(parsed.Contents)),
-		Certificate1: append([]byte(nil), parsed.Certificate1...),
-		Certificate2: append([]byte(nil), parsed.Certificate2...),
+		Certificate1: parsed.Certificate1,
+		Certificate2: parsed.Certificate2,
 	}
 	for i, content := range parsed.Contents {
 		out.Contents[i] = Content{
 			ID:    content.ID,
-			Index: append([]byte(nil), content.Index[:]...),
+			Index: content.Index[:],
 			Type:  content.Type,
 			Size:  content.Size,
-			Hash:  append([]byte(nil), content.Hash...),
+			Hash:  content.Hash,
 		}
 	}
 	switch out.Version {

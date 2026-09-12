@@ -18,7 +18,8 @@ pacman -Syu --noconfirm --needed \
 	gdk-pixbuf2 \
 	glib2 \
 	adwaita-icon-theme \
-	hicolor-icon-theme
+	hicolor-icon-theme \
+	gobject-introspection
 
 echo "Installing debloated packages..."
 echo "---------------------------------------------------------------"

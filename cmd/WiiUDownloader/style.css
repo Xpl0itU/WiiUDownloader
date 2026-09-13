@@ -127,15 +127,6 @@ button.download-queue-button {
    caption, dimmed, header, prefixes, suffixes, editable-area, ...): libadwaita
    puts "title" on every preferences-row title, so a global .title rule silently
    resizes the whole settings window. Keep custom classes namespaced. */
-.progress-title {
-	font-size: 1.2em;
-	font-weight: 500;
-}
-.queue-position-label {
-	font-size: 0.85em;
-	font-weight: 500;
-	color: @theme_unfocused_fg_color;
-}
 .sidebar {
 	background-color: @theme_bg_color;
 	border-right: 1px solid shade(@theme_bg_color, 0.9);

@@ -233,6 +233,38 @@ func uiSmokePackagingIDs(s *uiSmoke) {
 	s.check(checked > 0, "at least one flatpak manifest was checked (%d)", checked)
 }
 
+// uiSmokeRetiredProgressWindow guards the retirement of the separate progress
+// window: its files are gone, and no source may bring the seam back.
+func uiSmokeRetiredProgressWindow(s *uiSmoke) {
+	for _, retired := range []string{"progressWindow.go", "downloadUI.go"} {
+		_, err := os.Stat(retired)
+		s.check(os.IsNotExist(err), "%s is retired", retired)
+	}
+
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		s.check(false, "the package sources are readable: %v", err)
+		return
+	}
+	var references []string
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasPrefix(name, "ui_smoke") {
+			continue
+		}
+		data, err := os.ReadFile(name)
+		if err != nil {
+			continue
+		}
+		for _, symbol := range []string{"createProgressWindow", "UseInlineDownloadUI", "inlineDownloadUI"} {
+			if strings.Contains(string(data), symbol) {
+				references = append(references, name+":"+symbol)
+			}
+		}
+	}
+	s.check(len(references) == 0, "nothing still builds a separate progress window (%v)", references)
+}
+
 // uiSmokeVisibleWindowTitles lists the toplevels that are actually on screen.
 // A closed GtkWindow stays in the toplevel list, so counting titles alone would
 // not notice a window that was closed without being taken down.
@@ -292,20 +324,22 @@ func uiSmokeCheckLayout(s *uiSmoke, mw *MainWindow, size string) {
 		s.check(okBar && okAction && barY < actionY, "%s: donation bar stays above the action bar (%.0f < %.0f)", size, barY, actionY)
 	}
 
+	// The queue pane holds the queue and download controls plus the run bar, so it
+	// has to survive every window size instead of being dropped at a breakpoint.
+	s.check(gtk.BaseWidget(mw.queuePane.container).Visible() && gtk.BaseWidget(mw.queuePane.container).Mapped(),
+		"%s: the queue pane stays visible while resizing", size)
 	titleX, _, okTitle := uiSmokeWidgetPoint(mw.titleView, mw.window)
-	if gtk.BaseWidget(mw.queuePane.container).Visible() {
-		queueX, _, okQueue := uiSmokeWidgetPoint(mw.queuePane.container, mw.window)
-		s.check(okQueue && okTitle && queueX+float32(mw.queuePane.container.Width()) <= titleX+1,
-			"%s: queue pane stays left of the title list", size)
-	} else {
-		// Below the breakpoint the pane is dropped so nothing gets clipped. The
-		// list must stay usable, and the pane must really be gone: the old check
-		// only looked at the list, so a breakpoint that silently never fired
-		// still passed.
-		s.check(okTitle && gtk.BaseWidget(mw.titleView).Mapped() && mw.titleView.Width() > 0,
-			"%s: compact layout keeps the title list usable", size)
-		s.check(mw.window.Width() > COMPACT_WINDOW_BREAKPOINT || !gtk.BaseWidget(mw.queuePane.container).Visible(),
-			"%s: compact layout really drops the queue pane", size)
+	queueX, _, okQueue := uiSmokeWidgetPoint(mw.queuePane.container, mw.window)
+	s.check(okQueue && okTitle && queueX+float32(mw.queuePane.container.Width()) <= titleX+1,
+		"%s: queue pane stays left of the title list", size)
+	s.check(okTitle && gtk.BaseWidget(mw.titleView).Mapped() && mw.titleView.Width() > 0,
+		"%s: the title list stays usable", size)
+	for name, button := range map[string]*gtk.Button{
+		"download queue":  mw.queuePane.downloadButton,
+		"remove selected": mw.queuePane.removeFromQueueButton,
+	} {
+		s.check(gtk.BaseWidget(button).Mapped() && button.Width() > 0,
+			"%s: the %s button stays on screen (%d px wide)", size, name, button.Width())
 	}
 }
 
@@ -319,13 +353,17 @@ func uiSmokeCheckContentFits(s *uiSmoke, mw *MainWindow, size string) {
 	s.check(minW <= mw.window.Width() && minH <= mw.window.Height(),
 		"%s: content minimum %dx%d fits inside the window (no resize spam)", size, minW, minH)
 
-	// The pane-visible minimum has to fit the *smallest* window that still shows
-	// the pane, which is the breakpoint, not this size. Without this the
-	// breakpoint silently drifts below the layout and the warnings come back.
-	if gtk.BaseWidget(mw.queuePane.container).Visible() {
-		s.check(minW <= COMPACT_WINDOW_BREAKPOINT+1,
-			"%s: the pane-visible minimum %d fits the %d px breakpoint", size, minW, COMPACT_WINDOW_BREAKPOINT)
+	// What has to fit is the minimum of the layout actually in force. Below the
+	// breakpoint that is the compact one, so it has to fit the smallest window we
+	// allow; above it the wide one only has to fit the narrowest window that can
+	// still be wide. Without this the minimum silently drifts past the floor and
+	// the "exceeds AdwWindow" resize spam comes back.
+	limit := COMPACT_WINDOW_BREAKPOINT
+	if mw.window.Width() <= COMPACT_WINDOW_BREAKPOINT {
+		limit = MIN_WINDOW_WIDTH
 	}
+	s.check(minW <= limit,
+		"%s: the layout minimum %d fits the %d px it is allowed", size, minW, limit)
 }
 
 // uiSmokeTitlePrefixes checks every open window is titled "WiiUDownloader - ...".
@@ -553,7 +591,7 @@ func runUISmoke() int {
 	s.check(mw.donationBar.Visible(), "donation bar shows")
 
 	// --- the same invariants must hold at every window size ---
-	for _, size := range []struct{ w, h int }{{1024, 600}, {1600, 900}, {1280, 720}, {900, 500}, {880, 600}, {700, 480}, {MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT}} {
+	for _, size := range []struct{ w, h int }{{1024, 600}, {1600, 900}, {1280, 720}, {COMPACT_WINDOW_BREAKPOINT, 600}, {COMPACT_WINDOW_BREAKPOINT + 1, 600}, {900, 500}, {880, 600}, {MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT}, {MIN_WINDOW_WIDTH, 700}} {
 		mw.window.SetDefaultSize(size.w, size.h)
 		uiSmokeSettle()
 		actualW, actualH := mw.window.Width(), mw.window.Height()
@@ -778,177 +816,148 @@ func runUISmoke() int {
 			"a decryption batch reports every failed folder in one overview")
 		s.check(!uiSmokeHasWindowTitle(WINDOW_TITLE_PREFIX+"Download Complete"),
 			"a decryption batch never raises the Download Complete dialog")
-		if mw.progressWindow != nil {
-			mw.progressWindow.Window.Destroy()
-		}
+		s.check(!uiSmokeHasWindowTitle(WINDOW_TITLE_PREFIX+"Downloading"),
+			"a decryption batch reports in the run bar, not a progress window")
 		os.RemoveAll(decryptRoot)
 		uiSmokePump()
 	}
 
-	// --- download progress window ---
-	if pw, err := createProgressWindow(mw.window); err != nil {
-		s.check(false, "progress window builds: %v", err)
-	} else {
-		uiSmokePump()
-		s.check(pw.bar != nil && pw.pauseButton != nil && pw.cancelButton != nil, "progress window has progress bar, pause and cancel controls")
-		controls := gtk.BaseWidget(gtk.BaseWidget(pw.pauseButton).Parent())
-		s.check(controls != nil && controls.HAlign() == gtk.AlignEnd, "progress controls are right aligned (got %v)", controls.HAlign())
-		pw.setFraction(math.NaN())
-		s.check(pw.bar.Fraction() == 0, "a NaN fraction is clamped to 0 (got %v)", pw.bar.Fraction())
-		pw.setFraction(1.5)
-		s.check(pw.bar.Fraction() == 1, "a fraction above 1 is clamped (got %v)", pw.bar.Fraction())
-		pw.setFraction(0.5)
-		s.check(pw.bar.Fraction() == 0.5, "a valid fraction passes through (got %v)", pw.bar.Fraction())
-		pw.Window.Destroy()
-		uiSmokePump()
-	}
+	// --- the queue pane's run bar is the app's only progress surface ---
+	mw.queuePane.AddTitles([]wiiudownloader.TitleEntry{first, second})
+	uiSmokeSettle()
 
-	// --- inline download UI (the experiment) and its pluggable fallback ---
-	inlineUI := mw.newDownloadUI(&Config{UseInlineDownloadUI: true})
-	inline, isInline := inlineUI.(*inlineDownloadUI)
-	s.check(isInline, "the inline download UI is selected when configured")
-	if isInline {
-		s.check(mw.progressWindow != nil, "the progress window is still built as the state owner")
-		mw.queuePane.AddTitles([]wiiudownloader.TitleEntry{first, second})
-		uiSmokeSettle()
+	s.check(!mw.queuePane.statusColumn.Visible(),
+		"the Status column stays out of the narrow pane until a run starts")
 
-		s.check(!mw.queuePane.statusColumn.Visible(),
-			"the Status column stays out of the narrow pane until a run starts")
+	toplevelsBeforeRun := uiSmokeToplevelCount()
+	run := mw.beginRun("Preparing...")
+	uiSmokeSettle()
+	s.check(mw.queuePane.runBar.Visible(), "the run bar shows while a run is going")
+	s.check(mw.queuePane.statusColumn.Visible(), "the Status column appears while a run is going")
+	s.check(uiSmokeToplevelCount() == toplevelsBeforeRun,
+		"a run opens no window of its own (%d toplevels)", uiSmokeToplevelCount())
+	s.check(!uiSmokeHasWindowTitle(WINDOW_TITLE_PREFIX+"Downloading"),
+		"the retired progress window is gone")
 
-		mw.queuePane.BeginInlineRun()
-		uiSmokeSettle()
-		s.check(mw.queuePane.runBar.Visible(), "the inline run bar shows while a run is going")
-		s.check(mw.queuePane.statusColumn.Visible(), "the Status column appears while a run is going")
+	// The core reports from a worker goroutine and GTK is not thread-safe, so
+	// every run-bar write has to wait for the main loop rather than reaching the
+	// widget in place.
+	mw.queuePane.SetRunProgress("not yet", 0, "")
+	s.check(mw.queuePane.runBarLabel.Text() != "not yet",
+		"a run-bar write does not touch GTK off the main loop")
+	uiSmokeSettle()
+	s.check(mw.queuePane.runBarLabel.Text() == "not yet",
+		"the marshalled run-bar write lands once the loop runs")
 
-		s.check(!mw.progressWindow.Window.Visible(), "the progress window stays hidden in inline mode")
+	// The real calling pattern, all of it off-thread.
+	reported := make(chan struct{})
+	go func() {
+		defer close(reported)
+		run.ResetTotalsAndErrors()
+		run.SetQueueProgress(1, 2)
+		run.SetTitleState(first.TitleID, queueStateDownloading)
+		run.SetGameTitle("Mario Kart 8")
+		run.SetDownloadSize(2000)
+		run.SetTotalDownloadedForFile("f.bin", 200)
+		run.UpdateDownloadProgress(300, "f.bin")
+	}()
+	<-reported
+	uiSmokeSettle()
 
-		// The download core reports from a worker goroutine and GTK is not
-		// thread-safe, so every run-bar write has to wait for the main loop
-		// rather than reaching the widget in place.
-		mw.queuePane.SetInlineProgress("not yet", 0, "")
-		s.check(mw.queuePane.runBarLabel.Text() != "not yet",
-			"an inline run-bar write does not touch GTK off the main loop")
-		uiSmokeSettle()
-		s.check(mw.queuePane.runBarLabel.Text() == "not yet",
-			"the marshalled inline write lands once the loop runs")
+	// 200 + 300 of 2000 bytes for the title on screen, and the second of two
+	// queued titles: the bar follows the title, the count follows the queue.
+	s.check(mw.queuePane.runBarBar.Fraction() == 0.25,
+		"the run bar tracks the title being downloaded (got %v)", mw.queuePane.runBarBar.Fraction())
+	s.check(mw.queuePane.runBarBar.Text() == "25%",
+		"the run bar is labelled with that title's percentage (got %q)", mw.queuePane.runBarBar.Text())
+	s.check(mw.queuePane.runBarCount.Text() == "2/2",
+		"the run bar shows the queue position (got %q)", mw.queuePane.runBarCount.Text())
 
-		// The real calling pattern, all of it off-thread.
-		reported := make(chan struct{})
-		go func() {
-			defer close(reported)
-			inline.ResetTotalsAndErrors()
-			inline.SetQueueProgress(1, 2)
-			inline.SetTitleState(first.TitleID, queueStateDownloading)
-			inline.SetGameTitle("Mario Kart 8")
-			inline.SetDownloadSize(2000)
-			inline.SetTotalDownloadedForFile("f.bin", 200)
-			inline.UpdateDownloadProgress(300, "f.bin")
-		}()
-		<-reported
-		uiSmokeSettle()
+	// The bar describes the table above it, so it sits above the queue total
+	// rather than between the total and the buttons.
+	_, barY, okBar := uiSmokeWidgetPoint(mw.queuePane.runBar, mw.queuePane.container)
+	_, totalY, okTotal := uiSmokeWidgetPoint(mw.queuePane.totalSizeLabel, mw.queuePane.container)
+	s.check(okBar && okTotal && barY+float32(mw.queuePane.runBar.Height()) <= totalY+1,
+		"the run bar sits above the queue total size (%.0f+%d <= %.0f)",
+		barY, mw.queuePane.runBar.Height(), totalY)
+	s.check(mw.queuePane.rowData[rowKeyForTitleID(first.TitleID)].state == queueStateDownloading,
+		"the queue pane shows each title's state")
+	s.check(mw.queuePane.runBarLabel.Text() == "Mario Kart 8",
+		"the run bar names the title on screen now (got %q)", mw.queuePane.runBarLabel.Text())
+	// The window title carries the same run, so it stays visible when the compact
+	// layout has the queue pane hidden.
+	s.check(strings.Contains(mw.window.Title(), "Mario Kart 8") && strings.Contains(mw.window.Title(), "Title 2/2"),
+		"the window title mirrors the running title and queue position (%q)", mw.window.Title())
 
-		// 200 + 300 of 2000 bytes for the title on screen, and the second of two
-		// queued titles: the bar follows the title, the count follows the queue.
-		s.check(mw.queuePane.runBarBar.Fraction() == 0.25,
-			"the inline bar tracks the title being downloaded (got %v)", mw.queuePane.runBarBar.Fraction())
-		s.check(mw.queuePane.runBarBar.Text() == "25%",
-			"the inline bar is labelled with that title's percentage (got %q)", mw.queuePane.runBarBar.Text())
-		s.check(mw.queuePane.runBarCount.Text() == "2/2",
-			"the run bar shows the queue position (got %q)", mw.queuePane.runBarCount.Text())
-		s.check(mw.queuePane.rowData[rowKeyForTitleID(first.TitleID)].state == queueStateDownloading,
-			"the queue pane shows each title's state")
-		s.check(mw.queuePane.runBarLabel.Text() == "Mario Kart 8",
-			"the run bar names the title on screen now (got %q)", mw.queuePane.runBarLabel.Text())
+	// The sidebar can be dragged down to QUEUE_PANE_MIN_WIDTH, so the fully
+	// populated run bar has to fit there without a control being squeezed out.
+	minimum, _, _, _ := gtk.BaseWidget(mw.queuePane.runBar).Measure(gtk.OrientationHorizontal, -1)
+	s.check(minimum > 0 && minimum <= QUEUE_PANE_MIN_WIDTH,
+		"the populated run bar fits the narrowest queue pane (%d <= %d px)", minimum, QUEUE_PANE_MIN_WIDTH)
+	s.check(strings.Contains(mw.queuePane.runBarDetail.Text(), "500 B"),
+		"the run bar reports the bytes fetched so far (got %q)", mw.queuePane.runBarDetail.Text())
 
-		// The sidebar can be dragged down to QUEUE_PANE_MIN_WIDTH, so the fully
-		// populated run bar has to fit there without a control being squeezed out.
-		minimum, _, _, _ := gtk.BaseWidget(mw.queuePane.runBar).Measure(gtk.OrientationHorizontal, -1)
-		s.check(minimum > 0 && minimum <= QUEUE_PANE_MIN_WIDTH,
-			"the populated run bar fits the narrowest queue pane (%d <= %d px)", minimum, QUEUE_PANE_MIN_WIDTH)
-		s.check(strings.Contains(mw.queuePane.runBarDetail.Text(), "500 B"),
-			"the run bar reports the bytes fetched so far (got %q)", mw.queuePane.runBarDetail.Text())
+	// Rate and ETA need two samples an interval apart, which is why they only
+	// appear once the average is known.
+	time.Sleep(MIN_SAMPLE_INTERVAL + 50*time.Millisecond)
+	go run.UpdateDownloadProgress(300, "f.bin")
+	uiSmokeSettle()
+	s.check(strings.Contains(mw.queuePane.runBarDetail.Text(), "/s") &&
+		strings.Contains(mw.queuePane.runBarDetail.Text(), "left"),
+		"the run bar reports speed and time left (got %q)", mw.queuePane.runBarDetail.Text())
 
-		// Rate and ETA need two samples an interval apart, which is why the
-		// window only publishes them once the average is known.
-		time.Sleep(MIN_SAMPLE_INTERVAL + 50*time.Millisecond)
-		go inline.UpdateDownloadProgress(300, "f.bin")
-		uiSmokeSettle()
-		s.check(strings.Contains(mw.queuePane.runBarDetail.Text(), "/s") &&
-			strings.Contains(mw.queuePane.runBarDetail.Text(), "left"),
-			"the run bar reports speed and time left (got %q)", mw.queuePane.runBarDetail.Text())
+	// GTK logs an invalid "valuenow" for NaN, so the bar needs the clamp. A 0/0
+	// queue only blanks the count.
+	mw.queuePane.SetRunProgress("Zero", math.NaN(), "")
+	mw.queuePane.SetRunQueueProgress(0, 0)
+	uiSmokeSettle()
+	s.check(mw.queuePane.runBarBar.Fraction() == 0 && mw.queuePane.runBarBar.Text() == "0%",
+		"a NaN run-bar fraction is clamped (got %v %q)", mw.queuePane.runBarBar.Fraction(), mw.queuePane.runBarBar.Text())
+	s.check(mw.queuePane.runBarCount.Text() == "",
+		"a 0/0 queue position blanks the count (got %q)", mw.queuePane.runBarCount.Text())
 
-		// GTK logs an invalid "valuenow" for NaN, so the inline bar needs the
-		// same clamp the progress window got. A 0/0 queue only blanks the count.
-		mw.queuePane.SetInlineProgress("Zero", math.NaN(), "")
-		mw.queuePane.SetInlineQueueProgress(0, 0)
-		uiSmokeSettle()
-		s.check(mw.queuePane.runBarBar.Fraction() == 0 && mw.queuePane.runBarBar.Text() == "0%",
-			"a NaN inline fraction is clamped (got %v %q)", mw.queuePane.runBarBar.Fraction(), mw.queuePane.runBarBar.Text())
-		s.check(mw.queuePane.runBarCount.Text() == "",
-			"a 0/0 queue position blanks the count (got %q)", mw.queuePane.runBarCount.Text())
+	run.TogglePaused()
+	uiSmokeSettle()
+	s.check(run.Paused(), "the pause control pauses the run")
+	s.check(mw.queuePane.runPauseButton.IconName() == "media-playback-start-symbolic",
+		"the pause control flips to Resume (%q)", mw.queuePane.runPauseButton.IconName())
+	run.TogglePaused()
+	uiSmokeSettle()
+	s.check(!run.Paused(), "the pause control resumes the run")
 
-		inline.TogglePaused()
-		uiSmokeSettle()
-		s.check(mw.progressWindow.paused, "the inline pause control pauses the run")
-		s.check(mw.queuePane.runPauseButton.IconName() == "media-playback-start-symbolic",
-			"the inline pause control flips to Resume (%q)", mw.queuePane.runPauseButton.IconName())
-		inline.TogglePaused()
-		uiSmokeSettle()
-		s.check(!mw.progressWindow.paused, "the inline pause control resumes the run")
+	run.SetTitleState(first.TitleID, queueStateDone)
+	run.SetTitleState(second.TitleID, queueStateFailed)
+	uiSmokeSettle()
+	_, statusTexts := uiSmokeScan(mw.queuePane.columnView)
+	s.check(uiSmokeHasText(statusTexts, string(queueStateDone)) && uiSmokeHasText(statusTexts, string(queueStateFailed)),
+		"finished and failed titles both report their state (%v)", statusTexts)
 
-		inline.SetTitleState(first.TitleID, queueStateDone)
-		inline.SetTitleState(second.TitleID, queueStateFailed)
-		uiSmokeSettle()
-		_, statusTexts := uiSmokeScan(mw.queuePane.columnView)
-		s.check(uiSmokeHasText(statusTexts, string(queueStateDone)) && uiSmokeHasText(statusTexts, string(queueStateFailed)),
-			"finished and failed titles both report their state (%v)", statusTexts)
+	// A download removes its title from the queue, and that rebuilds every row:
+	// the run states have to survive it.
+	mw.queuePane.Update(true)
+	uiSmokeSettle()
+	s.check(mw.queuePane.rowData[rowKeyForTitleID(first.TitleID)].state == queueStateDone,
+		"a queue rebuild keeps each row's run state")
 
-		// A download removes its title from the queue, and that rebuilds every
-		// row: the run states have to survive it.
-		mw.queuePane.Update(true)
-		uiSmokeSettle()
-		s.check(mw.queuePane.rowData[rowKeyForTitleID(first.TitleID)].state == queueStateDone,
-			"a queue rebuild keeps each row's run state")
+	// Cancelling once disables the run controls.
+	mw.queuePane.runCancelButton.Emit("clicked")
+	uiSmokeSettle()
+	s.check(run.Cancelled(), "the run bar's cancel control cancels the run")
+	s.check(!mw.queuePane.runCancelButton.Sensitive() && !mw.queuePane.runPauseButton.Sensitive(),
+		"cancelling disables the run controls once pressed")
+	s.check(mw.queuePane.runBarLabel.Text() == "Cancelling...",
+		"the run bar reports a cancelled run (%q)", mw.queuePane.runBarLabel.Text())
 
-		// Cancelling once disables the run controls, exactly like the window.
-		mw.queuePane.runCancelButton.Emit("clicked")
-		uiSmokeSettle()
-		s.check(mw.progressWindow.Cancelled(), "the inline cancel control cancels the run")
-		s.check(!mw.queuePane.runCancelButton.Sensitive() && !mw.queuePane.runPauseButton.Sensitive(),
-			"the inline cancel control disables the run controls once pressed")
+	run.Finish()
+	uiSmokeSettle()
+	s.check(!mw.queuePane.runBar.Visible(), "the run bar hides when the run ends")
+	s.check(!mw.queuePane.statusColumn.Visible(), "the Status column goes away with the run")
+	s.check(mw.window.Title() == APP_NAME, "the window title goes back to the app name (%q)", mw.window.Title())
 
-		inline.Hide()
-		uiSmokeSettle()
-		s.check(!mw.queuePane.runBar.Visible(), "the inline run bar hides when the run ends")
-		s.check(!mw.queuePane.statusColumn.Visible(), "the Status column goes away with the run")
-		mw.queuePane.Clear()
-		uiSmokeSettle()
-	}
+	mw.queuePane.Clear()
+	uiSmokeSettle()
 
-	// The compact layout hides the queue pane, so there would be nothing to
-	// report to: the run has to fall back to the window.
-	mw.queuePane.GetContainer().SetVisible(false)
-	narrowUI := mw.newDownloadUI(&Config{UseInlineDownloadUI: true})
-	_, narrowInline := narrowUI.(*inlineDownloadUI)
-	s.check(!narrowInline && narrowUI != nil, "a hidden queue pane falls back to the progress window")
-	if narrowUI != nil {
-		narrowUI.Hide()
-	}
-	mw.queuePane.GetContainer().SetVisible(true)
-	uiSmokePump()
-
-	// Flipping the flag must hand the run back to the progress window, which is
-	// still whole.
-	windowUI := mw.newDownloadUI(&Config{UseInlineDownloadUI: false})
-	_, stillInline := windowUI.(*inlineDownloadUI)
-	s.check(!stillInline && windowUI != nil, "switching the flag off uses the progress window again")
-	if windowUI != nil {
-		windowUI.Present()
-		uiSmokePump()
-		s.check(mw.progressWindow.Window.Visible(), "the progress window still presents for a run")
-		windowUI.Hide()
-		uiSmokePump()
-	}
+	uiSmokeRetiredProgressWindow(s)
 
 	uiSmokeTitlePrefixes(s, "with every dialog open")
 

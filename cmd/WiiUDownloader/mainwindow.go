@@ -28,16 +28,17 @@ const (
 	// content's minimum, so the window happily shrinks into a layout that no
 	// longer fits. Pinning the smallest usable size stops that; the smoke run
 	// asserts the content minimum stays inside it.
-	MIN_WINDOW_WIDTH  = 640
+	// 840 is the queue pane's price: the pane never hides, so the floor has to
+	// clear both the layout minimum with it on screen (789 px with the compact
+	// bottom bar) and the toolbar's own natural width beside it (486 px inside a
+	// 280 px pane, i.e. ~829 px of window). The smoke run asserts that ordering.
+	MIN_WINDOW_WIDTH  = 840
 	MIN_WINDOW_HEIGHT = 480
-	// One compact layout below this width: the queue pane is dropped, the bottom
-	// bar stacks and the search entry shrinks. It has to be a single breakpoint —
-	// libadwaita only applies the last matching one, so a second, narrower
-	// breakpoint would never fire.
-	//
-	// The value is not free: the queue pane is only visible *above* it, so it has
-	// to clear the pane-visible layout minimum or AdwToolbarView starts logging
-	// "exceeds AdwWindow" again. The smoke run asserts exactly that.
+	// One compact layout below this width: the bottom bar stacks and the search
+	// entry shrinks. It has to be a single breakpoint — libadwaita only applies
+	// the last matching one, so a second, narrower breakpoint would never fire.
+	// The queue pane stays visible at every size; the smoke run asserts that, and
+	// that the layout minimum still fits MIN_WINDOW_WIDTH.
 	COMPACT_WINDOW_BREAKPOINT       = 920
 	NARROW_SEARCH_ENTRY_WIDTH_CHARS = 9
 
@@ -94,10 +95,10 @@ type MainWindow struct {
 	usaRegionToggleHandle           glib.SignalHandle
 	europeRegionToggleHandle        glib.SignalHandle
 	deleteEncryptedContents         bool
-	progressWindow                  *ProgressWindow
-	// downloadUI is the surface the current run reports to; set by
-	// startDownloadRun from Config.UseInlineDownloadUI.
-	downloadUI            DownloadUI
+	// runProgress is the surface the current run reports to: the queue pane's
+	// run bar. Set by beginRun when a download, decryption or ticket/cert run
+	// starts.
+	runProgress           *DownloadProgress
 	configWindow          *ConfigWindow
 	lastSearchText        string
 	categoryButtons       []*gtk.ToggleButton
@@ -443,12 +444,11 @@ func (mw *MainWindow) BuildUI() {
 
 	splitPane.SetPosition(280) // Set default width for QueuePane
 
-	// Narrow windows drop the queue pane instead of squeezing the title list. The
-	// two bottom-bar groups would otherwise set a minimum as wide as the window
-	// itself, so they stack, and the search entry gives up the most room.
+	// The queue pane never hides: it holds the queue and download controls and
+	// the run bar. Instead, narrow windows buy back horizontal room from the two
+	// bottom-bar groups (they stack) and from the search entry.
 	compact := adw.NewBreakpoint(adw.NewBreakpointConditionLength(
 		adw.BreakpointConditionMaxWidth, COMPACT_WINDOW_BREAKPOINT, adw.LengthUnitPx))
-	compact.AddSetter(mw.queuePane.GetContainer(), "visible", false)
 	compact.AddSetter(bottomhBox, "orientation", gtk.OrientationVertical)
 	compact.AddSetter(mw.searchEntry, "width-chars", NARROW_SEARCH_ENTRY_WIDTH_CHARS)
 	mw.adwWindow.AddBreakpoint(compact)
@@ -470,6 +470,14 @@ func (mw *MainWindow) openSettingsWindow() {
 	mw.configWindow.Window.Present()
 }
 
+// beginRun opens the progress surface for a new run.
+func (mw *MainWindow) beginRun(title string) *DownloadProgress {
+	run := newDownloadProgress(mw.queuePane, mw.window)
+	mw.runProgress = run
+	run.Start(title)
+	return run
+}
+
 // runDecryptContents decrypts one or more folders in the background. A folder
 // that fails is skipped so the rest of the batch still runs, and every failure
 // is reported together once the batch ends.
@@ -478,23 +486,16 @@ func (mw *MainWindow) runDecryptContents(selectedPaths []string) {
 		return
 	}
 
-	progressWindow, err := createProgressWindow(mw.window)
-	if err != nil {
-		log.Printf("Failed to create progress window: %v", err)
-		return
-	}
-	mw.progressWindow = progressWindow
-	mw.progressWindow.SetGameTitle(fmt.Sprintf("Decrypting %d folder(s)...", len(selectedPaths)))
-	mw.progressWindow.ResetTotals()
-	progressWindow.Window.Present()
+	run := mw.beginRun(fmt.Sprintf("Decrypting %d folder(s)...", len(selectedPaths)))
+	run.ResetTotals()
 
 	go func() {
 		var failed []DownloadError
 		for _, selectedPath := range selectedPaths {
-			if mw.progressWindow.Cancelled() {
+			if run.Cancelled() {
 				break
 			}
-			if err := mw.decryptFolder(selectedPath); err != nil {
+			if err := mw.decryptFolder(run, selectedPath); err != nil {
 				log.Printf("Decryption failed for %s: %v", selectedPath, err)
 				failed = append(failed, DownloadError{
 					Title: filepath.Base(selectedPath),
@@ -504,7 +505,7 @@ func (mw *MainWindow) runDecryptContents(selectedPaths []string) {
 		}
 
 		uiIdleAdd(func() {
-			mw.progressWindow.Window.SetVisible(false)
+			run.Finish()
 			// A decryption is not a download, so it never raises the "Download
 			// Complete" dialog; only the failures are worth a dialog.
 			if len(failed) > 0 {
@@ -515,7 +516,7 @@ func (mw *MainWindow) runDecryptContents(selectedPaths []string) {
 }
 
 // decryptFolder decrypts a single folder into the configured output path.
-func (mw *MainWindow) decryptFolder(selectedPath string) error {
+func (mw *MainWindow) decryptFolder(run *DownloadProgress, selectedPath string) error {
 	config, err := loadConfig()
 	if err != nil {
 		return err
@@ -524,24 +525,17 @@ func (mw *MainWindow) decryptFolder(selectedPath string) error {
 	if config.DecryptOutputPath != "" {
 		decryptOut = filepath.Join(config.DecryptOutputPath, filepath.Base(selectedPath))
 	}
-	return wiiudownloader.DecryptContents(selectedPath, mw.progressWindow, false, decryptOut)
+	return wiiudownloader.DecryptContents(selectedPath, run, false, decryptOut)
 }
 
 // runGenerateFakeTicketAndCert generates ticket+cert files for a TMD path.
 func (mw *MainWindow) runGenerateFakeTicketAndCert(tmdPath string) {
-	progressWindow, err := createProgressWindow(mw.window)
-	if err != nil {
-		log.Printf("Failed to create progress window: %v", err)
-		return
-	}
-	mw.progressWindow = progressWindow
-	mw.progressWindow.SetGameTitle("Generating Ticket and Cert...")
-	mw.progressWindow.ResetTotals()
-	progressWindow.Window.Present()
+	run := mw.beginRun("Generating Ticket and Cert...")
+	run.ResetTotals()
 
 	go func() {
 		defer uiIdleAdd(func() {
-			mw.progressWindow.Window.SetVisible(false)
+			run.Finish()
 		})
 
 		parentDir := filepath.Dir(tmdPath)
@@ -581,7 +575,7 @@ func (mw *MainWindow) runGenerateFakeTicketAndCert(tmdPath string) {
 			return
 		}
 
-		if err := wiiudownloader.GenerateCert(tmd, filepath.Join(parentDir, "title.cert"), mw.progressWindow, http.DefaultClient); err != nil {
+		if err := wiiudownloader.GenerateCert(tmd, filepath.Join(parentDir, "title.cert"), run, http.DefaultClient); err != nil {
 			uiIdleAdd(func() {
 				ShowErrorDialog(mw.window, err)
 			})
@@ -976,8 +970,8 @@ func (mw *MainWindow) showError(err error) {
 		return
 	}
 	uiIdleAdd(func() {
-		if mw.progressWindow != nil && mw.progressWindow.Window != nil {
-			mw.progressWindow.Window.SetVisible(false)
+		if mw.runProgress != nil {
+			mw.runProgress.Finish()
 		}
 		ShowErrorDialog(mw.window, err)
 	})

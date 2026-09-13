@@ -63,8 +63,8 @@ type QueuePane struct {
 	titleBytes            map[uint64]uint64
 	updateFunc            func()
 	setVersionRequested   func([]wiiudownloader.TitleEntry)
-	// Inline download UI (Config.UseInlineDownloadUI): a run bar in the pane and
-	// a live state per row.
+	// The run bar is the app's progress surface for downloads, decryption and
+	// ticket/cert generation: a bar, a detail line and live per-row states.
 	runBar          *gtk.Box
 	runBarBar       *gtk.ProgressBar
 	runBarLabel     *gtk.Label
@@ -77,12 +77,6 @@ type QueuePane struct {
 	statusColumn  *gtk.ColumnViewColumn
 	onTogglePause func()
 	onCancelRun   func()
-	// The run bar is rendered from these, so its two sources of progress (the
-	// current title and the queue position) cannot fight over one widget.
-	runTitle     string
-	runFraction  float64
-	runDetail    string
-	runQueueText string
 	// controlsSensitive is the app-level gate (a download in flight disables the
 	// pane); the remove button is derived from it, never set directly.
 	controlsSensitive bool
@@ -219,8 +213,8 @@ func NewQueuePane() (*QueuePane, error) {
 
 	buttonBox := gtk.NewBox(gtk.OrientationHorizontal, 0)
 	buttonBox.AddCSSClass("linked")
-	// Keeps the row off the run bar above it as well as the window corner below,
-	// and lines the buttons up with the rows above instead of the pane edges.
+	// Keeps the row off the queue total above it as well as the window corner
+	// below, and lines the buttons up with the rows instead of the pane edges.
 	buttonBox.SetMarginTop(QUEUE_BUTTON_ROW_CLEARANCE)
 	buttonBox.SetMarginBottom(QUEUE_CORNER_CLEARANCE)
 	buttonBox.SetMarginStart(QUEUE_BUTTON_ROW_SIDE_CLEARANCE)
@@ -228,8 +222,10 @@ func NewQueuePane() (*QueuePane, error) {
 	buttonBox.Append(removeFromQueueButton)
 	buttonBox.Append(downloadButton)
 
-	queueVBox.Append(totalSizeLabel)
+	// The run bar belongs to the table it describes, so it sits above the queue
+	// total rather than between the total and the buttons.
 	queueVBox.Append(queuePane.newRunBar())
+	queueVBox.Append(totalSizeLabel)
 	queueVBox.Append(buttonBox)
 
 	queueVBox.AddCSSClass("queue-pane-vbox")
@@ -242,9 +238,10 @@ func NewQueuePane() (*QueuePane, error) {
 	return queuePane, nil
 }
 
-// newRunBar builds the inline download UI: the title on screen right now with
-// the queue position and transfer controls, the bar for that title, and a detail
-// line with bytes, rate and time left. It stays hidden until a run starts.
+// newRunBar builds the progress surface a run reports to: the title on screen
+// right now with the queue position and transfer controls, the bar for that
+// title, and a detail line with bytes, rate and time left. Hidden until a run
+// starts.
 //
 // The controls are icon-only because the pane can be dragged as narrow as
 // QUEUE_PANE_MIN_WIDTH, where two icon+label buttons leave the bar no room.
@@ -305,8 +302,7 @@ func (qp *QueuePane) newRunBar() *gtk.Box {
 	runBar.SetMarginStart(12)
 	runBar.SetMarginEnd(12)
 	runBar.SetMarginTop(8)
-	// Breathing room before the pane's button row.
-	runBar.SetMarginBottom(12)
+	runBar.SetMarginBottom(8)
 	runBar.Append(titleRow)
 	runBar.Append(bar)
 	runBar.Append(detail)
@@ -365,9 +361,9 @@ func (qp *QueuePane) selectedKeys() []string {
 	return keys
 }
 
-// SetRunCallbacks wires the inline run bar's pause/cancel buttons to the run.
-// Marshalled like the rest of the inline API: it is called from the download
-// goroutine, while the buttons read it from the main loop.
+// SetRunCallbacks wires the run bar's pause/cancel buttons to the run. Called
+// once per run, before it starts; the buttons read the callbacks from the main
+// loop.
 func (qp *QueuePane) SetRunCallbacks(onTogglePause, onCancel func()) {
 	uiIdleAdd(func() {
 		qp.onTogglePause = onTogglePause
@@ -375,19 +371,16 @@ func (qp *QueuePane) SetRunCallbacks(onTogglePause, onCancel func()) {
 	})
 }
 
-// BeginInlineRun shows the run bar and resets every row to "Queued".
-func (qp *QueuePane) BeginInlineRun() {
+// BeginRun shows the run bar and resets every row to "Queued".
+func (qp *QueuePane) BeginRun() {
 	uiIdleAdd(func() {
 		if qp.runBar == nil {
 			return
 		}
 		qp.runBar.SetVisible(true)
 		qp.setRunControlsSensitive(true)
-		qp.runTitle, qp.runFraction, qp.runDetail = "", 0, ""
-		// The queue position is refreshed by the run itself; keep it for the
-		// next title rather than blanking the count between titles.
-		qp.renderRunBar()
-		qp.setInlinePaused(false)
+		qp.setRunPaused(false)
+		qp.setRunProgress("", 0, "")
 		if qp.statusColumn != nil {
 			qp.statusColumn.SetVisible(true)
 		}
@@ -399,8 +392,8 @@ func (qp *QueuePane) BeginInlineRun() {
 	})
 }
 
-// EndInlineRun hides the run bar, leaving the final per-row states visible.
-func (qp *QueuePane) EndInlineRun() {
+// EndRun hides the run bar, leaving the final per-row states visible.
+func (qp *QueuePane) EndRun() {
 	uiIdleAdd(func() {
 		if qp.runBar == nil {
 			return
@@ -409,28 +402,6 @@ func (qp *QueuePane) EndInlineRun() {
 		if qp.statusColumn != nil {
 			qp.statusColumn.SetVisible(false)
 		}
-	})
-}
-
-func (qp *QueuePane) setRunControlsSensitive(sensitive bool) {
-	if qp.runPauseButton != nil {
-		qp.runPauseButton.SetSensitive(sensitive)
-	}
-	if qp.runCancelButton != nil {
-		qp.runCancelButton.SetSensitive(sensitive)
-	}
-}
-
-// SetInlineQueueProgress reports the queue position. It only touches the count,
-// so the running title's own progress is never disturbed.
-func (qp *QueuePane) SetInlineQueueProgress(done, total int) {
-	count, full := queueCountText(done, total)
-	uiIdleAdd(func() {
-		qp.runQueueText = count
-		if qp.runBarCount != nil {
-			qp.runBarCount.SetTooltipText(full)
-		}
-		qp.renderRunBar()
 	})
 }
 
@@ -449,47 +420,55 @@ func queueCountText(done, total int) (short, long string) {
 	return fmt.Sprintf("%d/%d", done+1, total), queueProgressText(done, total)
 }
 
-// SetInlineProgress reports the title on screen right now, how far through it is
-// and the bytes/rate/ETA behind that fraction.
-func (qp *QueuePane) SetInlineProgress(title string, fraction float64, detail string) {
+// SetRunProgress names the title on screen right now and paints its fraction
+// and detail line. Every run-bar entry point marshals: the core reports from
+// worker goroutines and GTK is not thread-safe.
+func (qp *QueuePane) SetRunProgress(title string, fraction float64, detail string) {
 	uiIdleAdd(func() {
-		qp.runTitle, qp.runFraction, qp.runDetail = title, clampFraction(fraction), detail
-		qp.renderRunBar()
-
+		qp.setRunProgress(title, fraction, detail)
 	})
 }
 
-// renderRunBar paints the run bar from the stored run state. Main thread only.
-func (qp *QueuePane) renderRunBar() {
+// SetRunQueueProgress paints the queue position; total <= 0 blanks it.
+func (qp *QueuePane) SetRunQueueProgress(done, total int) {
+	short, long := queueCountText(done, total)
+	uiIdleAdd(func() {
+		if qp.runBarCount == nil {
+			return
+		}
+		qp.runBarCount.SetText(short)
+		qp.runBarCount.SetVisible(short != "")
+		qp.runBarCount.SetTooltipText(long)
+	})
+}
+
+// SetRunPaused flips the pause control's icon to match the run's state.
+func (qp *QueuePane) SetRunPaused(paused bool) {
+	uiIdleAdd(func() {
+		qp.setRunPaused(paused)
+	})
+}
+
+func (qp *QueuePane) setRunProgress(title string, fraction float64, detail string) {
 	if qp.runBarLabel == nil || qp.runBarBar == nil {
 		return
 	}
-
-	title := qp.runTitle
 	if title == "" {
 		title = "Preparing..."
 	}
-	qp.runBarLabel.SetText(title)
-	qp.runBarCount.SetText(qp.runQueueText)
-	qp.runBarCount.SetVisible(qp.runQueueText != "")
+	fraction = clampFraction(fraction)
 
-	qp.runBarBar.SetFraction(qp.runFraction)
-	qp.runBarBar.SetText(fmt.Sprintf("%d%%", int(math.Round(qp.runFraction*PERCENT_SCALE))))
+	qp.runBarLabel.SetText(title)
+	qp.runBarBar.SetFraction(fraction)
+	qp.runBarBar.SetText(fmt.Sprintf("%d%%", int(math.Round(fraction*PERCENT_SCALE))))
 
 	// The detail line is bytes/rate/ETA: the queue position already has its own
 	// slot, and this keeps the speed and time left on screen at any pane width.
-	qp.runBarDetail.SetText(qp.runDetail)
-	qp.runBarDetail.SetVisible(qp.runDetail != "")
+	qp.runBarDetail.SetText(detail)
+	qp.runBarDetail.SetVisible(detail != "")
 }
 
-// SetInlinePaused flips the inline pause control's icon.
-func (qp *QueuePane) SetInlinePaused(paused bool) {
-	uiIdleAdd(func() {
-		qp.setInlinePaused(paused)
-	})
-}
-
-func (qp *QueuePane) setInlinePaused(paused bool) {
+func (qp *QueuePane) setRunPaused(paused bool) {
 	if qp.runPauseButton == nil {
 		return
 	}
@@ -499,6 +478,23 @@ func (qp *QueuePane) setInlinePaused(paused bool) {
 	}
 	qp.runPauseButton.SetIconName(icon)
 	qp.runPauseButton.SetTooltipText(tooltip)
+}
+
+// SetRunControlsSensitive gates the pause/cancel controls while a run cannot be
+// interrupted (a decryption step, or a cancel already under way).
+func (qp *QueuePane) SetRunControlsSensitive(sensitive bool) {
+	uiIdleAdd(func() {
+		qp.setRunControlsSensitive(sensitive)
+	})
+}
+
+func (qp *QueuePane) setRunControlsSensitive(sensitive bool) {
+	if qp.runPauseButton != nil {
+		qp.runPauseButton.SetSensitive(sensitive)
+	}
+	if qp.runCancelButton != nil {
+		qp.runCancelButton.SetSensitive(sensitive)
+	}
 }
 
 // SetTitleState records how one queued title is doing and repaints its row.

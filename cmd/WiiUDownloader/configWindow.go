@@ -96,13 +96,6 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 	setTooltip(continueOnErrorRow, composeAccessibleText("Continue downloading on errors", "Continue with remaining titles even if some fail.", ". "))
 	downloads.Add(continueOnErrorRow)
 
-	inlineProgressRow := adw.NewSwitchRow()
-	inlineProgressRow.SetTitle("Show download progress in the queue pane")
-	inlineProgressRow.SetSubtitle("Off: downloads report in a separate progress window")
-	inlineProgressRow.SetActive(config.UseInlineDownloadUI)
-	setTooltip(inlineProgressRow, composeAccessibleText("Show download progress in the queue pane", "Report the running download inside the queue pane instead of a separate progress window.", ". "))
-	downloads.Add(inlineProgressRow)
-
 	suggestRelatedRow := adw.NewSwitchRow()
 	suggestRelatedRow.SetTitle("Suggest related content")
 	suggestRelatedRow.SetSubtitle("Offer matching Game, DLC and Update entries when queueing")
@@ -174,7 +167,6 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 			decryptPathRow.Text() != config.DecryptOutputPath ||
 			rememberPathRow.Active() != config.RememberLastPath ||
 			continueOnErrorRow.Active() != config.ContinueOnError ||
-			inlineProgressRow.Active() != config.UseInlineDownloadUI ||
 			suggestRelatedRow.Active() != config.SuggestRelatedContent ||
 			showDonationBarRow.Active() != config.ShowDonationBar ||
 			getSizeOnQueueRow.Active() != config.GetSizeOnQueue ||
@@ -192,7 +184,6 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 		config.LastSelectedPath = newPath
 		config.RememberLastPath = rememberPathRow.Active()
 		config.ContinueOnError = continueOnErrorRow.Active()
-		config.UseInlineDownloadUI = inlineProgressRow.Active()
 		config.SuggestRelatedContent = suggestRelatedRow.Active()
 		config.ShowDonationBar = showDonationBarRow.Active()
 		config.GetSizeOnQueue = getSizeOnQueueRow.Active()

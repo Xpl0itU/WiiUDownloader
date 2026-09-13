@@ -38,16 +38,12 @@ func (mw *MainWindow) onDownloadQueueButtonClicked() {
 	})
 }
 
-// startDownloadRun opens the download UI and drains the queue in the
-// background. Where that UI lives (progress window or inline in the queue pane)
-// is Config.UseInlineDownloadUI's call, not this function's.
+// startDownloadRun opens the progress surface and drains the queue in the
+// background.
 func (mw *MainWindow) startDownloadRun(selectedPath string, config *Config) {
-	downloadUI := mw.newDownloadUI(config)
-	if downloadUI == nil {
-		return
-	}
-	mw.downloadUI = downloadUI
-	downloadUI.Present()
+	// The run is unnamed until the first title's metadata lands; the bar reads
+	// "Preparing..." until then rather than putting that in the window title.
+	run := mw.beginRun("")
 
 	decryptContents := mw.decryptContents
 	deleteEncryptedContents := mw.getDeleteEncryptedContents()
@@ -69,7 +65,7 @@ func (mw *MainWindow) startDownloadRun(selectedPath string, config *Config) {
 			return
 		}
 
-		errors := downloadUI.GetErrors()
+		errors := run.GetErrors()
 		if shouldShowQueueErrorSummary(runErr, errors) {
 			uiIdleAdd(func() {
 				mw.showErrorsDialog(errors)
@@ -87,43 +83,43 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string, decryptContent
 		return nil
 	}
 
-	downloadUI := mw.downloadUI
-	if downloadUI == nil {
+	run := mw.runProgress
+	if run == nil {
 		return nil
 	}
-	downloadUI.ResetTotalsAndErrors()
+	run.ResetTotalsAndErrors()
 
 	totalInQueue := mw.queuePane.GetTitleQueueSize()
-	downloadUI.SetQueueProgress(0, totalInQueue)
+	run.SetQueueProgress(0, totalInQueue)
 
 	var firstErr error
 	for i, title := range mw.queuePane.GetTitleQueue() {
-		if downloadUI.Cancelled() {
+		if run.Cancelled() {
 			break
 		}
-		downloadUI.SetQueueProgress(i, totalInQueue)
-		downloadUI.SetTitleState(title.TitleID, queueStateDownloading)
+		run.SetQueueProgress(i, totalInQueue)
+		run.SetTitleState(title.TitleID, queueStateDownloading)
 
 		tidStr := fmt.Sprintf("%016x", title.TitleID)
 		titlePath := filepath.Join(selectedPath, fmt.Sprintf("%s [%s] [%s]", normalizeFilename(title.Name), wiiudownloader.GetFormattedKind(title.TitleID), tidStr))
 		if title.Version >= 0 {
 			titlePath = fmt.Sprintf("%s [v%d]", titlePath, title.Version)
 		}
-		downloadErr := wiiudownloader.DownloadTitle(tidStr, titlePath, title.Version, decryptContents, downloadUI, deleteEncryptedContents, mw.client, config.DecryptOutputPath)
+		downloadErr := wiiudownloader.DownloadTitle(tidStr, titlePath, title.Version, decryptContents, run, deleteEncryptedContents, mw.client, config.DecryptOutputPath)
 
-		cancelled := downloadUI.Cancelled()
+		cancelled := run.Cancelled()
 		step := nextQueueStep(downloadErr, cancelled, config.ContinueOnError)
 		switch {
 		case step.remove:
-			downloadUI.SetTitleState(title.TitleID, queueStateDone)
+			run.SetTitleState(title.TitleID, queueStateDone)
 		case cancelled:
-			downloadUI.SetTitleState(title.TitleID, queueStateCancelled)
+			run.SetTitleState(title.TitleID, queueStateCancelled)
 		default:
-			downloadUI.SetTitleState(title.TitleID, queueStateFailed)
+			run.SetTitleState(title.TitleID, queueStateFailed)
 		}
 		if step.record {
 			errorType := detectErrorType(downloadErr.Error())
-			downloadUI.AddErrorWithType(title.Name, downloadErr.Error(), tidStr, errorType, title.Version)
+			run.AddErrorWithType(title.Name, downloadErr.Error(), tidStr, errorType, title.Version)
 		}
 		if step.remove {
 			mw.queuePane.RemoveTitle(title)
@@ -137,11 +133,11 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string, decryptContent
 	}
 
 	uiIdleAdd(func() {
-		downloadUI.Hide()
+		run.Finish()
 		mw.updateTitlesInQueue()
 
-		errors := downloadUI.GetErrors()
-		if len(errors) == 0 && !downloadUI.Cancelled() {
+		errors := run.GetErrors()
+		if len(errors) == 0 && !run.Cancelled() {
 			decryptPathToShow := ""
 			if decryptContents && config.DecryptOutputPath != "" {
 				decryptPathToShow = config.DecryptOutputPath
@@ -156,7 +152,7 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string, decryptContent
 type queueStep struct {
 	remove   bool  // remove the title from the queue
 	stop     bool  // stop processing further titles
-	record   bool  // record the error in the progress window
+	record   bool  // record the error in the run's error list
 	returned error // non-nil: abort the whole run with this error
 }
 

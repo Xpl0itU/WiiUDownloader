@@ -17,7 +17,12 @@ HOMEBREW_PREFIXES = ("/opt/homebrew", "/usr/local", "/opt/local")
 
 
 def load_commands(path: str) -> List[str]:
-    """Every dependency path in path's load commands."""
+    """Every dependency path in path's load commands.
+
+    otool prints one header block per architecture for a universal binary —
+    "<path> (architecture arm64):" — so depend only on lines carrying the
+    version annotation rather than matching any parenthesised line.
+    """
     if not os.path.exists(path):
         print(f"Warning: path does not exist: {path}")
         return []
@@ -28,11 +33,9 @@ def load_commands(path: str) -> List[str]:
         print(f"Warning: otool failed for {path}")
         return []
     deps: List[str] = []
-    for line in res.stdout.split("\n")[1:]:
+    for line in res.stdout.split("\n"):
         line = line.strip()
-        if not line:
-            continue
-        match = re.match(r"^(.+?)\s+\(", line)
+        match = re.match(r"^(.+?)\s+\(compatibility version", line)
         if match:
             deps.append(match.group(1))
     return deps

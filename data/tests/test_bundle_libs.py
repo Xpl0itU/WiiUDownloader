@@ -14,10 +14,12 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from bundle_libs import bundle_lib, get_deps, verify_bundle
+import bundle_paths
+from bundle_libs import bundle_lib, get_deps, load_commands, verify_bundle
 
 
 def homebrew_libwebp():
@@ -82,6 +84,72 @@ class VerifyBundleTest(unittest.TestCase):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             verify_bundle(self.main_exe, self.root)
+        self.assertIn("verification passed", out.getvalue())
+
+
+# otool prints one block per architecture for a universal binary, and the
+# merge job creates exactly that. The header lines end in "(architecture arm64):"
+# and used to be parsed as dependencies.
+UNIVERSAL_OTOOL_OUTPUT = """Contents/MacOS/WiiUDownloader (architecture x86_64):
+	/opt/homebrew/opt/gtk4/lib/libgtk-4.1.dylib (compatibility version 1.0.0, current version 1.0.0)
+	@rpath/libwebp.7.dylib (compatibility version 0.0.0, current version 0.0.0)
+Contents/MacOS/WiiUDownloader (architecture arm64):
+	/opt/homebrew/opt/gtk4/lib/libgtk-4.1.dylib (compatibility version 1.0.0, current version 1.0.0)
+	@rpath/libwebp.7.dylib (compatibility version 0.0.0, current version 0.0.0)
+"""
+
+# The same output when the tool is handed an absolute path.
+UNIVERSAL_OTOOL_OUTPUT_ABSOLUTE = UNIVERSAL_OTOOL_OUTPUT.replace(
+    "Contents/MacOS/WiiUDownloader", "/opt/homebrew/build/Contents/MacOS/WiiUDownloader"
+)
+
+
+def fake_otool(stdout):
+    return mock.patch.object(
+        bundle_paths.subprocess, "run", return_value=mock.Mock(returncode=0, stdout=stdout, stderr="")
+    )
+
+
+class UniversalBinaryParsingTest(unittest.TestCase):
+    """A merged universal binary must not look like it depends on itself."""
+
+    def test_load_commands_ignores_architecture_headers(self):
+        with fake_otool(UNIVERSAL_OTOOL_OUTPUT):
+            deps = load_commands(os.path.abspath(__file__))
+        self.assertEqual(
+            deps,
+            [
+                "/opt/homebrew/opt/gtk4/lib/libgtk-4.1.dylib",
+                "@rpath/libwebp.7.dylib",
+                "/opt/homebrew/opt/gtk4/lib/libgtk-4.1.dylib",
+                "@rpath/libwebp.7.dylib",
+            ],
+        )
+        self.assertNotIn("Contents/MacOS/WiiUDownloader", deps)
+
+    def test_get_absolute_deps_ignores_architecture_headers(self):
+        with fake_otool(UNIVERSAL_OTOOL_OUTPUT_ABSOLUTE):
+            deps = bundle_paths.get_absolute_deps("/opt/homebrew/build/Contents/MacOS/WiiUDownloader")
+        self.assertEqual(
+            [d for d in deps if d.startswith("/opt/homebrew")],
+            [
+                "/opt/homebrew/opt/gtk4/lib/libgtk-4.1.dylib",
+                "/opt/homebrew/opt/gtk4/lib/libgtk-4.1.dylib",
+            ],
+        )
+
+    def test_verify_bundle_passes_for_a_universal_executable(self):
+        with tempfile.TemporaryDirectory() as root:
+            macos = os.path.join(root, "Contents", "MacOS")
+            os.makedirs(os.path.join(macos, "lib"))
+            main_exe = os.path.join(macos, "WiiUDownloader")
+            open(main_exe, "w").close()
+            for lib in ("libgtk-4.1.dylib", "libwebp.7.dylib"):
+                open(os.path.join(macos, "lib", lib), "w").close()
+            out = io.StringIO()
+            with fake_otool(UNIVERSAL_OTOOL_OUTPUT):
+                with contextlib.redirect_stdout(out):
+                    verify_bundle(main_exe, macos)
         self.assertIn("verification passed", out.getvalue())
 
 

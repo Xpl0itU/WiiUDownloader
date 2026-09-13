@@ -19,11 +19,11 @@ def get_absolute_deps(binary_path: str, run_fn: Optional[Callable[[str], object]
     if res.returncode != 0:
         return []
     deps: List[str] = []
-    for line in res.stdout.split("\n")[1:]:
+    for line in res.stdout.split("\n"):
         line = line.strip()
-        if not line:
-            continue
-        match = re.match(r"^(.+?)\s+\(", line)
+        # otool prints a "<path> (architecture arch):" header per slice for a
+        # universal binary; only real deps carry the compatibility version.
+        match = re.match(r"^(.+?)\s+\(compatibility version", line)
         if not match:
             continue
         dep_path = match.group(1).strip()

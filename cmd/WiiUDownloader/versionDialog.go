@@ -9,8 +9,9 @@ import (
 )
 
 // showVersionSelectionDialog presents the version picker; onChosen is not called
-// on cancel.
-func showVersionSelectionDialog(parent *gtk.Window, title wiiudownloader.TitleEntry, onChosen func(version int)) {
+// on cancel. The dialog is returned so callers (and the smoke run) can reach its
+// widgets.
+func showVersionSelectionDialog(parent *gtk.Window, title wiiudownloader.TitleEntry, onChosen func(version int)) *appDialog {
 	dialog := newAppDialog(parent, WINDOW_TITLE_PREFIX+"Select Title Version")
 
 	contentArea := dialog.Content()
@@ -39,19 +40,25 @@ func showVersionSelectionDialog(parent *gtk.Window, title wiiudownloader.TitleEn
 	specificRadio.SetActive(isSpecific)
 	specificBox.Append(specificRadio)
 
-	adjustment := gtk.NewAdjustment(float64(max(title.Version, 0)), 0, 65535, 1, 10, 0)
-	spinButton := gtk.NewSpinButton(adjustment, 1, 0)
+	spinButton := gtk.NewSpinButton(nil, 1, 0)
+	if adjustment := spinButton.Adjustment(); adjustment != nil {
+		adjustment.SetStepIncrement(1)
+		adjustment.SetPageIncrement(10)
+	}
+	spinButton.SetRange(0, 65535)
+	spinButton.SetValue(float64(max(title.Version, 0)))
 	spinButton.SetNumeric(true)
 	spinButton.SetWidthChars(8)
-	spinButton.SetSensitive(isSpecific)
 	specificBox.Append(spinButton)
 
 	contentArea.Append(specificBox)
 
-	// Spin is only meaningful while the specific-version button is active.
-	latestRadio.ConnectToggled(func() {
+	refreshSpinSensitivity := func() {
 		spinButton.SetSensitive(specificRadio.Active())
-	})
+	}
+	latestRadio.ConnectToggled(refreshSpinSensitivity)
+	specificRadio.ConnectToggled(refreshSpinSensitivity)
+	refreshSpinSensitivity()
 
 	linkLabel := gtk.NewLabel("")
 	linkLabel.SetMarkup("You can find a list of available versions on the <a href=\"https://wiiubrew.org/wiki/Title_database\">WiiUBrew Title Database</a>")
@@ -66,11 +73,12 @@ func showVersionSelectionDialog(parent *gtk.Window, title wiiudownloader.TitleEn
 
 	dialog.AddButton("Cancel", nil)
 	dialog.AddActionButton("OK", "suggested-action", func() {
+		version := wiiudownloader.VersionLatest
 		if specificRadio.Active() {
-			onChosen(spinButton.ValueAsInt())
-			return
+			version = spinButton.ValueAsInt()
 		}
-		onChosen(wiiudownloader.VersionLatest)
+		dialog.CloseThen(func() { onChosen(version) })
 	})
 	dialog.Present()
+	return dialog
 }

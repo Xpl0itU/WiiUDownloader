@@ -102,6 +102,16 @@ func (d *appDialog) Destroy() {
 	uiIdleAdd(func() { window.Close() })
 }
 
+func (d *appDialog) CloseThen(f func()) {
+	window := d.Window
+	uiIdleAdd(func() {
+		window.Close()
+		if f != nil {
+			uiIdleAdd(f)
+		}
+	})
+}
+
 // activeFileDialog keeps the newest async chooser referenced: nothing else holds
 // the native panel, so the GC could unref it while it is still on screen.
 var activeFileDialog *gtk.FileDialog

@@ -422,6 +422,116 @@ func uiSmokeChildren(container gtk.Widgetter) []gtk.Widgetter {
 	return out
 }
 
+// uiSmokeWindowWidget wraps the newest on-screen toplevel with the given title so
+// its children can be walked; the list hands back bare GObjects and keeps closed
+// windows, so an older one must not be picked up instead.
+func uiSmokeWindowWidget(title string) *gtk.Widget {
+	model := gtk.WindowGetToplevels()
+	var found *gtk.Widget
+	for i := uint(0); i < model.NItems(); i++ {
+		obj := model.Item(i)
+		if obj == nil {
+			continue
+		}
+		if visible, _ := obj.ObjectProperty("visible").(bool); !visible {
+			continue
+		}
+		if got, ok := obj.ObjectProperty("title").(string); ok && got == title {
+			found = &gtk.Widget{Object: obj}
+		}
+	}
+	return found
+}
+
+func uiSmokeButtonByLabel(root gtk.Widgetter, label string) *gtk.Button {
+	var found *gtk.Button
+	var walk func(gtk.Widgetter)
+	walk = func(cur gtk.Widgetter) {
+		if found != nil {
+			return
+		}
+		if button, ok := cur.(*gtk.Button); ok && button.Label() == label {
+			found = button
+			return
+		}
+		for _, child := range uiSmokeChildren(cur) {
+			walk(child)
+		}
+	}
+	walk(root)
+	return found
+}
+
+func uiSmokeSpinButton(root gtk.Widgetter) *gtk.SpinButton {
+	var found *gtk.SpinButton
+	var walk func(gtk.Widgetter)
+	walk = func(cur gtk.Widgetter) {
+		if found != nil {
+			return
+		}
+		if spin, ok := cur.(*gtk.SpinButton); ok {
+			found = spin
+			return
+		}
+		for _, child := range uiSmokeChildren(cur) {
+			walk(child)
+		}
+	}
+	walk(root)
+	return found
+}
+
+// uiSmokeSpinArrow finds one of a spin button's own step buttons. GTK builds
+// them from a template as real children, so emitting "clicked" on one takes the
+// same path a user's click does. They are matched by their up/down class; the
+// icon names moved from pan-*-symbolic to value-*-symbolic in GTK 4.22, so they
+// are only a fallback.
+func uiSmokeSpinArrow(spin *gtk.SpinButton, class string, icons ...string) *gtk.Button {
+	var found *gtk.Button
+	var walk func(gtk.Widgetter)
+	walk = func(cur gtk.Widgetter) {
+		if found != nil {
+			return
+		}
+		if button, ok := cur.(*gtk.Button); ok {
+			if button.HasCSSClass(class) {
+				found = button
+				return
+			}
+			for _, icon := range icons {
+				if button.IconName() == icon {
+					found = button
+					return
+				}
+			}
+		}
+		for _, child := range uiSmokeChildren(cur) {
+			walk(child)
+		}
+	}
+	walk(spin)
+	return found
+}
+
+func uiSmokeCheckByLabel(root gtk.Widgetter, label string) *gtk.CheckButton {
+	var found *gtk.CheckButton
+	var walk func(gtk.Widgetter)
+	walk = func(cur gtk.Widgetter) {
+		if found != nil {
+			return
+		}
+		if check, ok := cur.(*gtk.CheckButton); ok && check.Label() == label {
+			found = check
+			return
+		}
+		for _, child := range uiSmokeChildren(cur) {
+			walk(child)
+		}
+	}
+	walk(root)
+	return found
+}
+
 func uiSmokeSetupChecks(w gtk.Widgetter) []*gtk.CheckButton {
 	var out []*gtk.CheckButton
 	var walk func(gtk.Widgetter)
@@ -1145,6 +1255,182 @@ func runUISmoke() int {
 	showVersionSelectionDialog(mw.window, first, func(int) {})
 	uiSmokePump()
 	s.check(uiSmokeToplevelCount() > base, "version picker presents")
+
+	// Clicking OK is the path that took the app down, so drive it for real
+	// instead of only presenting the dialog.
+	chosenVersion := -2
+	latestEntry := first
+	latestEntry.Version = wiiudownloader.VersionLatest
+	picker := showVersionSelectionDialog(mw.window, latestEntry, func(v int) { chosenVersion = v })
+	uiSmokeSettle()
+	if okButton := uiSmokeButtonByLabel(picker.Window, "OK"); okButton != nil {
+		okButton.Emit("clicked")
+		uiSmokeSettle()
+		s.check(chosenVersion == wiiudownloader.VersionLatest,
+			"OK on the default choice reports Latest (got %d)", chosenVersion)
+	} else {
+		s.check(false, "version picker has an OK button")
+	}
+
+	chosenVersion = -2
+	customEntry := first
+	customEntry.Version = 32
+	picker = showVersionSelectionDialog(mw.window, customEntry, func(v int) { chosenVersion = v })
+	uiSmokeSettle()
+	if okButton := uiSmokeButtonByLabel(picker.Window, "OK"); okButton != nil {
+		okButton.Emit("clicked")
+		uiSmokeSettle()
+		s.check(chosenVersion == 32, "OK reports the already-set custom version (got %d)", chosenVersion)
+	} else {
+		s.check(false, "version picker reopens with an OK button")
+	}
+
+	// The reported crash: setting the version through the entry point the row menu
+	// uses, so the real handler runs and kicks off the size refetch that follows.
+	queued := first
+	queued.Version = wiiudownloader.VersionLatest
+	mw.queuePane.AddTitles([]wiiudownloader.TitleEntry{queued})
+	mw.updateTitlesInQueue()
+	uiSmokeSettle()
+	mw.onSetVersionRequested([]wiiudownloader.TitleEntry{queued})
+	uiSmokeSettle()
+	menuPicker := uiSmokeWindowWidget(WINDOW_TITLE_PREFIX + "Select Title Version")
+	if menuPicker == nil {
+		s.check(false, "the row menu's version picker presents")
+	} else {
+		if specific := uiSmokeCheckByLabel(menuPicker, "Set version:"); specific != nil {
+			specific.SetActive(true)
+			uiSmokeWait(50 * time.Millisecond)
+		}
+		if okButton := uiSmokeButtonByLabel(menuPicker, "OK"); okButton != nil {
+			okButton.Emit("clicked")
+			uiSmokeSettle()
+			queuedVersion := wiiudownloader.VersionLatest
+			for _, entry := range mw.queuePane.GetTitleQueue() {
+				if entry.TitleID == queued.TitleID {
+					queuedVersion = entry.Version
+				}
+			}
+			s.check(queuedVersion >= 0,
+				"setting a version from the row menu updates the queue entry (got %d)", queuedVersion)
+		} else {
+			s.check(false, "the row menu's version picker has an OK button")
+		}
+	}
+
+	// The same flow driven the way the row menu drives it: the popover is still up
+	// when the action fires, which is how a user reaches this dialog.
+	mw.showTitleRowMenu(mw.titleView, 8, 8, rowKeyForTitleID(queued.TitleID))
+	uiSmokePump()
+	mw.window.ActivateAction("row-set-version", nil)
+	uiSmokeSettle()
+	menuPicker = uiSmokeWindowWidget(WINDOW_TITLE_PREFIX + "Select Title Version")
+	if menuPicker == nil {
+		s.check(false, "the row action opens the version picker")
+	} else {
+		if specific := uiSmokeCheckByLabel(menuPicker, "Set version:"); specific != nil {
+			specific.SetActive(true)
+			uiSmokeWait(50 * time.Millisecond)
+		}
+		if okButton := uiSmokeButtonByLabel(menuPicker, "OK"); okButton != nil {
+			okButton.Emit("clicked")
+			uiSmokeSettle()
+			s.check(!menuPicker.Visible(), "the picker opened from the row menu closes on OK")
+		} else {
+			s.check(false, "the row-menu picker has an OK button")
+		}
+	}
+	if mw.titleRowMenu != nil {
+		mw.titleRowMenu.Popdown()
+	}
+	uiSmokeSettle()
+
+	// The field is live only for "Set version:". The user picks that with a click,
+	// not with SetActive, so the widget-level activation is driven too.
+	clickEntry := first
+	clickEntry.Version = wiiudownloader.VersionLatest
+	clickPicker := showVersionSelectionDialog(mw.window, clickEntry, func(int) {})
+	uiSmokeSettle()
+	clickSpecific := uiSmokeCheckByLabel(clickPicker.Window, "Set version:")
+	clickSpin := uiSmokeSpinButton(clickPicker.Window)
+	if clickSpecific == nil || clickSpin == nil {
+		s.check(false, "version picker has a clickable choice and a version field")
+	} else {
+		s.check(!clickSpin.Sensitive(),
+			"the version field is disabled while \"Latest version\" is the choice (usable=%v)", clickSpin.Sensitive())
+
+		clickSpecific.Activate()
+		uiSmokeWait(50 * time.Millisecond)
+		s.check(clickSpecific.Active() && clickSpin.Sensitive(),
+			"activating \"Set version:\" selects it and enables the field (chosen=%v usable=%v)",
+			clickSpecific.Active(), clickSpin.Sensitive())
+
+		clickSpecific.SetActive(false)
+		uiSmokeWait(50 * time.Millisecond)
+		s.check(!clickSpin.Sensitive(),
+			"going back to \"Latest version\" disables the field again (usable=%v)", clickSpin.Sensitive())
+	}
+	clickPicker.Window.Destroy()
+	uiSmokeSettle()
+
+	// The reported flow: pick "Set version:" on a title that was on Latest, then
+	// hit OK.
+	chosenVersion = -2
+	customEntry = first
+	customEntry.Version = wiiudownloader.VersionLatest
+	picker = showVersionSelectionDialog(mw.window, customEntry, func(v int) { chosenVersion = v })
+	uiSmokeSettle()
+	if spin := uiSmokeSpinButton(picker.Window); spin != nil {
+		// The step buttons exist and are live once the choice is made. GTK drives
+		// them from gesture controllers, which cannot be delivered from here, so the
+		// arithmetic a step performs is what gets asserted: a spin button left with
+		// the adjustment it makes for itself has a step of 0, and
+		// gtk_spin_button_spin adds count * step_increment, so its +/- buttons could
+		// never move the value.
+		up := uiSmokeSpinArrow(spin, "up", "pan-up-symbolic", "value-increase-symbolic")
+		down := uiSmokeSpinArrow(spin, "down", "pan-down-symbolic", "value-decrease-symbolic")
+		s.check(up != nil && down != nil, "the version field exposes its step buttons (up=%v down=%v)", up != nil, down != nil)
+
+		step, page, lower, upper := 0.0, 0.0, 0.0, 0.0
+		if adjustment := spin.Adjustment(); adjustment != nil {
+			step, page = adjustment.StepIncrement(), adjustment.PageIncrement()
+			lower, upper = adjustment.Lower(), adjustment.Upper()
+		}
+		s.check(step > 0 && page > 0,
+			"the version field's step buttons have something to step by (step=%.0f page=%.0f)", step, page)
+		s.check(lower == 0 && upper == 65535,
+			"the version field carries its range (lower=%.0f upper=%.0f)", lower, upper)
+
+		before := spin.ValueAsInt()
+		if adjustment := spin.Adjustment(); adjustment != nil {
+			adjustment.SetValue(adjustment.Value() + step)
+		}
+		uiSmokeWait(50 * time.Millisecond)
+		steppedUp := spin.ValueAsInt()
+		if adjustment := spin.Adjustment(); adjustment != nil {
+			adjustment.SetValue(adjustment.Value() - step)
+		}
+		uiSmokeWait(50 * time.Millisecond)
+		s.check(steppedUp == before+1,
+			"one step moves the field by one version (%d -> %d)", before, steppedUp)
+		s.check(spin.ValueAsInt() == before,
+			"stepping back returns the field to where it was (%d -> %d)", steppedUp, spin.ValueAsInt())
+	} else {
+		s.check(false, "version picker has a version field")
+	}
+	if specific := uiSmokeCheckByLabel(picker.Window, "Set version:"); specific != nil {
+		specific.SetActive(true)
+		uiSmokeWait(50 * time.Millisecond)
+	} else {
+		s.check(false, "version picker has a \"Set version:\" choice")
+	}
+	if okButton := uiSmokeButtonByLabel(picker.Window, "OK"); okButton != nil {
+		okButton.Emit("clicked")
+		uiSmokeSettle()
+		s.check(chosenVersion == 0, "choosing a custom version reports it (got %d)", chosenVersion)
+	} else {
+		s.check(false, "version picker has an OK button for a custom version")
+	}
 
 	mw.showErrorsDialog([]DownloadError{{
 		Title:     first.Name,

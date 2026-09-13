@@ -42,6 +42,12 @@ func expectedContentDownloadSize(content Content) int64 {
 	return int64(alignToAESBlockSize(content.Size))
 }
 
+// DownloadSize is the number of bytes the CDN serves for this content,
+// including its hash tree when the content is hashed.
+func (c Content) DownloadSize() int64 {
+	return expectedContentDownloadSize(c) + expectedH3DownloadSize(c)
+}
+
 func expectedH3DownloadSize(content Content) int64 {
 	if content.Type&CONTENT_TYPE_HASHED != CONTENT_TYPE_HASHED {
 		return 0

@@ -479,7 +479,54 @@ func downloadFile(progressReporter ProgressReporter, client *http.Client, downlo
 	})
 }
 
+// ensureTitleTicket fetches a title's ticket, falling back to a generated one
+// when the CDN has none and the title's key type is known.
+func ensureTitleTicket(progressReporter ProgressReporter, client *http.Client, baseURL, tikPath string, tmd *TMD, tid uint64, titleID string, tEntry TitleEntry) error {
+	err := downloadFileWithOptions(context.Background(), progressReporter, client, fmt.Sprintf("%s/%s", baseURL, "cetk"), tikPath, downloadOptions{
+		DoRetries:   false,
+		AllowResume: true,
+		UserAgent:   "WiiUDownloader",
+		Validate: func(path string) error {
+			return validateTicketFile(path, tmd.TitleID, tmd.TitleVersion)
+		},
+	})
+	if err == nil {
+		return nil
+	}
+	if isCancelled(progressReporter) || err == errCancel {
+		return err
+	}
+	titleKeyType := uint8(TITLE_KEY_mypass)
+	if tEntry.TitleID == tid {
+		titleKeyType = tEntry.Key
+	}
+	titleKey, generateErr := GenerateKeyWithType(titleID, titleKeyType)
+	if generateErr != nil {
+		return generateErr
+	}
+	return GenerateTicket(tikPath, tmd.TitleID, titleKey, tmd.TitleVersion)
+}
+
+func contentIDSet(ids []uint32) map[uint32]struct{} {
+	if len(ids) == 0 {
+		return nil
+	}
+	set := make(map[uint32]struct{}, len(ids))
+	for _, id := range ids {
+		set[id] = struct{}{}
+	}
+	return set
+}
+
 func DownloadTitle(titleID, outputDirectory string, version int, doDecryption bool, progressReporter ProgressReporter, deleteEncryptedContents bool, client *http.Client, decryptOutputDir string) error {
+	return DownloadTitleContents(titleID, outputDirectory, version, nil, doDecryption, progressReporter, deleteEncryptedContents, client, decryptOutputDir)
+}
+
+// DownloadTitleContents downloads a title, optionally restricted to the given
+// content IDs (nil or empty means every content listed in the TMD). A partial
+// download cannot be decrypted, so doDecryption only applies when no filter is
+// set.
+func DownloadTitleContents(titleID, outputDirectory string, version int, contentIDs []uint32, doDecryption bool, progressReporter ProgressReporter, deleteEncryptedContents bool, client *http.Client, decryptOutputDir string) error {
 	tid, err := strconv.ParseUint(titleID, 16, 64)
 	if err != nil {
 		return err
@@ -534,32 +581,17 @@ func DownloadTitle(titleID, outputDirectory string, version int, doDecryption bo
 		return err
 	}
 
+	selected := contentIDSet(contentIDs)
+
 	tikPath := filepath.Join(outputDir, "title.tik")
-	if err := downloadFileWithOptions(context.Background(), progressReporter, client, fmt.Sprintf("%s/%s", baseURL, "cetk"), tikPath, downloadOptions{
-		DoRetries:   false,
-		AllowResume: true,
-		UserAgent:   "WiiUDownloader",
-		Validate: func(path string) error {
-			return validateTicketFile(path, tmd.TitleID, tmd.TitleVersion)
-		},
-	}); err != nil {
+	if err := ensureTitleTicket(progressReporter, client, baseURL, tikPath, tmd, tid, titleID, tEntry); err != nil {
 		if isCancelled(progressReporter) || err == errCancel {
 			return nil
 		}
-		titleKeyType := uint8(TITLE_KEY_mypass)
-		if tEntry.TitleID == tid {
-			titleKeyType = tEntry.Key
-		}
-		titleKey, err := GenerateKeyWithType(titleID, titleKeyType)
-		if err != nil {
-			return err
-		}
-		if err := GenerateTicket(tikPath, tmd.TitleID, titleKey, tmd.TitleVersion); err != nil {
-			return err
-		}
+		return err
 	}
 
-	titleSize := tmd.CalculateTotalSize()
+	titleSize := tmd.calculateTotalSize(selected)
 
 	if progressReporter != nil {
 		progressReporter.SetDownloadSize(int64(titleSize))
@@ -578,13 +610,22 @@ func DownloadTitle(titleID, outputDirectory string, version int, doDecryption bo
 		progressReporter.SetStartTime(time.Now())
 	}
 
-	for i := 0; i < int(tmd.ContentCount); i++ {
-		i := i
+	contents := tmd.Contents
+	if selected != nil {
+		contents = make([]Content, 0, len(selected))
+		for _, content := range tmd.Contents {
+			if _, ok := selected[content.ID]; ok {
+				contents = append(contents, content)
+			}
+		}
+	}
+
+	for i := range contents {
+		content := contents[i]
 		g.Go(func() error {
 			if !waitUntilResumed(progressReporter) {
 				return errCancel
 			}
-			content := tmd.Contents[i]
 			filePath := filepath.Join(outputDir, fmt.Sprintf("%08X.app", content.ID))
 			if err := downloadFileWithOptions(ctx, progressReporter, client, fmt.Sprintf("%s/%08X", baseURL, content.ID), filePath, downloadOptions{
 				ExpectedSize: expectedContentDownloadSize(content),
@@ -629,7 +670,8 @@ func DownloadTitle(titleID, outputDirectory string, version int, doDecryption bo
 		return err
 	}
 
-	if doDecryption && !isCancelled(progressReporter) {
+	// Decryption needs every content in the TMD, so a partial download skips it.
+	if doDecryption && selected == nil && !isCancelled(progressReporter) {
 		decryptOut := ""
 		if decryptOutputDir != "" {
 			decryptOut = filepath.Join(decryptOutputDir, filepath.Base(outputDir))

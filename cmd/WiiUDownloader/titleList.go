@@ -80,10 +80,12 @@ func (mw *MainWindow) buildTitleList() {
 	textColumn := func(title string, width int, text func(*titleRow) string, less func(a, b *titleRow) int) *gtk.ColumnViewColumn {
 		factory := gtk.NewSignalListItemFactory()
 		factory.ConnectSetup(func(obj *coreglib.Object) {
+			item := listItem(obj)
 			label := gtk.NewLabel("")
 			label.SetXAlign(0)
 			label.SetEllipsize(pango.EllipsizeEnd)
-			listItem(obj).SetChild(label)
+			item.SetChild(label)
+			mw.attachRowContextGesture(label, item)
 		})
 		factory.ConnectBind(func(obj *coreglib.Object) {
 			item := listItem(obj)
@@ -178,6 +180,7 @@ func (mw *MainWindow) newQueueColumn() *gtk.ColumnViewColumn {
 		// Keep focus on the row; Space is handled by the view.
 		check.SetFocusable(false)
 		item.SetChild(check)
+		mw.attachRowContextGesture(check, item)
 
 		check.ConnectToggled(func() {
 			key := listItemKey(item)

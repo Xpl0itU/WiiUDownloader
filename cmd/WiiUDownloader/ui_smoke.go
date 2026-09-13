@@ -2,14 +2,17 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	wiiudownloader "github.com/Xpl0itU/WiiUDownloader"
+	coreglib "github.com/diamondburned/gotk4/pkg/core/glib"
 	gio "github.com/diamondburned/gotk4/pkg/gio/v2"
 	glib "github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/graphene"
@@ -45,6 +48,14 @@ func uiSmokePump() {
 	for i := 0; i < 300; i++ {
 		ctx.Iteration(false)
 	}
+}
+
+func uiSmokeMenuLabel(model *gio.MenuModel, index int) string {
+	value := model.ItemAttributeValue(index, gio.MENU_ATTRIBUTE_LABEL, glib.NewVariantType("s"))
+	if value == nil {
+		return ""
+	}
+	return value.String()
 }
 
 func uiSmokeToplevelCount() int {
@@ -426,6 +437,40 @@ func uiSmokeSetupChecks(w gtk.Widgetter) []*gtk.CheckButton {
 	return out
 }
 
+// errSmokeFetch stands in for a failed file-list fetch.
+var errSmokeFetch = errors.New("smoke: file list fetch failed")
+
+// smokeDirCounts reports how many files under a folder are ticked, which is
+// what its tri-state checkbox has to agree with.
+func smokeDirCounts(node *titleFileNode) (int, int) {
+	active, total := 0, 0
+	for _, child := range node.children {
+		if !child.dir {
+			total++
+			if child.selected {
+				active++
+			}
+			continue
+		}
+		childActive, childTotal := smokeDirCounts(child)
+		active += childActive
+		total += childTotal
+	}
+	return active, total
+}
+
+// smokeSelectedFiles counts the picker's ticked files from the model state, not
+// from widgets: only rows on screen carry a checkbox at all.
+func smokeSelectedFiles() int {
+	n := 0
+	for _, node := range lastTitleFileNodes {
+		if !node.dir && node.selected {
+			n++
+		}
+	}
+	return n
+}
+
 func runUISmoke() int {
 	s := &uiSmoke{}
 	fmt.Println("UI smoke run")
@@ -522,8 +567,48 @@ func runUISmoke() int {
 		s.check(model.NItems() == 2, "menu model has Tools and Settings sections (got %d)", model.NItems())
 		section := model.ItemLink(1, "section")
 		s.check(section != nil && gio.BaseMenuModel(section).NItems() == 1, "settings section holds a single flat item")
+
+		tools := model.ItemLink(0, "section")
+		toolsItems := 0
+		hasSpecificFiles := false
+		if tools != nil {
+			toolsModel := gio.BaseMenuModel(tools)
+			toolsItems = toolsModel.NItems()
+			for i := 0; i < toolsItems; i++ {
+				if uiSmokeMenuLabel(toolsModel, i) == CONTEXT_MENU_SPECIFIC_FILES {
+					hasSpecificFiles = true
+				}
+			}
+		}
+		s.check(toolsItems == 3, "tools section lists three items (got %d)", toolsItems)
+		s.check(!hasSpecificFiles, "the app menu does not duplicate the row action %q", CONTEXT_MENU_SPECIFIC_FILES)
 	} else {
 		s.check(false, "menu button carries a menu model")
+	}
+
+	// --- title row context menu ---
+	if ctxKey := mw.viewRowKey(0); ctxKey != "" {
+		ctxMenu := gio.BaseMenuModel(mw.buildTitleRowMenu(mw.titleRows[ctxKey]))
+		s.check(ctxMenu.NItems() == 4, "row context menu has four items (got %d)", ctxMenu.NItems())
+		s.check(uiSmokeMenuLabel(ctxMenu, 1) == CONTEXT_MENU_SPECIFIC_FILES,
+			"row context menu offers %q (got %q)", CONTEXT_MENU_SPECIFIC_FILES, uiSmokeMenuLabel(ctxMenu, 1))
+		queueLabel := uiSmokeMenuLabel(ctxMenu, 0)
+		s.check(queueLabel == CONTEXT_MENU_QUEUE_ADD || queueLabel == CONTEXT_MENU_QUEUE_REMOVE,
+			"row context menu queue entry matches the row state (got %q)", queueLabel)
+
+		mw.showTitleRowMenu(mw.titleView, 8, 8, ctxKey)
+		uiSmokePump()
+		s.check(mw.titleRowMenu != nil && gtk.BaseWidget(mw.titleRowMenu).Visible(), "right-click menu pops up")
+		if mw.titleRowMenu != nil {
+			mw.titleRowMenu.Popdown()
+		}
+		uiSmokePump()
+		if mw.titleSelection != nil {
+			mw.titleSelection.UnselectAll()
+		}
+		uiSmokePump()
+	} else {
+		s.check(false, "a title row is available for the context menu")
 	}
 
 	// --- search entry is the modern GtkSearchEntry ---
@@ -773,6 +858,289 @@ func runUISmoke() int {
 	mw.showAddByTitleIDDialog()
 	uiSmokePump()
 	s.check(uiSmokeToplevelCount() > base, "add-by-title-id dialog presents")
+
+	// The picker fetches the FST over the network; stub it so the tree UI can be
+	// exercised without one.
+	smokeTree := &wiiudownloader.TitleFileTree{
+		TitleID: 0x0005000010143500,
+		Name:    "Smoke Title",
+		Files: []wiiudownloader.TitleFile{
+			{Path: "content/a.bin", Size: 1024},
+			{Path: "content/sub/b.bin", Size: 2048},
+			{Path: "meta/meta.xml", Size: 512},
+		},
+	}
+	smokeTreeRoots, smokeTreeNodes := buildTitleFileNodes(smokeTree.Files)
+	fileNodeCount := 0
+	for _, node := range smokeTreeNodes {
+		if !node.dir {
+			fileNodeCount++
+		}
+	}
+	s.check(len(smokeTreeRoots) == 2 && len(smokeTreeNodes) == 6 && fileNodeCount == 3,
+		"the FST tree keeps folders and files (%d roots, %d nodes, %d files)", len(smokeTreeRoots), len(smokeTreeNodes), fileNodeCount)
+
+	// A search narrows the bulk buttons; a collapsed folder must not. Scoping
+	// them to hidden rows is what made Select All/None look broken on a big
+	// title, where almost every file sits inside a folder.
+	smokeFiles := make([]*titleFileNode, 0, fileNodeCount)
+	for _, node := range smokeTreeNodes {
+		if !node.dir {
+			smokeFiles = append(smokeFiles, node)
+		}
+	}
+	allShown := bulkTitleFileNodes(smokeFiles, "")
+	for _, node := range smokeTreeNodes {
+		if node.dir && node.name == "content" {
+			node.expanded = false
+		}
+	}
+	collapsedShown := bulkTitleFileNodes(smokeFiles, "")
+	for _, node := range smokeFiles {
+		node.match = strings.Contains(node.path, "b.bin")
+	}
+	searchShown := bulkTitleFileNodes(smokeFiles, "b.bin")
+	s.check(len(allShown) == 3 && len(collapsedShown) == 3 && len(searchShown) == 1,
+		"select all/none ignore collapsed folders but follow a search (all=%d collapsed=%d search=%d)",
+		len(allShown), len(collapsedShown), len(searchShown))
+	for _, node := range smokeTreeNodes {
+		if node.dir {
+			node.expanded = true
+		}
+	}
+
+	originalFetch := fetchTitleFileTree
+	fetchTitleFileTree = func(uint64, int, *http.Client) (*wiiudownloader.TitleFileTree, error) {
+		return smokeTree, nil
+	}
+	pickerBase := uiSmokeToplevelCount()
+	mw.showSpecificFilesDialogFor(wiiudownloader.TitleEntry{TitleID: 0x0005000010143500, Name: "Smoke Title"})
+	uiSmokeSettle()
+	s.check(uiSmokeToplevelCount() > pickerBase, "download-specific-files dialog presents")
+
+	// The model carries every node, and the factory must actually materialise
+	// rows: a key that does not resolve hides a row silently, which is how the
+	// "files detected but no tree" bug shipped.
+	modelItems := -1
+	storeItems := -1
+	if lastTitleFilePicker.model != nil {
+		modelItems = int(lastTitleFilePicker.model.NItems())
+	}
+	if lastTitleFilePicker.store != nil {
+		storeItems = int(lastTitleFilePicker.store.NItems())
+	}
+	_ = storeItems
+	materialised, bound := 0, 0
+	for _, node := range lastTitleFileNodes {
+		if node.row == nil || node.check == nil {
+			continue
+		}
+		materialised++
+		// A file row follows the node's own tick; a folder row follows its
+		// subtree's tri-state.
+		want := node.selected
+		if node.dir {
+			active, total := smokeDirCounts(node)
+			want = total > 0 && active == total
+		}
+		if node.check.Active() == want {
+			bound++
+		}
+	}
+	s.check(len(lastTitleFileNodes) == 6 && modelItems == 6 && materialised > 0 && bound == materialised,
+		"the FST tree renders from the model (%d nodes, %d in store, %d in model, %d rows materialised, %d bound)",
+		len(lastTitleFileNodes), storeItems, modelItems, materialised, bound)
+
+	// Wiring, not just the helper: with a search active, Select All must touch
+	// only the matching files.
+	if lastTitleFilePicker.search != nil && lastTitleFilePicker.selectAll != nil {
+		smokeSelectFiles := func(active bool) {
+			for _, node := range lastTitleFileNodes {
+				if node.dir {
+					continue
+				}
+				node.selected = active
+				if node.check != nil {
+					node.check.SetActive(active)
+				}
+			}
+		}
+		smokeSelectFiles(false)
+		lastTitleFilePicker.search.SetText("b.bin")
+		// GtkSearchEntry debounces search-changed, so wait past its delay.
+		uiSmokeWait(400 * time.Millisecond)
+		if lastTitleFilePicker.status != nil {
+			s.check(strings.HasPrefix(lastTitleFilePicker.status.Text(), "1 of 3 file(s)"),
+				"the search status reports matches against the total (%q)", lastTitleFilePicker.status.Text())
+		}
+		lastTitleFilePicker.bulkPasses, lastTitleFilePicker.folderPasses, lastTitleFilePicker.statusPasses = 0, 0, 0
+		coreglib.InternObject(lastTitleFilePicker.selectAll).Emit("clicked")
+		uiSmokeWait(100 * time.Millisecond)
+
+		active, shownActive, shownTotal := 0, 0, 0
+		for _, node := range lastTitleFileNodes {
+			if node.dir {
+				continue
+			}
+			if node.selected {
+				active++
+			}
+			if node.match {
+				shownTotal++
+				if node.selected {
+					shownActive++
+				}
+			}
+		}
+		s.check(active == 1 && shownTotal == 1 && shownActive == 1,
+			"select all with a search touches only shown files (%d active, %d of %d shown)", active, shownActive, shownTotal)
+		// Bounded passes, not one tree walk per checkbox.
+		s.check(lastTitleFilePicker.bulkPasses == 1 && lastTitleFilePicker.folderPasses == 1 && lastTitleFilePicker.statusPasses == 1,
+			"select all is one pass, not one per file (bulk=%d folder=%d status=%d)",
+			lastTitleFilePicker.bulkPasses, lastTitleFilePicker.folderPasses, lastTitleFilePicker.statusPasses)
+		lastTitleFilePicker.search.SetText("")
+		uiSmokeWait(400 * time.Millisecond)
+		if lastTitleFilePicker.status != nil {
+			s.check(strings.HasPrefix(lastTitleFilePicker.status.Text(), "3 file(s)"),
+				"clearing the search restores the plain file total (%q)", lastTitleFilePicker.status.Text())
+		}
+
+		// The reported bug: with folders collapsed, Select None and Select All
+		// did nothing because every file was hidden behind a folder. Run it
+		// through the real buttons, not the helper.
+		if lastTitleFilePicker.collapseAll != nil {
+			coreglib.InternObject(lastTitleFilePicker.collapseAll).Emit("clicked")
+			uiSmokeWait(100 * time.Millisecond)
+			collapsedItems := -1
+			if lastTitleFilePicker.model != nil {
+				collapsedItems = int(lastTitleFilePicker.model.NItems())
+			}
+			coreglib.InternObject(lastTitleFilePicker.selectNone).Emit("clicked")
+			uiSmokeWait(100 * time.Millisecond)
+			s.check(collapsedItems < 6 && smokeSelectedFiles() == 0,
+				"select none clears every file with folders collapsed (%d rows on screen, %d selected)",
+				collapsedItems, smokeSelectedFiles())
+
+			coreglib.InternObject(lastTitleFilePicker.selectAll).Emit("clicked")
+			uiSmokeWait(100 * time.Millisecond)
+			s.check(smokeSelectedFiles() == 3,
+				"select all selects every file with folders collapsed (%d selected)", smokeSelectedFiles())
+
+			coreglib.InternObject(lastTitleFilePicker.expandAll).Emit("clicked")
+			uiSmokeWait(100 * time.Millisecond)
+		}
+	} else {
+		s.check(false, "the file picker exposes its controls to the smoke run")
+	}
+
+	// Rows are recycled, so the interactive paths have to be driven through the
+	// real widgets: a handler that resolves the wrong node silently ticks another
+	// file, which is exactly what recycling can break.
+	smokeHasBoundRows := false
+	for _, node := range lastTitleFileNodes {
+		if node.check != nil {
+			smokeHasBoundRows = true
+			break
+		}
+	}
+	if smokeHasBoundRows {
+		var dirNode, fileNode *titleFileNode
+		for _, node := range lastTitleFileNodes {
+			if node.check == nil {
+				continue
+			}
+			if node.dir && dirNode == nil && len(node.children) > 0 {
+				dirNode = node
+			}
+			if !node.dir && fileNode == nil {
+				fileNode = node
+			}
+		}
+
+		// Indentation is measured, not assumed: a child row has to sit one step
+		// to the right of its parent. The arrow slot is reserved for files too,
+		// and dropping it pulled children back beside their parent.
+		if lastTitleFilePicker.view != nil {
+			aligned, compared := 0, 0
+			var bad []string
+			for _, node := range lastTitleFileNodes {
+				if node.row == nil || node.check == nil || node.parent == nil {
+					continue
+				}
+				parent := node.parent
+				if parent.row == nil || parent.check == nil {
+					continue
+				}
+				childX, _, childOK := uiSmokeWidgetPoint(node.check, lastTitleFilePicker.view)
+				parentX, _, parentOK := uiSmokeWidgetPoint(parent.check, lastTitleFilePicker.view)
+				if !childOK || !parentOK {
+					continue
+				}
+				compared++
+				if step := childX - parentX; step > SPECIFIC_FILE_INDENT-2 && step < SPECIFIC_FILE_INDENT+2 {
+					aligned++
+				} else {
+					bad = append(bad, fmt.Sprintf("%s is %.0fpx from %s", node.path, step, parent.path))
+				}
+			}
+			s.check(compared > 0 && aligned == compared,
+				"a child row is indented one step past its parent (%d of %d, bad: %v)", aligned, compared, bad)
+		}
+
+		if dirNode != nil {
+			dirNode.check.SetActive(false)
+			uiSmokeWait(50 * time.Millisecond)
+			active, total := smokeDirCounts(dirNode)
+			s.check(active == 0 && total > 0 && !dirNode.check.Active(),
+				"un-ticking a folder clears its subtree (%d of %d selected)", active, total)
+
+			dirNode.check.SetActive(true)
+			uiSmokeWait(50 * time.Millisecond)
+			active, total = smokeDirCounts(dirNode)
+			s.check(active == total && total > 0 && dirNode.check.Active(),
+				"re-ticking a folder selects its subtree again (%d of %d)", active, total)
+		}
+
+		if fileNode != nil && fileNode.parent != nil && fileNode.parent.check != nil {
+			parent := fileNode.parent
+			activeBefore, total := smokeDirCounts(parent)
+			fileNode.check.SetActive(false)
+			uiSmokeWait(50 * time.Millisecond)
+			activeAfter, _ := smokeDirCounts(parent)
+			s.check(activeAfter == activeBefore-1 && !parent.check.Active() && parent.check.Inconsistent(),
+				"un-ticking one file leaves its folder partially selected (%d of %d, inconsistent=%v)",
+				activeAfter, total, parent.check.Inconsistent())
+
+			fileNode.check.SetActive(true)
+			uiSmokeWait(50 * time.Millisecond)
+			s.check(!parent.check.Inconsistent() && parent.check.Active(),
+				"re-ticking the file settles the folder back to fully selected")
+		}
+	}
+
+	// A title that lists no files, and a failed fetch: both are real paths and
+	// both must say so rather than leave an empty list on screen.
+	emptyTree := &wiiudownloader.TitleFileTree{TitleID: 0x0005000010143500, Name: "Empty Title"}
+	fetchTitleFileTree = func(uint64, int, *http.Client) (*wiiudownloader.TitleFileTree, error) {
+		return emptyTree, nil
+	}
+	mw.showSpecificFilesDialogFor(wiiudownloader.TitleEntry{TitleID: 0x0005000010143500, Name: "Empty Title"})
+	uiSmokeSettle()
+	if lastTitleFilePicker.status != nil {
+		s.check(lastTitleFilePicker.status.Text() == "This title lists no files.",
+			"a title with no files says so (%q)", lastTitleFilePicker.status.Text())
+	}
+
+	fetchTitleFileTree = func(uint64, int, *http.Client) (*wiiudownloader.TitleFileTree, error) {
+		return nil, errSmokeFetch
+	}
+	mw.showSpecificFilesDialogFor(wiiudownloader.TitleEntry{TitleID: 0x0005000010143500, Name: "Broken Title"})
+	uiSmokeSettle()
+	if lastTitleFilePicker.status != nil {
+		s.check(lastTitleFilePicker.status.Text() == "Could not load the file list.",
+			"a failed file-list fetch says so (%q)", lastTitleFilePicker.status.Text())
+	}
+	fetchTitleFileTree = originalFetch
 
 	showVersionSelectionDialog(mw.window, first, func(int) {})
 	uiSmokePump()

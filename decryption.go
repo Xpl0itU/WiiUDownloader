@@ -71,29 +71,9 @@ func DecryptContents(path string, progressReporter ProgressReporter, deleteEncry
 		return err
 	}
 
-	encryptedTitleKey, ticketKeyIndex, err := readTicketData(filepath.Join(path, "title.tik"))
+	cipherHashTree, err := newTitleCipher(filepath.Join(path, "title.tik"), tmd)
 	if err != nil {
 		return err
-	}
-
-	selectedCommonKey := chooseCommonKey(tmd.Version, ticketKeyIndex)
-	cbcCipher, err := aes.NewCipher(selectedCommonKey)
-	if err != nil {
-		return err
-	}
-
-	var titleIDBytes [8]byte
-	binary.BigEndian.PutUint64(titleIDBytes[:], tmd.TitleID)
-	var ivTitle [aes.BlockSize]byte
-	copy(ivTitle[:], titleIDBytes[:])
-
-	cbc := cipher.NewCBCDecrypter(cbcCipher, ivTitle[:])
-	decryptedTitleKey := make([]byte, len(encryptedTitleKey))
-	cbc.CryptBlocks(decryptedTitleKey, encryptedTitleKey)
-
-	cipherHashTree, err := aes.NewCipher(decryptedTitleKey)
-	if err != nil {
-		return fmt.Errorf("failed to create AES cipher: %w", err)
 	}
 
 	if tmd.Version == TMD_VERSION_WIIU {
@@ -130,6 +110,34 @@ func resolveContentFileNames(path string, tmd *TMD) error {
 		}
 	}
 	return nil
+}
+
+// newTitleCipher derives the title's AES key from its ticket and the common key.
+func newTitleCipher(tikPath string, tmd *TMD) (cipher.Block, error) {
+	encryptedTitleKey, ticketKeyIndex, err := readTicketData(tikPath)
+	if err != nil {
+		return nil, err
+	}
+
+	cbcCipher, err := aes.NewCipher(chooseCommonKey(tmd.Version, ticketKeyIndex))
+	if err != nil {
+		return nil, err
+	}
+
+	var titleIDBytes [8]byte
+	binary.BigEndian.PutUint64(titleIDBytes[:], tmd.TitleID)
+	var ivTitle [aes.BlockSize]byte
+	copy(ivTitle[:], titleIDBytes[:])
+
+	cbc := cipher.NewCBCDecrypter(cbcCipher, ivTitle[:])
+	decryptedTitleKey := make([]byte, len(encryptedTitleKey))
+	cbc.CryptBlocks(decryptedTitleKey, encryptedTitleKey)
+
+	titleCipher, err := aes.NewCipher(decryptedTitleKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create AES cipher: %w", err)
+	}
+	return titleCipher, nil
 }
 
 func readTicketData(ticketPath string) ([]byte, byte, error) {

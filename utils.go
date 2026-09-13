@@ -44,7 +44,9 @@ func hasRemovableEncryptedExtension(name string) bool {
 	return false
 }
 
-func FetchTMDSize(titleID uint64, version int, client *http.Client) (uint64, error) {
+// FetchTitleTMD downloads and parses a title's TMD, which lists the contents a
+// download would fetch. version < 0 selects the latest version.
+func FetchTitleTMD(titleID uint64, version int, client *http.Client) (*TMD, error) {
 	baseURL := fmt.Sprintf("http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/%016x", titleID)
 	tmdURL := fmt.Sprintf("%s/tmd", baseURL)
 	if version >= 0 {
@@ -53,23 +55,31 @@ func FetchTMDSize(titleID uint64, version int, client *http.Client) (uint64, err
 
 	resp, err := client.Get(tmdURL)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("failed to fetch TMD: status %d", resp.StatusCode)
+		return nil, fmt.Errorf("failed to fetch TMD: status %d", resp.StatusCode)
 	}
 
 	tmdData, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return 0, fmt.Errorf("failed to read TMD data: %w", err)
+		return nil, fmt.Errorf("failed to read TMD data: %w", err)
 	}
 
 	tmd, err := ParseTMD(tmdData)
 	if err != nil {
-		return 0, fmt.Errorf("failed to parse TMD: %w", err)
+		return nil, fmt.Errorf("failed to parse TMD: %w", err)
 	}
 
+	return tmd, nil
+}
+
+func FetchTMDSize(titleID uint64, version int, client *http.Client) (uint64, error) {
+	tmd, err := FetchTitleTMD(titleID, version, client)
+	if err != nil {
+		return 0, err
+	}
 	return tmd.CalculateTotalSize(), nil
 }

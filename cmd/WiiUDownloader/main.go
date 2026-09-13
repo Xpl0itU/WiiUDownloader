@@ -60,6 +60,9 @@ func main() {
 	if os.Getenv("WIIU_UI_SMOKE") != "" {
 		os.Exit(runUISmoke())
 	}
+	if os.Getenv("WIIU_UI_BENCH") != "" {
+		os.Exit(runUIBench())
+	}
 
 	app := adw.NewApplication(APP_ID, gio.ApplicationFlagsNone)
 

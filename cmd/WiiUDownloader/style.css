@@ -20,6 +20,14 @@ button.category-toggle {
 checkbutton {
 	padding: 4px 8px;
 }
+/* File picker folder arrow. Its natural width has to stay inside the row's
+   fixed arrow slot: a row laid out wider because it carries an arrow shifts
+   every widget after it, so files stop lining up one step inside their folder. */
+button.file-picker-arrow {
+	padding: 0;
+	min-width: 24px;
+	min-height: 24px;
+}
 /* GTK4's .linked only squares off the corners; it no longer draws a divider
    between buttons. Draw one ourselves so the pills stay readable. */
 box.linked > button.category-toggle + button.category-toggle {

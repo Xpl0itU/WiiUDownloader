@@ -22,8 +22,19 @@ type TMD struct {
 }
 
 func (t *TMD) CalculateTotalSize() uint64 {
+	return t.calculateTotalSize(nil)
+}
+
+// calculateTotalSize sums the download sizes of the given contents; a nil or
+// empty selection means every content in the TMD.
+func (t *TMD) calculateTotalSize(selected map[uint32]struct{}) uint64 {
 	var total uint64
 	for _, content := range t.Contents {
+		if selected != nil {
+			if _, ok := selected[content.ID]; !ok {
+				continue
+			}
+		}
 		total += uint64(expectedContentDownloadSize(content))
 		total += uint64(expectedH3DownloadSize(content))
 	}

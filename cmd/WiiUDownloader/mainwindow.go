@@ -67,21 +67,25 @@ const (
 )
 
 type MainWindow struct {
-	window                          *gtk.Window
-	adwWindow                       *adw.Window
-	headerBar                       *adw.HeaderBar
-	toolbarView                     *adw.ToolbarView
-	titleStatusPage                 *adw.StatusPage
-	queuePane                       *QueuePane
-	titleView                       *gtk.ColumnView
-	titleSelection                  *gtk.MultiSelection
-	titleSortModel                  *gtk.SortListModel
-	titleFilter                     *gtk.CustomFilter
-	titleScroll                     *gtk.ScrolledWindow
-	rows                            *gtk.StringList
-	titleRows                       map[string]*titleRow
-	boundChecks                     map[string]*gtk.CheckButton
-	checkRowKeys                    map[uintptr]string
+	window          *gtk.Window
+	adwWindow       *adw.Window
+	headerBar       *adw.HeaderBar
+	toolbarView     *adw.ToolbarView
+	titleStatusPage *adw.StatusPage
+	queuePane       *QueuePane
+	titleView       *gtk.ColumnView
+	titleSelection  *gtk.MultiSelection
+	titleSortModel  *gtk.SortListModel
+	titleFilter     *gtk.CustomFilter
+	titleScroll     *gtk.ScrolledWindow
+	rows            *gtk.StringList
+	titleRows       map[string]*titleRow
+	boundChecks     map[string]*gtk.CheckButton
+	checkRowKeys    map[uintptr]string
+	// contextRowKey is the row the right-click menu acts on; titleRowMenu is the
+	// reusable popover, rebuilt per open so its queue label matches the row.
+	contextRowKey                   string
+	titleRowMenu                    *gtk.PopoverMenu
 	searchEntry                     *gtk.SearchEntry
 	downloadQueueButton             *gtk.Button
 	decryptContentsCheckbox         *gtk.CheckButton
@@ -247,6 +251,42 @@ func (mw *MainWindow) BuildUI() {
 		mw.showAddByTitleIDDialog()
 	})
 	menuActions.Insert(addByTitleIDAction)
+
+	// Title-list row context menu; the handlers read contextRowKey, so the menu
+	// needs no per-row action parameters.
+	rowToggleQueueAction := gio.NewSimpleAction("row-toggle-queue", nil)
+	rowToggleQueueAction.ConnectActivate(func(*glib.Variant) {
+		row := mw.titleRows[mw.contextRowKey]
+		if row == nil {
+			return
+		}
+		mw.setQueueMembership([]string{mw.contextRowKey}, !row.inQueue)
+	})
+	menuActions.Insert(rowToggleQueueAction)
+
+	rowSpecificFilesAction := gio.NewSimpleAction("row-specific-files", nil)
+	rowSpecificFilesAction.ConnectActivate(func(*glib.Variant) {
+		if entry, ok := mw.contextRowEntry(); ok {
+			mw.showSpecificFilesDialogFor(entry)
+		}
+	})
+	menuActions.Insert(rowSpecificFilesAction)
+
+	rowSetVersionAction := gio.NewSimpleAction("row-set-version", nil)
+	rowSetVersionAction.ConnectActivate(func(*glib.Variant) {
+		if entry, ok := mw.contextRowEntry(); ok {
+			mw.onSetVersionRequested([]wiiudownloader.TitleEntry{entry})
+		}
+	})
+	menuActions.Insert(rowSetVersionAction)
+
+	rowCopyIDAction := gio.NewSimpleAction("row-copy-id", nil)
+	rowCopyIDAction.ConnectActivate(func(*glib.Variant) {
+		if entry, ok := mw.contextRowEntry(); ok && mw.window != nil {
+			mw.window.Clipboard().SetText(fmt.Sprintf("%016x", entry.TitleID))
+		}
+	})
+	menuActions.Insert(rowCopyIDAction)
 
 	openSettingsAction := gio.NewSimpleAction("open-settings", nil)
 	openSettingsAction.ConnectActivate(func(*glib.Variant) {

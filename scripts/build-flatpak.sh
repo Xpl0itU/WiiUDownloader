@@ -32,7 +32,7 @@ if [ -z "$VERSION" ]; then
     refs/tags/v*) VERSION="${GITHUB_REF#refs/tags/v}" ;;
   esac
 fi
-VERSION="${VERSION:-3.0}"
+VERSION="${VERSION:-3.1}"
 
 APP_ID=io.github.xpl0itu.wiiudownloader
 IMAGE=ghcr.io/flathub-infra/flatpak-github-actions:gnome-50

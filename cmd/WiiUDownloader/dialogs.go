@@ -114,16 +114,31 @@ func (d *appDialog) Destroy() {
 // tear the panel down) while it is still on screen.
 var activeFileDialog *gtk.FileDialog
 
+// retainFileDialog pins an on-screen chooser for as long as its panel is up.
+func retainFileDialog(dialog *gtk.FileDialog) {
+	activeFileDialog = dialog
+}
+
+// releaseFileDialog drops the pin once the chooser has finished, so the last
+// dialog is not kept alive for the rest of the run. The guard keeps a finished
+// chooser from clearing the reference of a newer one.
+func releaseFileDialog(dialog *gtk.FileDialog) {
+	if activeFileDialog == dialog {
+		activeFileDialog = nil
+	}
+}
+
 // chooseFolder presents a folder chooser; onSelected gets "" on cancel.
 func chooseFolder(parent *gtk.Window, title, startDir string, onSelected func(path string)) {
 	dialog := gtk.NewFileDialog()
-	activeFileDialog = dialog
+	retainFileDialog(dialog)
 	dialog.SetTitle(title)
 	dialog.SetModal(true)
 	if startDir != "" {
 		dialog.SetInitialFolder(gio.NewFileForPath(startDir))
 	}
 	dialog.SelectFolder(context.Background(), parent, func(res gio.AsyncResulter) {
+		defer releaseFileDialog(dialog)
 		file, err := dialog.SelectFolderFinish(res)
 		if err != nil || file == nil {
 			onSelected("")
@@ -137,13 +152,14 @@ func chooseFolder(parent *gtk.Window, title, startDir string, onSelected func(pa
 // on cancel.
 func chooseFolders(parent *gtk.Window, title, startDir string, onSelected func(paths []string)) {
 	dialog := gtk.NewFileDialog()
-	activeFileDialog = dialog
+	retainFileDialog(dialog)
 	dialog.SetTitle(title)
 	dialog.SetModal(true)
 	if startDir != "" {
 		dialog.SetInitialFolder(gio.NewFileForPath(startDir))
 	}
 	dialog.SelectMultipleFolders(context.Background(), parent, func(res gio.AsyncResulter) {
+		defer releaseFileDialog(dialog)
 		files, err := dialog.SelectMultipleFoldersFinish(res)
 		if err != nil || files == nil {
 			onSelected(nil)
@@ -165,7 +181,7 @@ func chooseFolders(parent *gtk.Window, title, startDir string, onSelected func(p
 // chooseFile presents an open-file chooser; onSelected gets "" on cancel.
 func chooseFile(parent *gtk.Window, title, filterName string, patterns []string, onSelected func(path string)) {
 	dialog := gtk.NewFileDialog()
-	activeFileDialog = dialog
+	retainFileDialog(dialog)
 	dialog.SetTitle(title)
 	dialog.SetModal(true)
 	if filterName != "" && len(patterns) > 0 {
@@ -180,6 +196,7 @@ func chooseFile(parent *gtk.Window, title, filterName string, patterns []string,
 		dialog.SetFilters(filters)
 	}
 	dialog.Open(context.Background(), parent, func(res gio.AsyncResulter) {
+		defer releaseFileDialog(dialog)
 		file, err := dialog.OpenFinish(res)
 		if err != nil || file == nil {
 			onSelected("")

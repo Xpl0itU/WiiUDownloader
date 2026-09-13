@@ -195,6 +195,28 @@ func uiSmokeWindowTitles() []string {
 	return titles
 }
 
+// uiSmokeVisibleWindowTitles lists the toplevels that are actually on screen.
+// A closed GtkWindow stays in the toplevel list, so counting titles alone would
+// not notice a window that was closed without being taken down.
+func uiSmokeVisibleWindowTitles() []string {
+	model := gtk.WindowGetToplevels()
+	var titles []string
+	for i := uint(0); i < model.NItems(); i++ {
+		obj := model.Item(i)
+		if obj == nil {
+			continue
+		}
+		if visible, ok := obj.ObjectProperty("visible").(bool); !ok || !visible {
+			continue
+		}
+		title, ok := obj.ObjectProperty("title").(string)
+		if ok {
+			titles = append(titles, title)
+		}
+	}
+	return titles
+}
+
 // uiSmokeCheckLayout asserts the layout invariants that must hold at every
 // window size: one toolbar row with the search to the right of the category
 // pills, the queue pane left of the title list, the donation bar above the
@@ -909,6 +931,65 @@ func runUISmoke() int {
 		}
 		cw.Window.Destroy()
 	}
+
+	// --- window teardown ---
+	// These three used to leave windows behind: settings leaked one per open,
+	// dialogs tore themselves down from inside their own click handler, and the
+	// native choosers were locals the GC could unref while still on screen.
+
+	// Reopening settings has to close the previous window deliberately instead of
+	// dropping it for the GC to destroy at an arbitrary moment.
+	if err := mw.createConfigWindow(cfg); err != nil {
+		s.check(false, "first settings window opens: %v", err)
+	} else {
+		firstSettings := mw.configWindow
+		firstSettings.Window.Present()
+		uiSmokeSettle()
+		if err := mw.createConfigWindow(cfg); err != nil {
+			s.check(false, "second settings window opens: %v", err)
+		} else {
+			secondSettings := mw.configWindow
+			secondSettings.Window.Present()
+			uiSmokeSettle()
+			s.check(firstSettings != secondSettings, "reopening settings builds a new window")
+			s.check(!firstSettings.Window.Visible(), "reopening settings closes the previous window")
+			visibleSettings := 0
+			for _, title := range uiSmokeVisibleWindowTitles() {
+				if title == WINDOW_TITLE_PREFIX+"Settings" {
+					visibleSettings++
+				}
+			}
+			s.check(visibleSettings == 1, "exactly one settings window is on screen (%d)", visibleSettings)
+			secondSettings.Window.Destroy()
+			uiSmokeSettle()
+		}
+	}
+	mw.configWindow = nil
+
+	// A dialog button must not tear its own mapped window down inside the click
+	// handler; the close lands on the next main-loop turn.
+	smokeDialog := newAppDialog(mw.window, WINDOW_TITLE_PREFIX+"Teardown Check")
+	handlerRan := false
+	closeButton := smokeDialog.AddButton("Close", func() { handlerRan = true })
+	smokeDialog.Present()
+	uiSmokeSettle()
+	closeButton.Emit("clicked")
+	s.check(handlerRan, "a dialog button runs its handler")
+	s.check(smokeDialog.Visible(), "a dialog does not tear its own window down inside the click handler")
+	uiSmokeSettle()
+	s.check(!smokeDialog.Visible(), "the dialog closes once the main loop runs")
+
+	// The native choosers must outlive the GC while their panel is on screen, and
+	// must not be pinned forever afterwards.
+	liveChooser := gtk.NewFileDialog()
+	retainFileDialog(liveChooser)
+	s.check(activeFileDialog == liveChooser, "a live chooser is retained while its panel is on screen")
+	newestChooser := gtk.NewFileDialog()
+	retainFileDialog(newestChooser)
+	releaseFileDialog(liveChooser)
+	s.check(activeFileDialog == newestChooser, "releasing an older chooser leaves the newest retained")
+	releaseFileDialog(newestChooser)
+	s.check(activeFileDialog == nil, "the chooser reference is dropped once it finishes")
 
 	// --- setup assistant ---
 	if assistant, err := NewInitialSetupAssistantWindow(cfg); err != nil {

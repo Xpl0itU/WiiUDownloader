@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from bundle_libs import bundle_lib, get_deps, verify_bundle
 from bundle_paths import rewrite_binary
 from theme_compat import install_adwaita_compat_aliases
 
@@ -48,55 +49,6 @@ def set_minimum_macos_version(path):
                 os.remove(tmp_path)
         except:
             pass
-
-
-def get_deps(path):
-    if not os.path.exists(path):
-        print(f"Warning: path does not exist: {path}")
-        return []
-    res = run(f'otool -L "{path}"')
-    if not res or res.returncode != 0:
-        print(f"Warning: otool failed for {path}")
-        return []
-    deps = []
-    for line in res.stdout.split("\n")[1:]:
-        line = line.strip()
-        if not line:
-            continue
-        match = re.match(r"^(.+?)\s+\(", line)
-        if not match:
-            continue
-        dep_path = match.group(1)
-        if any(
-            dep_path.startswith(p)
-            for p in ["/opt/homebrew", "/usr/local", "/opt/local"]
-        ):
-            deps.append(dep_path)
-    return deps
-
-
-def bundle_lib(src_path, dest_dir, processed, search_paths):
-    if not src_path or src_path in processed:
-        return
-    real_src = os.path.realpath(src_path)
-    if not os.path.exists(real_src):
-        name = os.path.basename(src_path)
-        for sp in search_paths:
-            candidate = os.path.join(sp, name)
-            if os.path.exists(candidate):
-                real_src = os.path.realpath(candidate)
-                break
-        else:
-            return
-    name = os.path.basename(src_path)
-    dest_path = os.path.join(dest_dir, name)
-    if not os.path.exists(dest_path):
-        shutil.copy2(real_src, dest_path)
-        os.chmod(dest_path, 0o755)
-    processed.add(src_path)
-    processed.add(real_src)
-    for dep in get_deps(dest_path):
-        bundle_lib(dep, dest_dir, processed, search_paths)
 
 
 # Paths
@@ -293,6 +245,9 @@ set_minimum_macos_version(main_exe)
 for f in os.listdir(lib_path):
     if f.endswith(".dylib"):
         set_minimum_macos_version(os.path.join(lib_path, f))
+
+
+verify_bundle(main_exe, macos_path)
 
 # 5. Resources
 share_src = os.path.join(brew_prefix, "share")

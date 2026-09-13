@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from bundle_libs import verify_bundle
 from bundle_paths import rewrite_binary
 from theme_compat import install_adwaita_compat_aliases
 
@@ -116,6 +117,10 @@ def merge_apps(intel_app, arm_app, output_app):
         for f in files:
             if f.endswith(".dylib") or f.endswith(".so"):
                 rewrite_binary(os.path.join(root, f), is_main_exe=False, run_fn=print)
+
+    # A dylib present in only one slice is kept as-is above, so the merged app can
+    # end up loading something the bundle does not have. Fail before the DMG.
+    verify_bundle(out_exe, out_macos)
 
     # Ad-hoc code signing (lipo strips signatures, macOS SIP requires signed dlopen'd code)
     print("Signing universal app...")

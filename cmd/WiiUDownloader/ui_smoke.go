@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"os"
@@ -195,6 +196,43 @@ func uiSmokeWindowTitles() []string {
 	return titles
 }
 
+// FLATPAK_PACKAGING_DIR is relative to cmd/WiiUDownloader, where the smoke runs.
+const FLATPAK_PACKAGING_DIR = "../../packaging/flatpak"
+
+// uiSmokePackagingIDs checks the GApplication ID against the Flatpak metadata.
+// A sandbox only lets an app own its own ID on the session bus, so a mismatch
+// makes the app die with "Failed to register: ... ServiceUnknown" before a
+// window ever appears — in Flatpak only, which is why the AppImage is unaffected.
+func uiSmokePackagingIDs(s *uiSmoke) {
+	entries, err := os.ReadDir(FLATPAK_PACKAGING_DIR)
+	if err != nil {
+		s.check(false, "flatpak manifests are readable: %v", err)
+		return
+	}
+	checked := 0
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(FLATPAK_PACKAGING_DIR, entry.Name()))
+		if err != nil {
+			s.check(false, "%s is readable: %v", entry.Name(), err)
+			continue
+		}
+		var manifest struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(data, &manifest); err != nil {
+			s.check(false, "%s parses: %v", entry.Name(), err)
+			continue
+		}
+		checked++
+		s.check(manifest.ID == APP_ID,
+			"%s id matches the GApplication id (want %q, got %q)", entry.Name(), APP_ID, manifest.ID)
+	}
+	s.check(checked > 0, "at least one flatpak manifest was checked (%d)", checked)
+}
+
 // uiSmokeVisibleWindowTitles lists the toplevels that are actually on screen.
 // A closed GtkWindow stays in the toplevel list, so counting titles alone would
 // not notice a window that was closed without being taken down.
@@ -380,6 +418,7 @@ func runUISmoke() int {
 	width, height := mw.window.DefaultSize()
 	s.check(width > 0 && height > 0, "main window has a default size (%dx%d)", width, height)
 	uiSmokeStylesheet(s)
+	uiSmokePackagingIDs(s)
 
 	// --- category switcher: toggle buttons, mutually exclusive, filtering ---
 	s.check(len(mw.categoryButtons) == 5, "5 category buttons (got %d)", len(mw.categoryButtons))

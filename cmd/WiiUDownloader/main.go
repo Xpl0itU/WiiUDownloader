@@ -38,6 +38,8 @@ const (
 const (
 	APP_NAME            = "WiiUDownloader"
 	WINDOW_TITLE_PREFIX = APP_NAME + " - "
+	// Must match the Flatpak app id: a sandbox only lets the app own its own name.
+	APP_ID = "io.github.xpl0itu.wiiudownloader"
 )
 
 func main() {
@@ -59,7 +61,7 @@ func main() {
 		os.Exit(runUISmoke())
 	}
 
-	app := adw.NewApplication("io.github.xploitu.wiiudownloader", gio.ApplicationFlagsNone)
+	app := adw.NewApplication(APP_ID, gio.ApplicationFlagsNone)
 
 	if runtime.GOOS == "darwin" {
 		quitAction := gio.NewSimpleAction("quit", nil)
@@ -87,7 +89,7 @@ func main() {
 	}
 
 	app.ConnectActivate(func() {
-		if !config.DidInitialSetup {
+		if config.DidInitialSetup {
 			assistant, err := NewInitialSetupAssistantWindow(config)
 			if err != nil {
 				showFatalDialogAndLog("Error creating setup assistant", err)

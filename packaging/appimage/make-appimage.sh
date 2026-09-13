@@ -5,7 +5,7 @@
 set -eu
 
 ARCH=$(uname -m)
-VERSION="${VERSION:-2.105}"
+VERSION="${VERSION:-3.0-Beta1}"
 export ARCH VERSION
 
 export OUTPATH=./dist
@@ -22,6 +22,19 @@ export GTK_CLASS_FIX=1
 
 quick-sharun /usr/bin/wiiudownloader
 quick-sharun --make-appimage
+
+# The self-updater can only update from the .zsync, so a release without it is
+# a broken release. quick-sharun normally emits it from UPINFO; make it anyway
+# if it did not, then fail rather than publish an AppImage that cannot update.
+appimage=$(echo ./dist/*.AppImage)
+if [ ! -f "$appimage.zsync" ]; then
+	echo "quick-sharun produced no .zsync, generating one with zsyncmake..."
+	zsyncmake -u "${appimage##*/}" "$appimage"
+fi
+if [ ! -f "$appimage.zsync" ]; then
+	echo "ERROR: $appimage.zsync is missing; the self-updater would never find an update" >&2
+	exit 1
+fi
 
 # Actually run the AppImage; the container has xvfb from the anylinux setup.
 quick-sharun --test ./dist/*.AppImage

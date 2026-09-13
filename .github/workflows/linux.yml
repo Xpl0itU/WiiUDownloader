@@ -89,7 +89,11 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: WiiUDownloader-Linux-${{ matrix.arch }}-appimage
-          path: dist/*.AppImage*
+          # The .zsync is what AppImageUpdate/our self-updater consumes, so it
+          # ships next to the AppImage rather than being left in dist/.
+          path: |
+            dist/*.AppImage
+            dist/*.AppImage.zsync
           if-no-files-found: error
 
   release:
@@ -109,6 +113,10 @@ jobs:
         run: |
           mkdir -p release
           find artifacts -type f \( -name '*.AppImage' -o -name '*.AppImage.zsync' -o -name '*.flatpak' \) -exec cp {} release/ \;
+          shopt -s nullglob
+          for appimage in release/*.AppImage; do
+            [ -f "$appimage.zsync" ] || { echo "::error::$appimage has no .zsync, so it could never self-update"; exit 1; }
+          done
           ls -la release
       - name: Publish release
         uses: ncipollo/release-action@v1

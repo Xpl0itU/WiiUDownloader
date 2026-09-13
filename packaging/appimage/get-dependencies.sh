@@ -19,7 +19,8 @@ pacman -Syu --noconfirm --needed \
 	glib2 \
 	adwaita-icon-theme \
 	hicolor-icon-theme \
-	gobject-introspection
+	gobject-introspection \
+	zsync
 
 echo "Installing debloated packages..."
 echo "---------------------------------------------------------------"

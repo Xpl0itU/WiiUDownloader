@@ -89,7 +89,7 @@ func main() {
 	}
 
 	app.ConnectActivate(func() {
-		if config.DidInitialSetup {
+		if !config.DidInitialSetup {
 			assistant, err := NewInitialSetupAssistantWindow(config)
 			if err != nil {
 				showFatalDialogAndLog("Error creating setup assistant", err)

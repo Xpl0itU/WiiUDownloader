@@ -1,15 +1,10 @@
 name: MSYS2
 
-# Branch/PR runs build and upload a downloadable zip only. Releases are
-# published exclusively from tag pushes (see the gated publish step below).
+# Releases are published from tag pushes only.
 on:
   push:
-    branches:
-      - "**"
     tags:
       - "*"
-  pull_request:
-  workflow_dispatch:
 
 permissions:
   contents: write

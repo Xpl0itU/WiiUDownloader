@@ -34,6 +34,7 @@ docs/
 # Test & cache
 test_cache/
 *.cache
+__pycache__/
 *_test.go
 loadedlibs.txt*
 app.log

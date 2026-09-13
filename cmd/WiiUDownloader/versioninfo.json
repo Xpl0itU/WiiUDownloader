@@ -21,12 +21,12 @@
     "StringFileInfo": {
         "CompanyName": "Xpl0itU",
         "FileDescription": "WiiUDownloader",
-        "FileVersion": "3.0-Beta1",
+        "FileVersion": "3.0",
         "InternalName": "WiiUDownloader",
         "LegalCopyright": "Copyright 2022-2026 Xpl0itU",
         "OriginalFilename": "WiiUDownloader.exe",
         "ProductName": "WiiUDownloader",
-        "ProductVersion": "3.0-Beta1"
+        "ProductVersion": "3.0"
     },
     "IconPath": "WiiUDownloader.ico",
     "VarFileInfo": {

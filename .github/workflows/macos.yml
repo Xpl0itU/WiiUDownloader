@@ -1,15 +1,10 @@
 name: macOS
 
-# Branch/PR runs build and upload a downloadable .app only. The universal DMG is
-# assembled and released exclusively from tag pushes (see the release job's if).
+# Releases are published from tag pushes only.
 on:
   push:
-    branches:
-      - "**"
     tags:
       - "*"
-  pull_request:
-  workflow_dispatch:
 
 permissions:
   contents: write

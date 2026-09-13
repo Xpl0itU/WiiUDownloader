@@ -1,15 +1,10 @@
 name: Linux
 
-# Branch/PR runs build and upload downloadable artifacts only. Releases are
-# published exclusively from tag pushes (see the gated release job below).
+# Releases are published from tag pushes only.
 on:
   push:
-    branches:
-      - "**"
     tags:
       - "*"
-  pull_request:
-  workflow_dispatch:
 
 permissions:
   contents: write

@@ -18,6 +18,12 @@ const (
 	QUEUE_VERSION_COLUMN_WIDTH = 110
 	QUEUE_SIZE_COLUMN_WIDTH    = 100
 	QUEUE_STATUS_COLUMN_WIDTH  = 110
+	// The name column never drops below this, so a narrow pane scrolls instead of
+	// squeezing the name away entirely.
+	QUEUE_NAME_MIN_COLUMN_WIDTH = 120
+	// Automatic growth stops here so a wide pane cannot hand the whole table to
+	// the name column. Dragging the header bypasses it.
+	QUEUE_NAME_MAX_AUTO_WIDTH = 320
 	// Clearance so rounded window corners cannot clip the buttons.
 	QUEUE_CORNER_CLEARANCE          = 8
 	QUEUE_BUTTON_ROW_CLEARANCE      = 4
@@ -70,7 +76,13 @@ type QueuePane struct {
 	runPauseButton  *gtk.Button
 	runCancelButton *gtk.Button
 	// Only shown while a run is going; it costs 110px otherwise.
-	statusColumn  *gtk.ColumnViewColumn
+	statusColumn *gtk.ColumnViewColumn
+	// The name column is the only one that can shrink, so it gets its own
+	// bookkeeping. nameAutoWidth is the width the layout last applied, and
+	// nameManual records that the user dragged the header and took it over.
+	nameColumn    *gtk.ColumnViewColumn
+	nameAutoWidth int
+	nameManual    bool
 	onTogglePause func()
 	onCancelRun   func()
 	// App-level gate: the remove button is derived from it, never set directly.
@@ -130,11 +142,14 @@ func NewQueuePane() (*QueuePane, error) {
 		return column
 	}
 
+	// refreshQueueColumns owns the name column's width, so it must not also ask
+	// GTK to expand the column: a fixed width is what lets it stop at the cap.
 	nameColumn := textColumn("Name", 0, func(row *queueRow) string { return row.entry.Name })
-	nameColumn.SetExpand(true)
-	nameColumn.SetFixedWidth(-1)
+	nameColumn.SetExpand(false)
 	nameColumn.SetResizable(true)
 	queuePane.columnView.AppendColumn(nameColumn)
+	queuePane.nameColumn = nameColumn
+	queuePane.nameAutoWidth = -1
 	queuePane.columnView.AppendColumn(textColumn("Region", QUEUE_REGION_COLUMN_WIDTH, func(row *queueRow) string {
 		return wiiudownloader.GetFormattedRegion(row.entry.Region)
 	}))
@@ -362,6 +377,7 @@ func (qp *QueuePane) BeginRun() {
 		if qp.statusColumn != nil {
 			qp.statusColumn.SetVisible(true)
 		}
+		qp.refreshQueueColumns()
 
 		for _, row := range qp.rowData {
 			row.state = queueStateQueued
@@ -380,6 +396,7 @@ func (qp *QueuePane) EndRun() {
 		if qp.statusColumn != nil {
 			qp.statusColumn.SetVisible(false)
 		}
+		qp.refreshQueueColumns()
 	})
 }
 
@@ -764,11 +781,69 @@ func (qp *QueuePane) Update(doUpdateFunc bool) {
 		qp.spliceRows(0, qp.rows.NItems(), keys)
 		qp.refreshRemoveButton()
 		qp.updateTotalSizeLabel()
+		qp.refreshQueueColumns()
 
 		if qp.updateFunc != nil && doUpdateFunc {
 			qp.updateFunc()
 		}
 	})
+}
+
+// queueFixedColumnsWidth is what the always-visible queue columns cost before
+// the name column gets a say.
+const queueFixedColumnsWidth = QUEUE_REGION_COLUMN_WIDTH + QUEUE_KIND_COLUMN_WIDTH +
+	QUEUE_VERSION_COLUMN_WIDTH + QUEUE_SIZE_COLUMN_WIDTH
+
+// queueNameColumnWidth is the width the name column takes out of a table: what
+// the fixed columns leave, never less than nameMin (the table scrolls instead)
+// and never more than nameMax.
+func queueNameColumnWidth(available, reserved, nameMin, nameMax int) int {
+	width := available - reserved
+	if width < nameMin {
+		width = nameMin
+	}
+	if width > nameMax {
+		width = nameMax
+	}
+	return width
+}
+
+// refreshQueueColumns gives the name column the room the fixed columns leave,
+// capped so a wide pane cannot hand it the whole table. Every fixed column stays
+// visible; when the pane is too narrow to hold them beside the minimum name
+// width the table scrolls rather than squeezing the name away.
+//
+// GTK writes the column's fixed-width property on an interactive resize, so a
+// value that no longer matches the one applied here means the user dragged the
+// header. The width is theirs from then on and is never auto-sized again.
+func (qp *QueuePane) refreshQueueColumns() {
+	if qp.nameColumn == nil || qp.columnView == nil {
+		return
+	}
+	if !qp.nameManual && qp.nameAutoWidth >= 0 && qp.nameColumn.FixedWidth() != qp.nameAutoWidth {
+		qp.nameManual = true
+	}
+	if qp.nameManual {
+		return
+	}
+
+	available := qp.columnView.Width()
+	if available <= 0 {
+		return
+	}
+
+	reserved := queueFixedColumnsWidth
+	if qp.statusColumn != nil && qp.statusColumn.Visible() {
+		reserved += QUEUE_STATUS_COLUMN_WIDTH
+	}
+	width := queueNameColumnWidth(available, reserved, QUEUE_NAME_MIN_COLUMN_WIDTH, QUEUE_NAME_MAX_AUTO_WIDTH)
+	if qp.nameAutoWidth == width && qp.nameColumn.FixedWidth() == width {
+		return
+	}
+	// Remember the width before writing it, so the next refresh can tell our own
+	// write apart from a user drag.
+	qp.nameAutoWidth = width
+	qp.nameColumn.SetFixedWidth(width)
 }
 
 func (qp *QueuePane) updateTotalSizeLabel() {

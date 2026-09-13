@@ -73,6 +73,7 @@ type MainWindow struct {
 	toolbarView     *adw.ToolbarView
 	titleStatusPage *adw.StatusPage
 	queuePane       *QueuePane
+	splitPane       *gtk.Paned
 	titleView       *gtk.ColumnView
 	titleSelection  *gtk.MultiSelection
 	titleSortModel  *gtk.SortListModel
@@ -476,6 +477,13 @@ func (mw *MainWindow) BuildUI() {
 	mw.adwWindow.SetContent(view)
 
 	splitPane.SetPosition(280) // Set default width for QueuePane
+	mw.splitPane = splitPane
+	// The pane's width is what decides which queue columns fit, and it only
+	// changes when the divider moves. The allocation catches up after the
+	// notify, so the recompute is deferred to idle.
+	splitPane.NotifyProperty("position", func() {
+		uiIdleAdd(mw.queuePane.refreshQueueColumns)
+	})
 
 	// The queue pane never hides: it holds the queue, the download controls and
 	// the run bar. Narrow windows instead stack the bottom bar and shrink the search

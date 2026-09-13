@@ -891,6 +891,70 @@ func runUISmoke() int {
 			"queue buttons clear the rounded window corner (bottom %.0f, window %.0f)", buttonBottom, windowBottom)
 	}
 
+	// --- the name column gets the room the fixed columns leave ---
+	{
+		// The width rule is the whole behaviour, so pin it on its own first.
+		s.check(queueNameColumnWidth(313, queueFixedColumnsWidth, QUEUE_NAME_MIN_COLUMN_WIDTH, QUEUE_NAME_MAX_AUTO_WIDTH) == QUEUE_NAME_MIN_COLUMN_WIDTH,
+			"a pane too narrow for the fixed columns still keeps the name minimum")
+		s.check(queueNameColumnWidth(573, queueFixedColumnsWidth, QUEUE_NAME_MIN_COLUMN_WIDTH, QUEUE_NAME_MAX_AUTO_WIDTH) == 203,
+			"a roomy pane gives the name column what the fixed columns leave (got %d)",
+			queueNameColumnWidth(573, queueFixedColumnsWidth, QUEUE_NAME_MIN_COLUMN_WIDTH, QUEUE_NAME_MAX_AUTO_WIDTH))
+		s.check(queueNameColumnWidth(900, queueFixedColumnsWidth, QUEUE_NAME_MIN_COLUMN_WIDTH, QUEUE_NAME_MAX_AUTO_WIDTH) == QUEUE_NAME_MAX_AUTO_WIDTH,
+			"a wide pane stops the name column at the %dpx cap", QUEUE_NAME_MAX_AUTO_WIDTH)
+
+		// And the same rule drives the live column view.
+		pane := mw.splitPane
+		start := pane.Position()
+		mw.queuePane.Clear()
+		uiSmokeSettle()
+		mw.queuePane.AddTitles([]wiiudownloader.TitleEntry{first, second})
+		uiSmokeSettle()
+
+		nameWidth := mw.queuePane.nameColumn.FixedWidth()
+		s.check(nameWidth == QUEUE_NAME_MIN_COLUMN_WIDTH,
+			"the default pane gives the name column its minimum instead of nothing (%d)", nameWidth)
+		// The width has to reach the table's own minimum, otherwise the column
+		// would still be laid out at zero and the check above would be vacuous.
+		minWidth, _, _, _ := mw.queuePane.columnView.Measure(gtk.OrientationHorizontal, -1)
+		s.check(minWidth >= queueFixedColumnsWidth+QUEUE_NAME_MIN_COLUMN_WIDTH,
+			"the table asks for the name column on top of the fixed ones (%d >= %d)",
+			minWidth, queueFixedColumnsWidth+QUEUE_NAME_MIN_COLUMN_WIDTH)
+
+		// A wider window lets the pane and the table grow with it; the name column
+		// follows, up to the cap.
+		mw.window.SetDefaultSize(1600, 900)
+		uiSmokeSettle()
+		pane.SetPosition(900)
+		uiSmokeSettle()
+		s.check(mw.queuePane.nameColumn.FixedWidth() > nameWidth,
+			"widening the pane expands the name column (%d -> %d)", nameWidth, mw.queuePane.nameColumn.FixedWidth())
+		s.check(mw.queuePane.nameColumn.FixedWidth() == QUEUE_NAME_MAX_AUTO_WIDTH,
+			"the expanded name column stops at the automatic cap (%d)", mw.queuePane.nameColumn.FixedWidth())
+		mw.window.SetDefaultSize(MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT)
+		pane.SetPosition(start)
+		uiSmokeSettle()
+
+		// A header drag wins. GTK writes fixed-width on an interactive resize, so
+		// the same write stands in for the drag; the layout pass after it must
+		// notice, and then leave the width alone as the pane changes around it.
+		manual := 250
+		mw.queuePane.nameColumn.SetFixedWidth(manual)
+		mw.queuePane.refreshQueueColumns()
+		s.check(mw.queuePane.nameManual, "a header drag marks the name width as the user's")
+
+		pane.SetPosition(start + 100)
+		uiSmokeSettle()
+		s.check(mw.queuePane.nameColumn.FixedWidth() == manual,
+			"a manually sized name column is left alone as the pane changes (got %d, want %d)",
+			mw.queuePane.nameColumn.FixedWidth(), manual)
+
+		// Hand the width back to the layout rule for whatever runs next.
+		pane.SetPosition(start)
+		mw.queuePane.nameManual = false
+		mw.queuePane.nameAutoWidth = -1
+		uiSmokeSettle()
+	}
+
 	// --- a restored queue must show every size as it arrives, row by row ---
 	restored := []wiiudownloader.TitleEntry{games[20], games[21], games[22]}
 	sizes := []uint64{QUEUE_SMOKE_SIZE_BYTES, QUEUE_SMOKE_SIZE_BYTES * 4, QUEUE_SMOKE_SIZE_BYTES * 9}

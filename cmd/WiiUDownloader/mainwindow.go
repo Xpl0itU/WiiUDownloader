@@ -183,10 +183,8 @@ func (mw *MainWindow) SetApplicationForGTKWindow(app *gtk.Application) {
 }
 
 func (mw *MainWindow) createConfigWindow(config *Config) error {
-	// One settings window at a time. The previous one used to be dropped and
-	// left for the Go GC to destroy, which tears a realized window down at an
-	// arbitrary moment; on macOS that is frame-callback churn GDK is not fond
-	// of. Closing it here keeps the teardown deterministic.
+	// One settings window at a time: dropping the old reference left its teardown
+	// to the GC, which tears a realized window down at an arbitrary moment.
 	if previous := mw.configWindow; previous != nil && previous.Window != nil {
 		mw.configWindow = nil
 		uiIdleAdd(func() { previous.Window.Close() })
@@ -222,8 +220,7 @@ func (mw *MainWindow) BuildUI() {
 	mainvBox.SetMarginStart(UI_MARGIN_SMALL)
 	mainvBox.SetMarginEnd(UI_MARGIN_SMALL)
 
-	// App-level menu lives in the header bar as a primary GtkMenuButton, the
-	// GTK4 pattern; handlers sit in the window's action group.
+	// Header-bar menu button; handlers live in the window's action group.
 	menuActions := gio.NewSimpleActionGroup()
 
 	decryptContentsAction := gio.NewSimpleAction("decrypt-contents", nil)
@@ -281,7 +278,6 @@ func (mw *MainWindow) BuildUI() {
 
 	mw.window.InsertActionGroup("win", menuActions)
 
-	// Same nav bar as the other windows, so the app looks like one piece.
 	headerBar := adw.NewHeaderBar()
 	mw.headerBar = headerBar
 	headerBar.PackEnd(menuButton)
@@ -289,8 +285,7 @@ func (mw *MainWindow) BuildUI() {
 	tophBox := gtk.NewBox(gtk.OrientationHorizontal, 12)
 	mw.toolbar = tophBox
 
-	// GTK3 used SetMode(false) radio buttons, i.e. toggle buttons; a grouped,
-	// linked set of GtkToggleButtons is the same widget without the removed one.
+	// GTK4 has no radio buttons; a grouped, linked set of toggles is the same thing.
 	categoryBox := gtk.NewBox(gtk.OrientationHorizontal, 0)
 	mw.categoryBox = categoryBox
 	categoryBox.AddCSSClass("linked")
@@ -332,7 +327,6 @@ func (mw *MainWindow) BuildUI() {
 	scrollable.SetChild(mw.titleView)
 	mw.titleScroll = scrollable
 
-	// Empty state: an empty list otherwise just looks like a broken window.
 	statusPage := adw.NewStatusPage()
 	statusPage.SetIconName("edit-find-symbolic")
 	statusPage.SetTitle("No titles match")
@@ -345,9 +339,8 @@ func (mw *MainWindow) BuildUI() {
 	titleOverlay.AddOverlay(statusPage)
 	mainvBox.Append(titleOverlay)
 
-	// A GtkActionBar paints its background as a rounded card under libadwaita, so
-	// the fill visibly stops short of the content area. A plain box with our own
-	// border spans the full width the way the GTK3 build's action bar did.
+	// GtkActionBar paints a rounded card under libadwaita, so its fill stops short
+	// of the content area; a plain box with our own border spans the full width.
 	bottomhBox := gtk.NewBox(gtk.OrientationHorizontal, 12)
 	bottomhBox.AddCSSClass("bottom-bar")
 	mw.bottomBar = bottomhBox
@@ -412,8 +405,8 @@ func (mw *MainWindow) BuildUI() {
 	bottomhBox.Append(regionBox)
 	mw.syncRegionCheckboxes()
 
-	// GTK3 pack_end stacks upward from the bottom edge, so the donation bar sat
-	// above the action bar; GtkBox lays out in append order, so append it first.
+	// GtkBox lays out in append order, so appending first keeps the donation bar
+	// above the action bar.
 	mw.setupDonationBar()
 	if mw.donationBar != nil {
 		mainvBox.Append(mw.donationBar)
@@ -444,9 +437,9 @@ func (mw *MainWindow) BuildUI() {
 
 	splitPane.SetPosition(280) // Set default width for QueuePane
 
-	// The queue pane never hides: it holds the queue and download controls and
-	// the run bar. Instead, narrow windows buy back horizontal room from the two
-	// bottom-bar groups (they stack) and from the search entry.
+	// The queue pane never hides: it holds the queue, the download controls and
+	// the run bar. Narrow windows instead stack the bottom bar and shrink the search
+	// entry.
 	compact := adw.NewBreakpoint(adw.NewBreakpointConditionLength(
 		adw.BreakpointConditionMaxWidth, COMPACT_WINDOW_BREAKPOINT, adw.LengthUnitPx))
 	compact.AddSetter(bottomhBox, "orientation", gtk.OrientationVertical)
@@ -454,7 +447,6 @@ func (mw *MainWindow) BuildUI() {
 	mw.adwWindow.AddBreakpoint(compact)
 }
 
-// openSettingsWindow shows the settings window as a transient of the main one.
 func (mw *MainWindow) openSettingsWindow() {
 	config, err := loadConfig()
 	if err != nil {
@@ -470,7 +462,6 @@ func (mw *MainWindow) openSettingsWindow() {
 	mw.configWindow.Window.Present()
 }
 
-// beginRun opens the progress surface for a new run.
 func (mw *MainWindow) beginRun(title string) *DownloadProgress {
 	run := newDownloadProgress(mw.queuePane, mw.window)
 	mw.runProgress = run
@@ -478,9 +469,8 @@ func (mw *MainWindow) beginRun(title string) *DownloadProgress {
 	return run
 }
 
-// runDecryptContents decrypts one or more folders in the background. A folder
-// that fails is skipped so the rest of the batch still runs, and every failure
-// is reported together once the batch ends.
+// runDecryptContents decrypts folders in the background: a failing folder is
+// skipped so the batch continues, and all failures are reported at the end.
 func (mw *MainWindow) runDecryptContents(selectedPaths []string) {
 	if len(selectedPaths) == 0 {
 		return
@@ -506,8 +496,7 @@ func (mw *MainWindow) runDecryptContents(selectedPaths []string) {
 
 		uiIdleAdd(func() {
 			run.Finish()
-			// A decryption is not a download, so it never raises the "Download
-			// Complete" dialog; only the failures are worth a dialog.
+			// Decryption is not a download, so only failures raise a dialog.
 			if len(failed) > 0 {
 				mw.showDecryptErrorsDialog(failed)
 			}
@@ -515,7 +504,6 @@ func (mw *MainWindow) runDecryptContents(selectedPaths []string) {
 	}()
 }
 
-// decryptFolder decrypts a single folder into the configured output path.
 func (mw *MainWindow) decryptFolder(run *DownloadProgress, selectedPath string) error {
 	config, err := loadConfig()
 	if err != nil {
@@ -528,7 +516,6 @@ func (mw *MainWindow) decryptFolder(run *DownloadProgress, selectedPath string) 
 	return wiiudownloader.DecryptContents(selectedPath, run, false, decryptOut)
 }
 
-// runGenerateFakeTicketAndCert generates ticket+cert files for a TMD path.
 func (mw *MainWindow) runGenerateFakeTicketAndCert(tmdPath string) {
 	run := mw.beginRun("Generating Ticket and Cert...")
 	run.ResetTotals()
@@ -871,8 +858,7 @@ func (mw *MainWindow) collectRelatedCandidates(originals []wiiudownloader.TitleE
 	return candidates
 }
 
-// showRelatedTitlesDialog presents related-content candidates; onDone gets the
-// accepted entries, or nil when skipped.
+// showRelatedTitlesDialog's onDone gets the accepted entries, or nil when skipped.
 func (mw *MainWindow) showRelatedTitlesDialog(originals, candidates []wiiudownloader.TitleEntry, onDone func(chosen []wiiudownloader.TitleEntry)) {
 	dialog := newAppDialog(mw.window, WINDOW_TITLE_PREFIX+"Add Related Content")
 	dialog.SetDefaultSize(RELATED_DIALOG_WIDTH, RELATED_DIALOG_HEIGHT)
@@ -1037,7 +1023,6 @@ func (mw *MainWindow) showErrorsDialog(errors []DownloadError) {
 	dialog.Present()
 }
 
-// newErrorOverviewRow renders one failure as title, optional type and message.
 func newErrorOverviewRow(dlErr DownloadError) *gtk.ListBoxRow {
 	row := gtk.NewListBoxRow()
 
@@ -1075,7 +1060,6 @@ func newErrorOverviewRow(dlErr DownloadError) *gtk.ListBoxRow {
 	return row
 }
 
-// showDecryptErrorsDialog lists the folders a decryption batch could not handle.
 func (mw *MainWindow) showDecryptErrorsDialog(errors []DownloadError) {
 	dialog := newAppDialog(mw.window, WINDOW_TITLE_PREFIX+"Decryption Errors")
 	dialog.SetDefaultSize(ERROR_DIALOG_WIDTH, ERROR_DIALOG_HEIGHT)
@@ -1128,7 +1112,6 @@ func (mw *MainWindow) showAddByTitleIDDialog() {
 
 		titleEntry := wiiudownloader.GetTitleEntryFromTid(tid)
 		if titleEntry.TitleID == 0 {
-			// Not in database, create placeholder
 			titleEntry = wiiudownloader.TitleEntry{
 				Name:    tidStr,
 				TitleID: tid,

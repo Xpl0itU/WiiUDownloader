@@ -6,8 +6,8 @@ import (
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 )
 
-// newIconLabelButton builds a button whose label sits next to a symbolic icon;
-// libadwaita lays the pair out and keeps them in sync with the button state.
+// newIconLabelButton pairs a symbolic icon with a label through AdwButtonContent,
+// so libadwaita keeps both in sync with the button state.
 func newIconLabelButton(iconName, label string) *gtk.Button {
 	content := adw.NewButtonContent()
 	content.SetIconName(iconName)
@@ -17,8 +17,8 @@ func newIconLabelButton(iconName, label string) *gtk.Button {
 	return button
 }
 
-// newIconButton builds a flat, icon-only button whose purpose lives in the
-// tooltip. Used where a labelled button would not fit the available width.
+// newIconButton is flat and icon-only, with the purpose in the tooltip; for places
+// too narrow to fit a label.
 func newIconButton(iconName, tooltip string) *gtk.Button {
 	button := gtk.NewButtonFromIconName(iconName)
 	button.AddCSSClass("flat")
@@ -44,12 +44,10 @@ func listItem(obj *coreglib.Object) *gtk.ListItem {
 	return &gtk.ListItem{Object: obj}
 }
 
-// newRowStore creates the GtkStringList every table in this app is built on.
 func newRowStore(keys []string) *gtk.StringList {
 	return gtk.NewStringList(keys)
 }
 
-// listItemKey returns the bound row key, or "" during setup.
 func listItemKey(item *gtk.ListItem) string {
 	if item == nil {
 		return ""

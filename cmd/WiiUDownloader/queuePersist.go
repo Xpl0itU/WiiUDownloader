@@ -13,8 +13,8 @@ import (
 
 const queueFilename = "queue.json"
 
-// persistedQueueEntry stores the minimal state needed to rebuild the queue.
-// The Title ID is a 16-char hex string for portability and readability.
+// persistedQueueEntry is the minimal state needed to rebuild the queue; the Title
+// ID is a 16-char hex string for readability.
 type persistedQueueEntry struct {
 	TID     string `json:"tid"`
 	Version int    `json:"version"`
@@ -32,8 +32,8 @@ func queueFilePath() (string, error) {
 	return filepath.Join(dir, queueFilename), nil
 }
 
-// saveQueueFile writes the queue atomically (tmp + rename) so a crash cannot
-// leave a half-written file behind.
+// saveQueueFile writes the queue atomically so a crash cannot leave a half-written
+// file behind.
 func saveQueueFile(path string, titles []wiiudownloader.TitleEntry) error {
 	entries := make([]persistedQueueEntry, 0, len(titles))
 	for _, t := range titles {

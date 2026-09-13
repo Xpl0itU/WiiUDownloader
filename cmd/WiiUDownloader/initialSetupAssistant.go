@@ -11,9 +11,8 @@ import (
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 )
 
-// InitialSetupAssistantWindow is the first-run wizard. GtkAssistant has been
-// deprecated since GTK 4.10 with no replacement, so the step bar is a
-// GtkListBox and the steps are pages of a GtkStack.
+// InitialSetupAssistantWindow is the first-run wizard. GtkAssistant is deprecated
+// with no GTK4 replacement, so the step bar and pages are hand-built.
 type InitialSetupAssistantWindow struct {
 	window            *gtk.Window
 	adwWindow         *adw.Window
@@ -46,7 +45,6 @@ const (
 	SETUP_STACK_TRANSITION_MS   = 180
 )
 
-// setupPageBox applies the wizard's page margins.
 func setupPageBox(spacing int) *gtk.Box {
 	box := gtk.NewBox(gtk.OrientationVertical, 0)
 	box.SetSpacing(spacing)
@@ -71,8 +69,8 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	windowTitle := adw.NewWindowTitle("Initial Setup", "")
 	headerBar.SetTitleWidget(windowTitle)
 
-	// The button row is identical on every step: Skip on the start side, Back
-	// and one primary button whose label and enabled state are all that change.
+	// Identical button row on every step; only the primary button's label and
+	// enabled state change.
 	backButton := gtk.NewButtonWithLabel("Back")
 	SetupButtonAccessibility(backButton, "Go back to the previous step")
 
@@ -103,10 +101,9 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	stack.SetHExpand(true)
 	stack.SetVExpand(true)
 
-	// Only the page on screen may change the Next button, so each page's
-	// completeness is stored here and the button state is always derived through
-	// refreshNext. Storage is deliberately always complete: an unset path is
-	// asked for at the first download, so the wizard must not block on it.
+	// Only the page on screen may change Next, so completeness is stored here and
+	// derived through refreshNext. Storage is deliberately always complete: an
+	// unset path is asked for at the first download.
 	complete := []bool{true, true, true, true, true}
 
 	currentPage := 0
@@ -392,7 +389,6 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 		entry.SetHExpand(true)
 		row.Append(entry)
 
-		// Strip the trailing colon for the accessibility description.
 		pathName := strings.ToLower(strings.TrimSuffix(labelText, ":"))
 
 		browseButton := gtk.NewButtonWithLabel("Browse")
@@ -530,8 +526,8 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 	stepList.SetActivateOnSingleClick(true)
 	SetupListViewAccessibility(stepList)
 
-	// A size group keeps every title the width of the widest one, so the sidebar
-	// cannot grow as the bold "current step" moves between pages.
+	// A size group keeps every title as wide as the widest one, so the sidebar
+	// cannot grow as "current step" moves between pages.
 	stepLabelGroup := gtk.NewSizeGroup(gtk.SizeGroupHorizontal)
 
 	stepRows := make([]*gtk.ListBoxRow, 0, len(pages))
@@ -698,8 +694,8 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 		}
 	}
 
-	// Derived, never poked directly: a toggle handler on a hidden page can no
-	// longer reach out and disable the Next button of the page on screen.
+	// Derived, never poked directly: a handler on a hidden page must not touch the
+	// button of the page on screen.
 	refreshNext = func() {
 		nextButton.SetSensitive(currentPage >= lastPageIndex || complete[currentPage])
 	}
@@ -726,9 +722,8 @@ func NewInitialSetupAssistantWindow(config *Config) (*InitialSetupAssistantWindo
 		}
 	}
 
-	// GtkStack makes its first child visible but leaves the sidebar, the window
-	// subtitle and the button states untouched, so the wizard used to open
-	// unselected and only initialise itself on the first Back click.
+	// GtkStack shows its first child but leaves the sidebar and button states
+	// untouched, so the wizard must select step 0 explicitly.
 	initialSetupAssistantWindow.setPage(0)
 
 	return &initialSetupAssistantWindow, nil
@@ -765,7 +760,6 @@ func configureSetupOptionList(list *gtk.ListBox, options ...setupOptionRow) {
 		toggleSetupOptionForRow(row, options)
 	})
 
-	// GTK4 replaced "key-press-event" with event controllers.
 	keyController := gtk.NewEventControllerKey()
 	keyController.ConnectKeyPressed(func(keyval, keycode uint, state gdk.ModifierType) bool {
 		if !isKeyboardActivationKey(keyval) {

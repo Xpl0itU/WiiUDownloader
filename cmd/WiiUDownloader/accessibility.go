@@ -65,7 +65,6 @@ func SetupCheckButtonAccessibility(checkButton *gtk.CheckButton, description str
 	return nil
 }
 
-// SetupListViewAccessibility makes a list widget keyboard-focusable.
 func SetupListViewAccessibility(list gtk.Widgetter) error {
 	if list == nil {
 		return nil

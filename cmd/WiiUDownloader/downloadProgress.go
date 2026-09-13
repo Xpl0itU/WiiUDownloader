@@ -93,11 +93,9 @@ func (sa *SpeedAverager) GetAverageSpeed() float64 {
 
 // DownloadProgress is the app's only progress surface: it owns a run's state
 // (byte counters, rate, pause/cancel, error list) for downloads, decryption and
-// ticket/cert generation alike, and paints it into the queue pane's run bar.
-//
-// The core reports from worker goroutines, so every widget write here goes
-// through a QueuePane method that marshals onto the main loop; the counters
-// themselves are mutex-guarded and sampled on the main thread.
+// ticket/cert generation alike, and paints the queue pane's run bar. Worker
+// goroutines report into it, so widget writes marshal onto the main loop and the
+// counters are mutex-guarded.
 type DownloadProgress struct {
 	pane   *QueuePane
 	window *gtk.Window
@@ -138,13 +136,11 @@ func newDownloadProgress(pane *QueuePane, window *gtk.Window) *DownloadProgress 
 		errors:          make([]DownloadError, 0),
 	}
 	dp.controlCond = sync.NewCond(&dp.controlMutex)
-	// The run bar's controls drive this run's state, not a window's.
 	pane.SetRunCallbacks(dp.TogglePaused, dp.SetCancelled)
 	return dp
 }
 
-// Start shows the run bar and names the run. The window title carries it too,
-// because the compact layout can hide the queue pane mid-run.
+// Start shows the run bar and names the run.
 func (dp *DownloadProgress) Start(title string) {
 	dp.SetGameTitle(title)
 	dp.pane.BeginRun()
@@ -160,8 +156,7 @@ func (dp *DownloadProgress) Finish() {
 	})
 }
 
-// transferDetail describes what has been fetched: bytes done, the rate and the
-// time left.
+// transferDetail is the "done / total, rate, time left" line.
 func transferDetail(total, toDownload int64, speed float64) string {
 	detail := fmt.Sprintf("%s / %s", formatBytes(uint64(total)), formatBytes(uint64(toDownload)))
 	if speed <= 0 {
@@ -197,8 +192,8 @@ func clampFraction(fraction float64) float64 {
 	return fraction
 }
 
-// ProgressFraction reports the overall fraction from the byte counters, rather
-// than reading it back off the progress bar.
+// ProgressFraction reads the byte counters rather than the progress bar, which a
+// worker goroutine must not touch.
 func (dp *DownloadProgress) ProgressFraction() float64 {
 	dp.progressMutex.Lock()
 	defer dp.progressMutex.Unlock()
@@ -230,7 +225,6 @@ func (dp *DownloadProgress) SetQueueProgress(done, total int) {
 	dp.setWindowTitle(title, done, total)
 }
 
-// queueProgressText is the window title's long queue position.
 func queueProgressText(done, total int) string {
 	if total <= 0 {
 		return ""
@@ -244,8 +238,6 @@ func queueProgressText(done, total int) string {
 	return fmt.Sprintf("Title %d/%d", done+1, total)
 }
 
-// setWindowTitle keeps a run visible when the compact layout has the queue pane
-// hidden, which is the only other place progress is reported.
 func (dp *DownloadProgress) setWindowTitle(title string, done, total int) {
 	text := runTitleText(title, done, total)
 	uiIdleAdd(func() {
@@ -255,8 +247,6 @@ func (dp *DownloadProgress) setWindowTitle(title string, done, total int) {
 	})
 }
 
-// runTitleText is the main window's title during a run: the app name on its
-// own when nothing is named yet, otherwise the run plus its queue position.
 func runTitleText(title string, done, total int) string {
 	if title == "" {
 		return APP_NAME
@@ -297,8 +287,7 @@ func (dp *DownloadProgress) UpdateDownloadProgress(downloaded int64, filename st
 	dp.updatePending = true
 	dp.progressMutex.Unlock()
 
-	// The rate is sampled on the main thread, where the throttling flag makes
-	// the updates land one at a time.
+	// Sample the rate on the main thread; the flag makes updates land one at a time.
 	uiIdleAddBool(func() bool {
 		dp.progressMutex.Lock()
 		dp.updatePending = false

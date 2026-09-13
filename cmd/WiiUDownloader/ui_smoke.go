@@ -32,7 +32,6 @@ func (s *uiSmoke) check(ok bool, format string, args ...interface{}) {
 	fmt.Printf("  [%s] %s\n", label, fmt.Sprintf(format, args...))
 }
 
-// uiSmokeSettle drains the loop and lets the frame clock realise rows.
 func uiSmokeSettle() {
 	for i := 0; i < 6; i++ {
 		uiSmokePump()
@@ -99,7 +98,6 @@ var libadwaitaOwnedClasses = []string{
 	"boxed-list", "activatable", "property", "card", "toolbar",
 }
 
-// uiSmokeFindByClass returns the first descendant of root carrying a CSS class.
 func uiSmokeFindByClass(root gtk.Widgetter, class string) gtk.Widgetter {
 	for _, child := range uiSmokeChildren(root) {
 		if uiSmokeHasClass(child, class) {
@@ -134,8 +132,6 @@ func uiSmokeLabelCount(box gtk.Widgetter) int {
 	return n
 }
 
-// uiSmokeScan reports the tallest list row height and every label text found in
-// a widget subtree.
 func uiSmokeScan(w gtk.Widgetter) (int, []string) {
 	maxRow := 0
 	var texts []string
@@ -170,7 +166,6 @@ func uiSmokeHasText(texts []string, want string) bool {
 	return false
 }
 
-// uiSmokeWidgetPoint translates w's origin into target's coordinates.
 func uiSmokeWidgetPoint(w, target gtk.Widgetter) (float32, float32, bool) {
 	point, ok := gtk.BaseWidget(w).ComputePoint(target, graphene.PointZero())
 	if !ok || point == nil {
@@ -179,7 +174,6 @@ func uiSmokeWidgetPoint(w, target gtk.Widgetter) (float32, float32, bool) {
 	return point.X(), point.Y(), true
 }
 
-// uiSmokeWindowTitles reads the title of every toplevel GTK currently has.
 func uiSmokeWindowTitles() []string {
 	model := gtk.WindowGetToplevels()
 	var titles []string
@@ -287,10 +281,8 @@ func uiSmokeVisibleWindowTitles() []string {
 	return titles
 }
 
-// uiSmokeCheckLayout asserts the layout invariants that must hold at every
-// window size: one toolbar row with the search to the right of the category
-// pills, the queue pane left of the title list, the donation bar above the
-// action bar, and no control squeezed out of its allocation.
+// uiSmokeCheckLayout asserts the layout invariants that must hold at every window
+// size.
 func uiSmokeCheckLayout(s *uiSmoke, mw *MainWindow, size string) {
 	pillsX, _, okPills := uiSmokeWidgetPoint(mw.categoryBox, mw.toolbar)
 	searchX, _, okSearch := uiSmokeWidgetPoint(mw.searchEntry, mw.toolbar)
@@ -353,11 +345,9 @@ func uiSmokeCheckContentFits(s *uiSmoke, mw *MainWindow, size string) {
 	s.check(minW <= mw.window.Width() && minH <= mw.window.Height(),
 		"%s: content minimum %dx%d fits inside the window (no resize spam)", size, minW, minH)
 
-	// What has to fit is the minimum of the layout actually in force. Below the
-	// breakpoint that is the compact one, so it has to fit the smallest window we
-	// allow; above it the wide one only has to fit the narrowest window that can
-	// still be wide. Without this the minimum silently drifts past the floor and
-	// the "exceeds AdwWindow" resize spam comes back.
+	// What has to fit is the minimum of the layout actually in force: the compact
+	// one below the breakpoint, the wide one just above it. Without this the
+	// minimum silently drifts past the window floor.
 	limit := COMPACT_WINDOW_BREAKPOINT
 	if mw.window.Width() <= COMPACT_WINDOW_BREAKPOINT {
 		limit = MIN_WINDOW_WIDTH
@@ -421,7 +411,6 @@ func uiSmokeChildren(container gtk.Widgetter) []gtk.Widgetter {
 	return out
 }
 
-// uiSmokeSetupChecks returns every check button inside w in tree order.
 func uiSmokeSetupChecks(w gtk.Widgetter) []*gtk.CheckButton {
 	var out []*gtk.CheckButton
 	var walk func(gtk.Widgetter)
@@ -518,7 +507,7 @@ func runUISmoke() int {
 	all.SetActive(true)
 	uiSmokePump()
 
-	// --- the main window now carries the same nav bar as every other window ---
+	// --- the main window carries the same nav bar as the other windows ---
 	headerName := "none"
 	if mw.headerBar != nil {
 		headerName = gtk.BaseWidget(mw.headerBar).CSSName()
@@ -873,8 +862,7 @@ func runUISmoke() int {
 	s.check(mw.queuePane.runBarCount.Text() == "2/2",
 		"the run bar shows the queue position (got %q)", mw.queuePane.runBarCount.Text())
 
-	// The bar describes the table above it, so it sits above the queue total
-	// rather than between the total and the buttons.
+	// The run bar sits above the queue total.
 	_, barY, okBar := uiSmokeWidgetPoint(mw.queuePane.runBar, mw.queuePane.container)
 	_, totalY, okTotal := uiSmokeWidgetPoint(mw.queuePane.totalSizeLabel, mw.queuePane.container)
 	s.check(okBar && okTotal && barY+float32(mw.queuePane.runBar.Height()) <= totalY+1,
@@ -884,8 +872,7 @@ func runUISmoke() int {
 		"the queue pane shows each title's state")
 	s.check(mw.queuePane.runBarLabel.Text() == "Mario Kart 8",
 		"the run bar names the title on screen now (got %q)", mw.queuePane.runBarLabel.Text())
-	// The window title carries the same run, so it stays visible when the compact
-	// layout has the queue pane hidden.
+	// The window title carries the same run.
 	s.check(strings.Contains(mw.window.Title(), "Mario Kart 8") && strings.Contains(mw.window.Title(), "Title 2/2"),
 		"the window title mirrors the running title and queue position (%q)", mw.window.Title())
 

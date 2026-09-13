@@ -24,8 +24,8 @@ type titleRow struct {
 }
 
 // buildTitleList builds GtkStringList -> filter -> sort -> multi selection ->
-// GtkColumnView. Cell callbacks resolve their row from the row key, never from
-// the selection.
+// GtkColumnView. Cell callbacks resolve their row from the row key, never from the
+// selection, so a recycled cell can never act on another row.
 func (mw *MainWindow) buildTitleList() {
 	allTitles := wiiudownloader.GetTitleEntries(wiiudownloader.TITLE_CATEGORY_ALL)
 	mw.titleRows = make(map[string]*titleRow, len(allTitles))
@@ -130,7 +130,7 @@ func (mw *MainWindow) buildTitleList() {
 
 	SetupListViewAccessibility(mw.titleView)
 
-	// Claim Space/Enter in the capture phase; GtkTreeView's key handling is gone.
+	// Claim Space/Enter in the capture phase, before the view consumes them.
 	treeKeyController := gtk.NewEventControllerKey()
 	treeKeyController.SetPropagationPhase(gtk.PhaseCapture)
 	treeKeyController.ConnectKeyPressed(func(keyval, keycode uint, state gdk.ModifierType) bool {
@@ -149,7 +149,6 @@ func compareWithNameTieBreak(a, b *titleRow, av, bv string) int {
 	return strings.Compare(a.entry.Name, b.entry.Name)
 }
 
-// titleColumnSorter adapts a row comparator to glib.NewObjectComparer.
 func (mw *MainWindow) titleColumnSorter(less func(a, b *titleRow) int) *gtk.Sorter {
 	sorter := gtk.NewCustomSorter(glib.NewObjectComparer(func(a, b *gtk.StringObject) int {
 		var ra, rb *titleRow
@@ -167,7 +166,8 @@ func (mw *MainWindow) titleColumnSorter(less func(a, b *titleRow) int) *gtk.Sort
 	return &sorter.Sorter
 }
 
-// newQueueColumn is the queue checkbox column; each checkbox binds its own row key.
+// newQueueColumn binds each checkbox to its own row key, so a click can never land
+// on another title after the cell is recycled.
 func (mw *MainWindow) newQueueColumn() *gtk.ColumnViewColumn {
 	factory := gtk.NewSignalListItemFactory()
 
@@ -232,7 +232,6 @@ func (mw *MainWindow) newQueueColumn() *gtk.ColumnViewColumn {
 	return column
 }
 
-// titleMatchesFilter is the current category/region/search predicate.
 func (mw *MainWindow) titleMatchesFilter(row *titleRow) bool {
 	if mw.currentCategory != wiiudownloader.TITLE_CATEGORY_ALL {
 		if row.kind != wiiudownloader.GetFormattedKind(row.entry.TitleID) {
@@ -254,15 +253,13 @@ func (mw *MainWindow) titleMatchesFilter(row *titleRow) bool {
 	return true
 }
 
-// refreshTitleFilter re-runs the predicate after category/region/search changes.
 func (mw *MainWindow) refreshTitleFilter() {
 	if mw.titleFilter == nil {
 		return
 	}
 	mw.titleFilter.Filter.Changed(gtk.FilterChangeDifferent)
 	// The filter model keeps the old scroll anchor, so a shorter list leaves the
-	// viewport past its end and looking empty until the user scrolls. Scroll back
-	// to the top once the model has settled.
+	// viewport past its end looking empty until the user scrolls.
 	uiIdleAdd(func() {
 		if mw.titleSortModel != nil && mw.titleSortModel.NItems() > 0 {
 			mw.titleView.ScrollTo(0, nil, gtk.ListScrollNone, nil)
@@ -273,7 +270,6 @@ func (mw *MainWindow) refreshTitleFilter() {
 	})
 }
 
-// viewRowKey maps a position in the view's model back to a row key.
 func (mw *MainWindow) viewRowKey(position uint) string {
 	if mw.titleSortModel == nil {
 		return ""
@@ -281,7 +277,6 @@ func (mw *MainWindow) viewRowKey(position uint) string {
 	return rowKey(mw.titleSortModel.Item(position))
 }
 
-// selectedRowKeys returns the keys of every selected row.
 func (mw *MainWindow) selectedRowKeys() []string {
 	if mw.titleSelection == nil {
 		return nil
@@ -299,7 +294,6 @@ func (mw *MainWindow) selectedRowKeys() []string {
 	return keys
 }
 
-// focusTitleList selects and reveals the first row for keyboard toggling.
 func (mw *MainWindow) focusTitleList() bool {
 	if mw.titleView == nil || mw.titleSelection == nil || mw.titleSortModel == nil {
 		return false
@@ -338,7 +332,6 @@ func (mw *MainWindow) toggleQueueFromKeyboard() bool {
 	return true
 }
 
-// setQueueMembership adds or removes rows and syncs the visible checkboxes.
 func (mw *MainWindow) setQueueMembership(keys []string, queued bool) {
 	entries := make([]wiiudownloader.TitleEntry, 0, len(keys))
 	seen := make(map[uint64]struct{}, len(keys))
@@ -383,7 +376,6 @@ func (mw *MainWindow) setQueueMembership(keys []string, queued bool) {
 	})
 }
 
-// updateTitlesInQueue re-syncs row state and the on-screen checkboxes.
 func (mw *MainWindow) updateTitlesInQueue() {
 	if mw.titleRows == nil {
 		return

@@ -24,8 +24,6 @@ func (mw *MainWindow) onDownloadQueueButtonClicked() {
 		return
 	}
 
-	// GTK4 removed gtk_dialog_run(), so the folder chooser is asynchronous and
-	// the run starts from its callback.
 	chooseFolder(mw.window, WINDOW_TITLE_PREFIX+"Select Download Path", config.LastSelectedPath, func(chosen string) {
 		if chosen == "" {
 			return
@@ -38,11 +36,9 @@ func (mw *MainWindow) onDownloadQueueButtonClicked() {
 	})
 }
 
-// startDownloadRun opens the progress surface and drains the queue in the
-// background.
 func (mw *MainWindow) startDownloadRun(selectedPath string, config *Config) {
-	// The run is unnamed until the first title's metadata lands; the bar reads
-	// "Preparing..." until then rather than putting that in the window title.
+	// The run stays unnamed until the first title's metadata lands; the bar reads
+	// "Preparing..." rather than putting that in the window title.
 	run := mw.beginRun("")
 
 	decryptContents := mw.decryptContents

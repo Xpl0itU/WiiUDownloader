@@ -9,10 +9,8 @@ import (
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 )
 
-// GTK4 removed gtk_dialog_run(), so every dialog helper here is async.
-
-// showAlert presents a one-button libadwaita alert. AdwAlertDialog renders
-// inside the parent window when there is one, so it cannot end up behind it.
+// showAlert presents a one-button libadwaita alert. AdwAlertDialog renders inside
+// the parent window when there is one, so it cannot end up behind it.
 func showAlert(parent *gtk.Window, headline, message string) *adw.AlertDialog {
 	dialog := adw.NewAlertDialog(headline, message)
 	dialog.AddResponse("ok", "OK")
@@ -29,14 +27,12 @@ func showAlert(parent *gtk.Window, headline, message string) *adw.AlertDialog {
 	return dialog
 }
 
-// appDialog is a libadwaita dialog with a header bar, content box and button row.
 type appDialog struct {
 	*gtk.Window
 	content *gtk.Box
 	buttons *gtk.Box
 }
 
-// newAppDialog builds an empty modal dialog; parent may be nil.
 func newAppDialog(parent *gtk.Window, title string) *appDialog {
 	window := adw.NewWindow()
 	window.SetTitle(title)
@@ -71,19 +67,18 @@ func newAppDialog(parent *gtk.Window, title string) *appDialog {
 	return &appDialog{Window: &window.Window, content: content, buttons: buttons}
 }
 
-// Content is where callers append the dialog body.
 func (d *appDialog) Content() *gtk.Box {
 	return d.content
 }
 
-// AddButton appends a neutral button; onClick runs before the dialog is closed.
+// AddButton runs onClick before closing the dialog.
 func (d *appDialog) AddButton(label string, onClick func()) *gtk.Button {
 	return d.AddActionButton(label, "", onClick)
 }
 
-// AddActionButton appends a button carrying a semantic action class
-// (suggested-action, destructive-action, confirm-action or warn-action) so each
-// button in the linked row is a different colour by role.
+// AddActionButton adds a semantic action class (suggested-action,
+// destructive-action, confirm-action, warn-action) so each button's colour
+// matches its role.
 func (d *appDialog) AddActionButton(label, actionClass string, onClick func()) *gtk.Button {
 	button := gtk.NewButtonWithLabel(label)
 	if actionClass != "" {
@@ -93,9 +88,8 @@ func (d *appDialog) AddActionButton(label, actionClass string, onClick func()) *
 		if onClick != nil {
 			onClick()
 		}
-		// Close through the window's own path, on the next main-loop turn: tearing
-		// a realized window down from inside its own click handler is the kind of
-		// frame-callback churn macOS GDK trips over.
+		// Tearing a realized window down inside its own click handler is the macOS
+		// GDK churn this avoids; close on the next main-loop turn instead.
 		window := d.Window
 		uiIdleAdd(func() { window.Close() })
 	})
@@ -103,25 +97,21 @@ func (d *appDialog) AddActionButton(label, actionClass string, onClick func()) *
 	return button
 }
 
-// Destroy releases the dialog.
 func (d *appDialog) Destroy() {
 	window := d.Window
 	uiIdleAdd(func() { window.Close() })
 }
 
-// activeFileDialog keeps the most recent async chooser referenced. The dialog
-// owns the native panel, and without a reference the Go GC could unref it (and
-// tear the panel down) while it is still on screen.
+// activeFileDialog keeps the newest async chooser referenced: nothing else holds
+// the native panel, so the GC could unref it while it is still on screen.
 var activeFileDialog *gtk.FileDialog
 
-// retainFileDialog pins an on-screen chooser for as long as its panel is up.
 func retainFileDialog(dialog *gtk.FileDialog) {
 	activeFileDialog = dialog
 }
 
-// releaseFileDialog drops the pin once the chooser has finished, so the last
-// dialog is not kept alive for the rest of the run. The guard keeps a finished
-// chooser from clearing the reference of a newer one.
+// releaseFileDialog drops the pin, but only if a newer chooser has not replaced
+// it, so a finishing dialog cannot clear the reference of the one behind it.
 func releaseFileDialog(dialog *gtk.FileDialog) {
 	if activeFileDialog == dialog {
 		activeFileDialog = nil

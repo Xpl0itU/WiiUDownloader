@@ -20,8 +20,7 @@ const (
 	INVALID_DOWNLOAD_PATH_ERROR_MESSAGE = "Invalid download path. Please select a valid directory."
 )
 
-// NewConfigWindow builds the preferences window out of libadwaita preference
-// pages, so every setting is a native-looking row instead of a hand-laid grid.
+// NewConfigWindow builds the settings window from libadwaita preference rows.
 func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 	win := adw.NewWindow()
 	win.SetTitle(WINDOW_TITLE_PREFIX + "Settings")
@@ -160,8 +159,8 @@ func NewConfigWindow(config *Config) (*ConfigWindow, error) {
 	win.SetContent(toolbar)
 	win.SetDefaultWidget(saveButton)
 
-	// Comparing the rows against the config is the dirty check; no per-widget
-	// change bookkeeping is needed, and it cannot drift out of sync.
+	// The dirty check compares the rows against the config, so there is no
+	// per-widget state to drift out of sync.
 	windowIsDirty := func() bool {
 		return downloadPathRow.Text() != config.LastSelectedPath ||
 			decryptPathRow.Text() != config.DecryptOutputPath ||

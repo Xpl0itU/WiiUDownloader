@@ -18,8 +18,7 @@ const (
 	QUEUE_VERSION_COLUMN_WIDTH = 110
 	QUEUE_SIZE_COLUMN_WIDTH    = 100
 	QUEUE_STATUS_COLUMN_WIDTH  = 110
-	// Clearance under the buttons so rounded window corners cannot clip them,
-	// and around them so the row is not pressed against its neighbours.
+	// Clearance so rounded window corners cannot clip the buttons.
 	QUEUE_CORNER_CLEARANCE          = 8
 	QUEUE_BUTTON_ROW_CLEARANCE      = 4
 	QUEUE_BUTTON_ROW_SIDE_CLEARANCE = 12
@@ -28,7 +27,6 @@ const (
 	LIST_POSITION_INVALID           = uint(0xFFFFFFFF)
 )
 
-// queueRowState is what a queued title reads while a download run is going.
 type queueRowState string
 
 const (
@@ -47,8 +45,8 @@ type queueRow struct {
 	state   queueRowState
 }
 
-// QueuePane is the download queue table, built on GtkColumnView so every cell is
-// a real widget.
+// QueuePane is the download queue table. It is a GtkColumnView, so every cell is
+// a real widget carrying its own state.
 type QueuePane struct {
 	container             *gtk.Box
 	columnView            *gtk.ColumnView
@@ -63,8 +61,7 @@ type QueuePane struct {
 	titleBytes            map[uint64]uint64
 	updateFunc            func()
 	setVersionRequested   func([]wiiudownloader.TitleEntry)
-	// The run bar is the app's progress surface for downloads, decryption and
-	// ticket/cert generation: a bar, a detail line and live per-row states.
+	// The run bar is the app's progress surface for every kind of run.
 	runBar          *gtk.Box
 	runBarBar       *gtk.ProgressBar
 	runBarLabel     *gtk.Label
@@ -72,13 +69,11 @@ type QueuePane struct {
 	runBarDetail    *gtk.Label
 	runPauseButton  *gtk.Button
 	runCancelButton *gtk.Button
-	// statusColumn only earns its width while a run is going, so it is hidden
-	// the rest of the time.
+	// Only shown while a run is going; it costs 110px otherwise.
 	statusColumn  *gtk.ColumnViewColumn
 	onTogglePause func()
 	onCancelRun   func()
-	// controlsSensitive is the app-level gate (a download in flight disables the
-	// pane); the remove button is derived from it, never set directly.
+	// App-level gate: the remove button is derived from it, never set directly.
 	controlsSensitive bool
 }
 
@@ -150,9 +145,7 @@ func NewQueuePane() (*QueuePane, error) {
 	queuePane.columnView.AppendColumn(textColumn("Size", QUEUE_SIZE_COLUMN_WIDTH, func(row *queueRow) string {
 		return row.size
 	}))
-	// How the title is doing while a run is going, so the queue pane itself can
-	// be the download UI. Hidden while nothing is running: the pane is narrow
-	// enough already without 110px of empty column.
+	// Per-title state, so the queue pane itself is the download UI.
 	statusColumn := textColumn("Status", QUEUE_STATUS_COLUMN_WIDTH, func(row *queueRow) string {
 		return string(row.state)
 	})
@@ -198,7 +191,6 @@ func NewQueuePane() (*QueuePane, error) {
 	queuePane.downloadButton = downloadButton
 	queuePane.totalSizeLabel = totalSizeLabel
 
-	// Only offer the destructive button while something is actually selected.
 	queuePane.selection.ConnectSelectionChanged(func(uint, uint) {
 		queuePane.refreshRemoveButton()
 	})
@@ -213,8 +205,7 @@ func NewQueuePane() (*QueuePane, error) {
 
 	buttonBox := gtk.NewBox(gtk.OrientationHorizontal, 0)
 	buttonBox.AddCSSClass("linked")
-	// Keeps the row off the queue total above it as well as the window corner
-	// below, and lines the buttons up with the rows instead of the pane edges.
+	// Lines the buttons up with the rows and keeps them off the window corner.
 	buttonBox.SetMarginTop(QUEUE_BUTTON_ROW_CLEARANCE)
 	buttonBox.SetMarginBottom(QUEUE_CORNER_CLEARANCE)
 	buttonBox.SetMarginStart(QUEUE_BUTTON_ROW_SIDE_CLEARANCE)
@@ -222,15 +213,13 @@ func NewQueuePane() (*QueuePane, error) {
 	buttonBox.Append(removeFromQueueButton)
 	buttonBox.Append(downloadButton)
 
-	// The run bar belongs to the table it describes, so it sits above the queue
-	// total rather than between the total and the buttons.
 	queueVBox.Append(queuePane.newRunBar())
 	queueVBox.Append(totalSizeLabel)
 	queueVBox.Append(buttonBox)
 
 	queueVBox.AddCSSClass("queue-pane-vbox")
 	queueVBox.AddCSSClass("sidebar")
-	// The inline run bar needs this much room to keep both controls on screen.
+	// Enough room to keep both run controls on screen.
 	queueVBox.SetSizeRequest(QUEUE_PANE_MIN_WIDTH, -1)
 
 	queuePane.container = queueVBox
@@ -238,13 +227,10 @@ func NewQueuePane() (*QueuePane, error) {
 	return queuePane, nil
 }
 
-// newRunBar builds the progress surface a run reports to: the title on screen
-// right now with the queue position and transfer controls, the bar for that
-// title, and a detail line with bytes, rate and time left. Hidden until a run
-// starts.
-//
-// The controls are icon-only because the pane can be dragged as narrow as
-// QUEUE_PANE_MIN_WIDTH, where two icon+label buttons leave the bar no room.
+// newRunBar builds the run bar: the title on screen with the queue position and
+// transfer controls, the bar for that title, and a bytes/rate/ETA line. Hidden
+// until a run starts. The controls are icon-only because at QUEUE_PANE_MIN_WIDTH
+// two labelled buttons would leave the bar no room.
 func (qp *QueuePane) newRunBar() *gtk.Box {
 	bar := gtk.NewProgressBar()
 	bar.SetHExpand(true)
@@ -280,8 +266,7 @@ func (qp *QueuePane) newRunBar() *gtk.Box {
 		if qp.onCancelRun != nil {
 			qp.onCancelRun()
 		}
-		// One press is enough: the run is winding down, and the pause control no
-		// longer has anything to pause.
+		// One press is enough; the run is already winding down.
 		cancelButton.SetSensitive(false)
 		pauseButton.SetSensitive(false)
 	})
@@ -318,7 +303,6 @@ func (qp *QueuePane) newRunBar() *gtk.Box {
 	return runBar
 }
 
-// refreshRows re-splices the whole model so every row picks up its new state.
 func (qp *QueuePane) refreshRows() {
 	keys := make([]string, 0, qp.rows.NItems())
 	for i := uint(0); i < qp.rows.NItems(); i++ {
@@ -327,13 +311,10 @@ func (qp *QueuePane) refreshRows() {
 	qp.spliceRows(0, qp.rows.NItems(), keys)
 }
 
-// spliceRows replaces model items and puts the selection back afterwards.
+// spliceRows replaces model items and re-selects the same keys.
 //
-// Repainting a row works by swapping its item for an equal one, but that drops
-// the old item from the selection — so a size landing, or a title's run state
-// changing, silently cleared whatever the user had selected (and with it the
-// Remove Selected button). Re-selecting by key avoids that without touching the
-// view.
+// Swapping an item for an equal one drops the old item from the selection, so a
+// repaint used to clear whatever the user had selected along with it.
 func (qp *QueuePane) spliceRows(position, removed uint, keys []string) {
 	selected := qp.selectedKeys()
 	qp.rows.Splice(position, removed, keys)
@@ -344,7 +325,6 @@ func (qp *QueuePane) spliceRows(position, removed uint, keys []string) {
 	}
 }
 
-// selectedKeys returns the row keys currently selected.
 func (qp *QueuePane) selectedKeys() []string {
 	bits := qp.selection.Selection()
 	if bits == nil {
@@ -361,9 +341,8 @@ func (qp *QueuePane) selectedKeys() []string {
 	return keys
 }
 
-// SetRunCallbacks wires the run bar's pause/cancel buttons to the run. Called
-// once per run, before it starts; the buttons read the callbacks from the main
-// loop.
+// SetRunCallbacks wires the run bar's controls; marshalled because the download
+// goroutine calls it.
 func (qp *QueuePane) SetRunCallbacks(onTogglePause, onCancel func()) {
 	uiIdleAdd(func() {
 		qp.onTogglePause = onTogglePause
@@ -371,7 +350,6 @@ func (qp *QueuePane) SetRunCallbacks(onTogglePause, onCancel func()) {
 	})
 }
 
-// BeginRun shows the run bar and resets every row to "Queued".
 func (qp *QueuePane) BeginRun() {
 	uiIdleAdd(func() {
 		if qp.runBar == nil {
@@ -392,7 +370,7 @@ func (qp *QueuePane) BeginRun() {
 	})
 }
 
-// EndRun hides the run bar, leaving the final per-row states visible.
+// EndRun hides the run bar but leaves the final per-row states on screen.
 func (qp *QueuePane) EndRun() {
 	uiIdleAdd(func() {
 		if qp.runBar == nil {
@@ -405,8 +383,8 @@ func (qp *QueuePane) EndRun() {
 	})
 }
 
-// queueCountText is the run bar's short queue position, plus the long form for
-// its tooltip. The pane is narrow, so "2/5" beats "Title 2/5".
+// queueCountText is the short queue position plus its long tooltip form; the pane
+// is too narrow for "Title 2/5".
 func queueCountText(done, total int) (short, long string) {
 	if total <= 0 {
 		return "", ""
@@ -420,9 +398,9 @@ func queueCountText(done, total int) (short, long string) {
 	return fmt.Sprintf("%d/%d", done+1, total), queueProgressText(done, total)
 }
 
-// SetRunProgress names the title on screen right now and paints its fraction
-// and detail line. Every run-bar entry point marshals: the core reports from
-// worker goroutines and GTK is not thread-safe.
+// SetRunProgress names the running title and paints its fraction and detail.
+// Marshalled like every run-bar entry point: the core reports from worker
+// goroutines and GTK is not thread-safe.
 func (qp *QueuePane) SetRunProgress(title string, fraction float64, detail string) {
 	uiIdleAdd(func() {
 		qp.setRunProgress(title, fraction, detail)
@@ -442,7 +420,6 @@ func (qp *QueuePane) SetRunQueueProgress(done, total int) {
 	})
 }
 
-// SetRunPaused flips the pause control's icon to match the run's state.
 func (qp *QueuePane) SetRunPaused(paused bool) {
 	uiIdleAdd(func() {
 		qp.setRunPaused(paused)
@@ -462,8 +439,7 @@ func (qp *QueuePane) setRunProgress(title string, fraction float64, detail strin
 	qp.runBarBar.SetFraction(fraction)
 	qp.runBarBar.SetText(fmt.Sprintf("%d%%", int(math.Round(fraction*PERCENT_SCALE))))
 
-	// The detail line is bytes/rate/ETA: the queue position already has its own
-	// slot, and this keeps the speed and time left on screen at any pane width.
+	// Bytes/rate/ETA get their own line so the speed survives any pane width.
 	qp.runBarDetail.SetText(detail)
 	qp.runBarDetail.SetVisible(detail != "")
 }
@@ -480,8 +456,8 @@ func (qp *QueuePane) setRunPaused(paused bool) {
 	qp.runPauseButton.SetTooltipText(tooltip)
 }
 
-// SetRunControlsSensitive gates the pause/cancel controls while a run cannot be
-// interrupted (a decryption step, or a cancel already under way).
+// SetRunControlsSensitive gates pause/cancel while a run cannot be interrupted
+// (a decryption step, or a cancel already under way).
 func (qp *QueuePane) SetRunControlsSensitive(sensitive bool) {
 	uiIdleAdd(func() {
 		qp.setRunControlsSensitive(sensitive)
@@ -497,7 +473,6 @@ func (qp *QueuePane) setRunControlsSensitive(sensitive bool) {
 	}
 }
 
-// SetTitleState records how one queued title is doing and repaints its row.
 func (qp *QueuePane) SetTitleState(titleID uint64, state queueRowState) {
 	uiIdleAdd(func() {
 		key := rowKeyForTitleID(titleID)
@@ -514,7 +489,6 @@ func (qp *QueuePane) SetTitleState(titleID uint64, state queueRowState) {
 	})
 }
 
-// newVersionColumn builds the Version column as a flat button per row.
 func (qp *QueuePane) newVersionColumn() *gtk.ColumnViewColumn {
 	factory := gtk.NewSignalListItemFactory()
 	factory.ConnectSetup(func(obj *coreglib.Object) {
@@ -552,7 +526,6 @@ func (qp *QueuePane) newVersionColumn() *gtk.ColumnViewColumn {
 	return column
 }
 
-// onVersionClicked selects the clicked row and asks for the version picker.
 func (qp *QueuePane) onVersionClicked(item *gtk.ListItem) {
 	if item == nil || qp.setVersionRequested == nil {
 		return
@@ -563,7 +536,7 @@ func (qp *QueuePane) onVersionClicked(item *gtk.ListItem) {
 		return
 	}
 
-	// Highlight the row being edited so dialog and table agree.
+	// Select the row being edited so dialog and table agree.
 	position := item.Position()
 	if position != LIST_POSITION_INVALID {
 		qp.selection.UnselectAll()
@@ -573,7 +546,6 @@ func (qp *QueuePane) onVersionClicked(item *gtk.ListItem) {
 	qp.setVersionRequested([]wiiudownloader.TitleEntry{row.entry})
 }
 
-// selectedTitleIDs maps the current selection back to title IDs.
 func (qp *QueuePane) selectedTitleIDs() []uint64 {
 	bits := qp.selection.Selection()
 	if bits == nil {
@@ -631,7 +603,6 @@ func (qp *QueuePane) RemoveTitles(titlesToRemove []uint64) {
 	qp.Update(true)
 }
 
-// Clear empties the queue and refreshes the table and persisted queue.
 func (qp *QueuePane) Clear() {
 	qp.titleQueue.WithLock(func(queue *[]wiiudownloader.TitleEntry) {
 		*queue = make([]wiiudownloader.TitleEntry, 0)
@@ -639,9 +610,8 @@ func (qp *QueuePane) Clear() {
 	qp.Update(true)
 }
 
-// refreshRemoveButton derives the button's state from the app gate and the live
-// selection. Re-enabling the pane used to set the button sensitive outright,
-// which left "Remove Selected" clickable with nothing selected after a download.
+// refreshRemoveButton is the only writer of the button's state: it derives it from
+// the app gate and the live selection.
 func (qp *QueuePane) refreshRemoveButton() {
 	if qp.removeFromQueueButton == nil || qp.selection == nil {
 		return
@@ -651,7 +621,6 @@ func (qp *QueuePane) refreshRemoveButton() {
 	qp.removeFromQueueButton.SetSensitive(qp.controlsSensitive && hasSelection)
 }
 
-// SetControlsSensitive gates the pane while a download is running.
 func (qp *QueuePane) SetControlsSensitive(sensitive bool) {
 	qp.controlsSensitive = sensitive
 	qp.refreshRemoveButton()
@@ -719,7 +688,6 @@ func (qp *QueuePane) SetTitleLoading(titleID uint64) {
 	qp.updateSizeInStore(titleID, "loading...")
 }
 
-// updateSizeInStore rewrites one row so the view re-binds just that cell.
 func (qp *QueuePane) updateSizeInStore(titleID uint64, size string) {
 	key := rowKeyForTitleID(titleID)
 	if row, ok := qp.rowData[key]; ok {
@@ -770,8 +738,8 @@ func (qp *QueuePane) Update(doUpdateFunc bool) {
 	}
 
 	uiIdleAdd(func() {
-		// Build the rows as the update lands, not when it was queued: a size
-		// that arrived in between must not be replaced by a stale "loading...".
+		// Build rows as the update lands: a size that arrived while it was queued
+		// must not be replaced by a stale "loading...".
 		rows := make(map[string]*queueRow, len(queueSnapshot))
 		for _, title := range queueSnapshot {
 			key := rowKeyForTitleID(title.TitleID)
@@ -779,8 +747,7 @@ func (qp *QueuePane) Update(doUpdateFunc bool) {
 			if title.Version >= 0 {
 				versionStr = fmt.Sprintf("v%d", title.Version)
 			}
-			// Carry the run state across: Update rebuilds every row, and dropping
-			// it mid-run made finished titles read as untouched again.
+			// Update rebuilds every row, so carry the run state across.
 			state := queueRowState("")
 			if previous, ok := qp.rowData[key]; ok {
 				state = previous.state
@@ -793,8 +760,7 @@ func (qp *QueuePane) Update(doUpdateFunc bool) {
 			}
 		}
 		qp.rowData = rows
-		// Titles that are still queued keep their selection; only the ones that
-		// really went away are dropped.
+		// spliceRows keeps the selection for titles that are still queued.
 		qp.spliceRows(0, qp.rows.NItems(), keys)
 		qp.refreshRemoveButton()
 		qp.updateTotalSizeLabel()

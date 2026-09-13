@@ -45,25 +45,45 @@ jobs:
             echo "}" >> db.go
           fi
           magick data/WiiUDownloader.png -define icon:auto-resize=256,128,64,48,32,16 cmd/WiiUDownloader/WiiUDownloader.ico
-          (cd cmd/WiiUDownloader && go generate && go build -ldflags="-H=windowsgui" -o ../../main.exe .) &
-          wait
+          (cd cmd/WiiUDownloader && go generate && go build -ldflags="-H=windowsgui" -o ../../main.exe .)
       - name: Deploy WiiUDownloader
         run: |
+          set -euo pipefail
           rm -rf dist
           mkdir -p dist/lib dist/share/icons dist/share/glib-2.0/schemas
 
-          ${MSYSTEM_PREFIX}/bin/ntldd -R main.exe | tr '\\' '/' | grep -io "$(cygpath -m ${MSYSTEM_PREFIX}).+\\.dll" | sort -u | cygpath -f - -u | xargs -I {} cp "{}" dist/
+          test -f main.exe || { echo "::error::main.exe was not built"; exit 1; }
+          prefix=$(cygpath -m "${MSYSTEM_PREFIX}")
+          dll_paths() {
+            "${MSYSTEM_PREFIX}/bin/ntldd" -R "$1" |
+              awk -v p="$prefix" '$2 == "=>" { gsub(/\\/, "/", $3); if (index($3, p) == 1) print $3 }' |
+              sort -u | cygpath -f - -u
+          }
 
-          cp -r /ucrt64/lib/gdk-pixbuf-2.0 ./dist/lib/gdk-pixbuf-2.0
+          dll_paths main.exe | while IFS= read -r dll; do cp "$dll" dist/; done
 
-          find dist/lib/gdk-pixbuf-2.0/2.10.0/loaders/ -name "*.dll" -print0 | xargs -0 -I {} ${MSYSTEM_PREFIX}/bin/ntldd -R "{}" | tr '\\' '/' | grep -io "$(cygpath -m ${MSYSTEM_PREFIX}).+\\.dll" | sort -u | cygpath -f - -u | xargs -I {} cp -n "{}" dist/ || true
+          cp -r "${MSYSTEM_PREFIX}/lib/gdk-pixbuf-2.0" ./dist/lib/gdk-pixbuf-2.0
 
-          cp -r /ucrt64/share/icons/* ./dist/share/icons/
-          cp -r /ucrt64/share/glib-2.0/schemas/* dist/share/glib-2.0/schemas/
+          for loader in dist/lib/gdk-pixbuf-2.0/2.10.0/loaders/*.dll; do
+            dll_paths "$loader" || echo "::warning::could not resolve $loader"
+          done | sort -u | while IFS= read -r dll; do cp -n "$dll" dist/ 2>/dev/null || true; done
+
+          cp -r "${MSYSTEM_PREFIX}/share/icons/"* ./dist/share/icons/
+          cp -r "${MSYSTEM_PREFIX}/share/glib-2.0/schemas/"* dist/share/glib-2.0/schemas/
 
           glib-compile-schemas.exe dist/share/glib-2.0/schemas/
           gdk-pixbuf-query-loaders > dist/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache
           cp main.exe dist/WiiUDownloader.exe
+
+          missing=0
+          while IFS= read -r dll; do
+            if [ ! -f "dist/${dll##*/}" ]; then
+              echo "::error::${dll##*/} is missing from the bundle"
+              missing=$((missing + 1))
+            fi
+          done < <(dll_paths main.exe)
+          echo "Bundled $(find dist -maxdepth 1 -name '*.dll' | wc -l) DLLs"
+          [ "$missing" -eq 0 ] || exit 1
 
           cd dist
           rm -f libx265-*.dll

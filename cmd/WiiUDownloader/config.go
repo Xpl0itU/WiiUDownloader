@@ -115,13 +115,20 @@ func loadConfig() (*Config, error) {
 			globalConfig = getDefaultConfig()
 		}
 
-		if globalConfig.SelectedRegion > 7 { // Assuming bitmask 0-7
+		if normalized := normalizeRegionMask(globalConfig.SelectedRegion); normalized != globalConfig.SelectedRegion {
 			log.Printf("Warning: invalid region %d, resetting to default", globalConfig.SelectedRegion)
-			globalConfig.SelectedRegion = getDefaultConfig().SelectedRegion
+			globalConfig.SelectedRegion = normalized
 		}
 	})
 
 	return globalConfig, err
+}
+
+func normalizeRegionMask(mask uint8) uint8 {
+	if mask == 0 || mask > 7 { // Assuming bitmask 0-7
+		return getDefaultConfig().SelectedRegion
+	}
+	return mask
 }
 
 func (c *Config) saveTo(path string) error {

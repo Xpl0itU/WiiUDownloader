@@ -627,7 +627,12 @@ func (mw *MainWindow) PostShowInit() {
 }
 
 func (mw *MainWindow) onRegionChange(button *gtk.CheckButton, region uint8) {
-	mw.currentRegion = updateRegionMask(mw.currentRegion, region, button.Active())
+	next := updateRegionMask(mw.currentRegion, region, button.Active())
+	if next == 0 {
+		setCheckButtonActiveWithoutSignal(button, mw.regionToggleHandle(region), true)
+		return
+	}
+	mw.currentRegion = next
 	mw.refreshTitleFilter()
 	config, err := loadConfig()
 	if err != nil {
@@ -637,6 +642,17 @@ func (mw *MainWindow) onRegionChange(button *gtk.CheckButton, region uint8) {
 	if err := config.Save(); err != nil {
 		ShowErrorDialog(mw.window, err)
 		return
+	}
+}
+
+func (mw *MainWindow) regionToggleHandle(region uint8) glib.SignalHandle {
+	switch region {
+	case wiiudownloader.MCP_REGION_EUROPE:
+		return mw.europeRegionToggleHandle
+	case wiiudownloader.MCP_REGION_USA:
+		return mw.usaRegionToggleHandle
+	default:
+		return mw.japanRegionToggleHandle
 	}
 }
 

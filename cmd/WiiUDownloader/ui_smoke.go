@@ -787,6 +787,73 @@ func runUISmoke() int {
 	mw.window.SetDefaultSize(MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT)
 	uiSmokeSettle()
 
+	for _, test := range []struct {
+		name               string
+		defaultW, defaultH int
+		availW, availH     int
+		wantW, wantH       int
+	}{
+		{"desktop monitor", 1040, 700, 2560, 1440, 1040, 700},
+		{"1366x768 laptop at 125% scaling", 1040, 700, 1093, 614, 1040, 518},
+		{"1024x600 netbook", 1040, 700, 1024, 600, 992, 504},
+		{"a window that already fits", 900, 500, 1024, 600, 900, 500},
+		{"a default under the layout minimum", 700, 400, 2560, 1440, MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT},
+		{"a screen under the layout minimum", 1040, 700, 640, 400, MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT},
+		{"a monitor that reports no size", 1040, 700, 0, 0, 1040, 700},
+	} {
+		gotW, gotH := planWindowSize(test.defaultW, test.defaultH, test.availW, test.availH)
+		s.check(gotW == test.wantW && gotH == test.wantH,
+			"%s: %dx%d on a %dx%d screen fits as %dx%d", test.name, test.defaultW, test.defaultH, test.availW, test.availH, gotW, gotH)
+	}
+
+	if areaW, areaH, scale, ok := windowArea(mw.window); !ok || areaW <= 0 || areaH <= 0 || scale < 1 {
+		s.check(false, "the presented window reports the monitor it is on")
+	} else {
+		s.check(true, "the presented window reports its monitor (%dx%d at scale %d)", areaW, areaH, scale)
+	}
+
+	mw.window.SetDefaultSize(MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT)
+	uiSmokeSettle()
+	beforeH := mw.window.Height()
+	fittedW, fittedH, changed := applyWindowSize(mw.window, 1093, 614)
+	uiSmokeSettle()
+	fitH := mw.window.Height()
+	s.check(changed && fittedW == 1040 && fittedH == 518,
+		"a monitor smaller than the default plans a shorter window (%dx%d changed=%v)", fittedW, fittedH, changed)
+	s.check(fitH < beforeH && fitH <= 614, "the planned size reaches the window (%d -> %d)", beforeH, fitH)
+	if _, _, again := applyWindowSize(mw.window, 1093, 614); again {
+		s.check(false, "a window that already fits is left alone")
+	} else {
+		s.check(true, "a window that already fits is left alone")
+	}
+	mw.window.SetDefaultSize(MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT)
+	uiSmokeSettle()
+	s.check(mw.window.Height() > fitH, "restoring the default size grows the window back (%d -> %d)", fitH, mw.window.Height())
+
+	earlyWindow := NewMainWindow(buildHTTPClient(), cfg)
+	earlyWindow.window.Realize()
+	uiSmokePump()
+	earlyW, earlyH, _, earlyOK := windowArea(earlyWindow.window)
+	s.check(earlyOK && earlyW > 0 && earlyH > 0,
+		"a realized but unpresented window knows its monitor (%dx%d, ok=%v)", earlyW, earlyH, earlyOK)
+	_, _, earlyChanged := applyWindowSize(earlyWindow.window, 1093, 614)
+	s.check(earlyChanged, "the window is sized before its first frame")
+	earlyWindow.window.Destroy()
+	uiSmokePump()
+
+	shownWindow := NewMainWindow(buildHTTPClient(), cfg)
+	fitWindowToMonitorBeforeShow(shownWindow.window)
+	uiSmokeSettle()
+	shownW, shownH := shownWindow.window.DefaultSize()
+	s.check(shownWindow.window.Visible(), "sizing the window before it is shown still presents it")
+	s.check(shownW > 0 && shownH > 0, "the pre-show window keeps a usable default size (%dx%d)", shownW, shownH)
+	shownAreaW, shownAreaH, _, shownOK := windowArea(shownWindow.window)
+	_, _, changedAfterShow := applyWindowSize(shownWindow.window, shownAreaW, shownAreaH)
+	s.check(shownOK && !changedAfterShow,
+		"the pre-show fit already matches its monitor (%dx%d), so nothing is left to resize", shownAreaW, shownAreaH)
+	shownWindow.window.Destroy()
+	uiSmokePump()
+
 	// --- region and search filters ---
 	mw.currentCategory = wiiudownloader.TITLE_CATEGORY_ALL
 	mw.currentRegion = wiiudownloader.MCP_REGION_USA
@@ -1056,6 +1123,16 @@ func runUISmoke() int {
 	mw.europeRegionCheckbox.SetActive(true)
 	uiSmokePump()
 	s.check(mw.currentRegion&wiiudownloader.MCP_REGION_EUROPE != 0, "re-checking Europe restores it")
+
+	mw.europeRegionCheckbox.SetActive(false)
+	mw.usaRegionCheckbox.SetActive(false)
+	mw.japanRegionCheckbox.SetActive(false)
+	uiSmokePump()
+	s.check(mw.currentRegion != 0 && mw.japanRegionCheckbox.Active(),
+		"unchecking the last region keeps it selected (mask %d)", mw.currentRegion)
+	s.check(mw.titleSortModel.NItems() > 0, "the list is never left empty by the region boxes (%d rows)", mw.titleSortModel.NItems())
+	mw.applyRegionSelection(wiiudownloader.MCP_REGION_EUROPE | wiiudownloader.MCP_REGION_JAPAN | wiiudownloader.MCP_REGION_USA)
+	uiSmokePump()
 
 	// --- control sensitivity ---
 	mw.setDownloadControlsSensitive(false)

@@ -114,7 +114,7 @@ func main() {
 				showMainWindow(&app.Application, win)
 			})
 			app.AddWindow(assistant.window)
-			assistant.window.Present()
+			fitWindowToMonitorBeforeShow(assistant.window)
 			if win.window != nil {
 				win.window.SetVisible(false)
 			}
@@ -232,10 +232,11 @@ func showMainWindow(app *gtk.Application, win *MainWindow) {
 	win.BuildUI()
 	app.AddWindow(win.window)
 	if win.window != nil {
-		win.window.Present()
+		fitWindowToMonitorBeforeShow(win.window)
 		if !win.showDonationBar {
 			win.setDonationBarVisible(false)
 		}
+		fitWindowToMonitor(win.window)
 		win.PostShowInit()
 		win.restorePersistedQueue()
 	}

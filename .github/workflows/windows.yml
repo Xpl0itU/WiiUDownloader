@@ -21,13 +21,6 @@ jobs:
       run:
         shell: msys2 {0}
     steps:
-      - name: What this run does
-        run: |
-          if [ "${{ github.ref_type }}" = "tag" ]; then
-            echo "Tag ${{ github.ref_name }}: the built files are uploaded and then published as a release."
-          else
-            echo "BUILD_NOW commit: the built files are uploaded as artifacts. No release is created."
-          fi
       - uses: actions/checkout@v7
       - uses: msys2/setup-msys2@v2
         with:

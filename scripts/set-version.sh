@@ -6,8 +6,8 @@
 #
 # The version is written to every declaration, because the app has no single
 # source for it: the Windows version resource, the macOS Info.plist, the Flatpak
-# metainfo and the VERSION default in both build scripts. The date goes to the
-# Flatpak <release> only.
+# metainfo, the APP_VERSION constant in main.go and the VERSION default in both
+# build scripts. The date goes to the Flatpak <release> only.
 set -euo pipefail
 
 usage() {
@@ -21,7 +21,7 @@ version=$1
 date=${2:-$(date +%F)}
 
 # The Windows resource needs an X.Y[.Z[.W]] core; a suffix like -Beta1 is kept in
-# the display strings but cannot be part of the numeric tuple.
+# the app's own version string but cannot be part of the numeric tuple.
 if ! [[ $version =~ ^[0-9]+(\.[0-9]+)*([-+][0-9A-Za-z.]+)?$ ]]; then
     echo "not a version: ${version}" >&2
     exit 2
@@ -59,19 +59,22 @@ def patch(path, pattern, replacement, count=1, last=False):
 
 
 # Windows version resource.
+numeric = [int(p) for p in re.split(r"[-+]", version)[0].split(".")]
+padded = numeric + [0] * (4 - len(numeric))
+display = ".".join(str(p) for p in padded[:3])
 path = "cmd/WiiUDownloader/versioninfo.json"
 with open(path) as f:
     info = json.load(f)
-parts = [int(p) for p in version.split("-")[0].split("+")[0].split(".")]
-parts += [0] * (4 - len(parts))
-fixed = dict(zip(("Major", "Minor", "Patch", "Build"), parts[:4]))
+fixed = dict(zip(("Major", "Minor", "Patch", "Build"), padded[:4]))
 info["FixedFileInfo"]["FileVersion"] = fixed
 info["FixedFileInfo"]["ProductVersion"] = fixed
-info["StringFileInfo"]["FileVersion"] = version
-info["StringFileInfo"]["ProductVersion"] = version
+info["StringFileInfo"]["FileVersion"] = display
+info["StringFileInfo"]["ProductVersion"] = display
 with open(path, "w") as f:
     json.dump(info, f, indent=4)
     f.write("\n")
+
+patch("cmd/WiiUDownloader/main.go", r'(APP_VERSION\s*=\s*")[^"]*(")', rf"\g<1>{version}\g<2>")
 
 # macOS bundle: key-scoped so the copyright string and the two version strings
 # cannot be confused with each other.

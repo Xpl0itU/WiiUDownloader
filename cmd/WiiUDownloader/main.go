@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -42,6 +43,15 @@ const (
 )
 
 func main() {
+	defer func() {
+		if failure := recover(); failure != nil {
+			fmt.Fprintf(os.Stderr, "fatal: %v\n%s\n", failure, debug.Stack())
+			showNativeFatalMessage(WINDOW_TITLE_PREFIX+"Could not start",
+				fmt.Sprintf("The app stopped unexpectedly:\n\n%v", failure))
+			os.Exit(2)
+		}
+	}()
+
 	runtime.LockOSThread()
 	runtime.GOMAXPROCS(runtime.NumCPU())
 

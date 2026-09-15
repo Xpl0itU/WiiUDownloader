@@ -17,3 +17,9 @@ func newCommand(name string, args ...string) *exec.Cmd {
 	}
 	return cmd
 }
+
+func newAppCommand(name string, args ...string) *exec.Cmd {
+	cmd := exec.Command(name, args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: createNoWindow}
+	return cmd
+}

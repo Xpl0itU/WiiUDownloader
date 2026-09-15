@@ -7,3 +7,7 @@ import "os/exec"
 func newCommand(name string, args ...string) *exec.Cmd {
 	return exec.Command(name, args...)
 }
+
+func newAppCommand(name string, args ...string) *exec.Cmd {
+	return exec.Command(name, args...)
+}

@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 	"net/http"
 	"os"
@@ -77,6 +79,127 @@ func uiSmokeCheckboxSweep(mw *MainWindow) (int, bool) {
 
 // uiSmokeStylesheet parses style.css with the live theme: the libadwaita colour
 // names it relies on only resolve once libadwaita has been initialized.
+type uiSmokeForwardHandler struct {
+	count *int
+}
+
+func (h *uiSmokeForwardHandler) Enabled(context.Context, slog.Level) bool { return true }
+
+func (h *uiSmokeForwardHandler) Handle(context.Context, slog.Record) error {
+	*h.count++
+	return nil
+}
+
+func (h *uiSmokeForwardHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
+
+func (h *uiSmokeForwardHandler) WithGroup(string) slog.Handler { return h }
+
+func uiSmokeRendererFallback(s *uiSmoke) {
+	plans := []struct {
+		name  string
+		user  string
+		state string
+		want  rendererPlan
+	}{
+		{"fresh launch tries GL and leaves a marker", "", "", rendererPlan{persist: RENDERER_STATE_ATTEMPTING, watch: true}},
+		{"a healthy previous launch tries GL again", "", RENDERER_STATE_HEALTHY, rendererPlan{persist: RENDERER_STATE_ATTEMPTING, watch: true}},
+		{"a launch that never reached a frame falls back for good", "", RENDERER_STATE_ATTEMPTING, rendererPlan{setEnv: RENDERER_CAIRO, persist: RENDERER_STATE_CAIRO}},
+		{"an existing fallback is kept", "", RENDERER_STATE_CAIRO, rendererPlan{setEnv: RENDERER_CAIRO}},
+		{"the user's cairo is left alone", "  cairo ", RENDERER_STATE_ATTEMPTING, rendererPlan{}},
+		{"the user's gl is left alone", "gl", RENDERER_STATE_ATTEMPTING, rendererPlan{}},
+	}
+	for _, c := range plans {
+		got := planRendererLaunch(c.user, c.state)
+		s.check(got == c.want, "renderer plan: %s (%+v)", c.name, got)
+	}
+
+	dir, err := os.MkdirTemp("", "wiiu-renderer")
+	if err != nil {
+		s.check(false, "renderer state temp dir (%v)", err)
+		return
+	}
+	defer os.RemoveAll(dir)
+	path := rendererStatePathFor(dir)
+	s.check(readRendererStateFile(path) == "", "a missing renderer state reads empty")
+	s.check(writeRendererStateFile(path, RENDERER_STATE_ATTEMPTING) == nil && readRendererStateFile(path) == RENDERER_STATE_ATTEMPTING,
+		"the renderer state round trips")
+	s.check(filepath.Base(filepath.Dir(path)) == WIIUDOWNLOADER_CONFIG_DIR,
+		"the renderer state sits in the app's config directory (%s)", path)
+
+	s.check(markRendererHealthyFile(path) && readRendererStateFile(path) == RENDERER_STATE_HEALTHY,
+		"a launch that drew frames is recorded healthy")
+	if writeRendererStateFile(path, RENDERER_STATE_CAIRO) == nil {
+		markRendererHealthyFile(path)
+		s.check(readRendererStateFile(path) == RENDERER_STATE_CAIRO,
+			"a launch already on cairo never rewrites the state (%s)", readRendererStateFile(path))
+	}
+
+	failures := []struct {
+		name            string
+		domain, message string
+		want            bool
+	}{
+		{"the MSYS2 shader failure is caught", "Gsk", "Failed to load shader program: Compilation failure in shader.", true},
+		{"the domain match ignores case", "gsk", "Failed to load shader program: x", true},
+		{"a Gtk message is not a renderer failure", "Gtk", "Failed to load shader program: x", false},
+		{"GTK's own realize fallback is not a renderer failure", "Gsk", "Failed to realize renderer 'GskGLRenderer' for surface", false},
+		{"an empty message is not a renderer failure", "Gsk", "", false},
+	}
+	for _, c := range failures {
+		s.check(isGLRenderFailure(c.domain, c.message) == c.want, "GL failure predicate: %s", c.name)
+	}
+
+	forwarded, fired, derivedFired := 0, 0, 0
+	watcher := &glFailureWatcher{
+		next:      &uiSmokeForwardHandler{count: &forwarded},
+		onFailure: func() { fired++ },
+		state:     &glFailureWatchState{},
+	}
+	emit := func(h slog.Handler, domain, message string) {
+		record := slog.NewRecord(time.Now(), slog.LevelError, message, 0)
+		record.AddAttrs(slog.String(GLIB_LOG_DOMAIN_ATTR, domain))
+		_ = h.Handle(context.Background(), record)
+	}
+	emit(watcher, "Gsk", "Failed to load shader program: first")
+	emit(watcher, "Gsk", "Failed to load shader program: second")
+	emit(watcher, "Gtk", "Failed to load shader program: other domain")
+	emit(watcher, "Gsk", "unrelated message")
+	s.check(fired == 1, "the first GL failure restarts once (%d)", fired)
+	s.check(forwarded == 4, "every record still reaches the wrapped handler (%d)", forwarded)
+
+	derived := watcher.WithAttrs([]slog.Attr{slog.String("k", "v")}).(*glFailureWatcher)
+	derived.onFailure = func() { derivedFired++ }
+	emit(derived, "Gsk", "Failed to load shader program: third")
+	s.check(derivedFired == 0, "a derived handler cannot restart a second time (%d)", derivedFired)
+
+	os.Setenv(RENDERER_ENV_VAR, "gl")
+	restartEnv := rendererEnvWithoutOverride()
+	os.Unsetenv(RENDERER_ENV_VAR)
+	inherited := 0
+	for _, entry := range restartEnv {
+		if strings.HasPrefix(entry, RENDERER_ENV_VAR+"=") {
+			inherited++
+		}
+	}
+	s.check(inherited == 0, "the restart drops an inherited override (%d left)", inherited)
+	s.check(uiTestModeActive(), "a harness run is recognised, so it arms nothing and writes no state")
+
+	glibFired := 0
+	previous := slog.Default()
+	installGLFailureFallback(func() { glibFired++ })
+	emitGLib := func(domain, message string, level glib.LogLevelFlags) {
+		dict := glib.NewVariantDict(nil)
+		dict.InsertValue("MESSAGE", glib.NewVariantString(message))
+		glib.LogVariant(domain, level, dict.End())
+	}
+	emitGLib("Gsk", "Failed to load shader program: first", glib.LogLevelCritical)
+	emitGLib("Gsk", "Failed to load shader program: second", glib.LogLevelCritical)
+	emitGLib("Gtk", "Failed to load shader program: other domain", glib.LogLevelWarning)
+	emitGLib("Gsk", "some other gsk message", glib.LogLevelCritical)
+	slog.SetDefault(previous)
+	s.check(glibFired == 1, "a real Gsk shader failure triggers one fallback (%d)", glibFired)
+}
+
 func uiSmokeStylesheet(s *uiSmoke) {
 	provider := gtk.NewCSSProvider()
 	errors := 0
@@ -1963,6 +2086,8 @@ func runUISmoke() int {
 	}
 	uiSmokePump()
 	uiSmokePump()
+
+	uiSmokeRendererFallback(s)
 
 	// --- dark mode round trip ---
 	setDarkTheme(true)

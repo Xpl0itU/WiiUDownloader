@@ -149,7 +149,8 @@ func NewMainWindow(client *http.Client, config *Config) *MainWindow {
 
 	queuePane, err := NewQueuePane()
 	if err != nil {
-		log.Fatalln("Unable to create queue pane:", err)
+		showFatalDialogAndLog("Unable to create queue pane", err)
+		os.Exit(2)
 	}
 
 	mainWindow := MainWindow{

@@ -61,6 +61,7 @@ func main() {
 	}
 
 	configureMacOSEnvironment()
+	enableRendererFallback()
 	// adw.Init also initializes GTK; it must run before any widget is built.
 	adw.Init()
 
@@ -115,6 +116,7 @@ func main() {
 			})
 			app.AddWindow(assistant.window)
 			fitWindowToMonitorBeforeShow(assistant.window)
+			watchFirstFrames(assistant.window)
 			if win.window != nil {
 				win.window.SetVisible(false)
 			}
@@ -237,6 +239,7 @@ func showMainWindow(app *gtk.Application, win *MainWindow) {
 			win.setDonationBarVisible(false)
 		}
 		fitWindowToMonitor(win.window)
+		watchFirstFrames(win.window)
 		win.PostShowInit()
 		win.restorePersistedQueue()
 	}

@@ -69,9 +69,6 @@ jobs:
 
   release:
     name: Universal binary
-    # Runs for a tag so the DMG can be published, and for a BUILD_NOW commit so
-    # the same DMG can be downloaded from the run. The publish step below is what
-    # stays tag-only.
     if: github.ref_type == 'tag' || (github.event.head_commit != null && startsWith(github.event.head_commit.message, 'BUILD_NOW'))
     runs-on: macos-14
     needs: build

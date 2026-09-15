@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	wiiudownloader "github.com/Xpl0itU/WiiUDownloader"
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	"github.com/diamondburned/gotk4/pkg/gio/v2"
 	glib "github.com/diamondburned/gotk4/pkg/glib/v2"

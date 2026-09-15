@@ -590,7 +590,7 @@ func runUISmoke() int {
 	cfg.SuggestRelatedContent = false
 	cfg.GetSizeOnQueue = false
 
-	mw := NewMainWindow(wiiudownloader.GetTitleEntries(wiiudownloader.TITLE_CATEGORY_ALL), buildHTTPClient(), cfg)
+	mw := NewMainWindow(buildHTTPClient(), cfg)
 	mw.BuildUI()
 	// Present so rows, cells and allocations exist for real; offscreen widgets
 	// have no allocation and cannot be measured.
@@ -805,6 +805,47 @@ func runUISmoke() int {
 	mw.refreshTitleFilter()
 	uiSmokePump()
 	s.check(mw.titleSortModel.NItems() == allRows, "clearing the search restores every row")
+
+	// --- the per-row category the filter reads is the one its title ID implies ---
+	// titleMatchesFilter reads titleRow.category, derived once at build time. If it
+	// ever drifts from what the row displays, filtering silently selects the wrong
+	// rows, so compare it against the derivation for every row and category.
+	drift := 0
+	for _, row := range mw.titleRows {
+		kind := wiiudownloader.GetFormattedKind(row.entry.TitleID)
+		if row.kind != kind || row.category != wiiudownloader.GetCategoryFromFormattedCategory(kind) {
+			drift++
+		}
+	}
+	s.check(drift == 0, "every row's cached kind and category match its title ID (%d of %d wrong)", drift, len(mw.titleRows))
+
+	mw.currentRegion = wiiudownloader.MCP_REGION_EUROPE | wiiudownloader.MCP_REGION_JAPAN | wiiudownloader.MCP_REGION_USA
+	mw.lastSearchText = ""
+	mismatch := 0
+	for _, category := range []uint8{
+		wiiudownloader.TITLE_CATEGORY_ALL,
+		wiiudownloader.TITLE_CATEGORY_GAME,
+		wiiudownloader.TITLE_CATEGORY_UPDATE,
+		wiiudownloader.TITLE_CATEGORY_DLC,
+		wiiudownloader.TITLE_CATEGORY_DEMO,
+	} {
+		mw.currentCategory = category
+		for _, row := range mw.titleRows {
+			// The form the filter used before the category was cached: derive the
+			// kind and its category from the title ID on every row.
+			derivedCategory := wiiudownloader.GetCategoryFromFormattedCategory(
+				wiiudownloader.GetFormattedKind(row.entry.TitleID))
+			want := (category == wiiudownloader.TITLE_CATEGORY_ALL || derivedCategory == category) &&
+				(mw.currentRegion&row.entry.Region) != 0
+			if mw.titleMatchesFilter(row) != want {
+				mismatch++
+			}
+		}
+	}
+	s.check(mismatch == 0, "the cached-category filter selects the same rows as deriving them per row (%d mismatches)", mismatch)
+	mw.currentCategory = wiiudownloader.TITLE_CATEGORY_ALL
+	mw.refreshTitleFilter()
+	uiSmokePump()
 
 	// --- queue round trip driven from the title list ---
 	games := wiiudownloader.GetTitleEntries(wiiudownloader.TITLE_CATEGORY_GAME)

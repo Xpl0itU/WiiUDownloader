@@ -215,7 +215,6 @@ func (mw *MainWindow) BuildUI() {
 	mw.uiBuilt = true
 
 	mw.buildTitleList()
-	startupTrace("buildTitleList")
 
 	mainvBox := gtk.NewBox(gtk.OrientationVertical, 6)
 	mainvBox.SetMarginTop(UI_MARGIN_SMALL)

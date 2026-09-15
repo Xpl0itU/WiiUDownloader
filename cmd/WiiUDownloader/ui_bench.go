@@ -96,16 +96,96 @@ func uiBenchReport(label string, d time.Duration, extra string) {
 	fmt.Printf("  %-32s %9s  %s\n", label, d.Round(time.Millisecond), extra)
 }
 
+// benchTitleList measures the per-row work behind the title list. The filter
+// predicate runs for every row on every pass, and a pass happens at startup and
+// again on each search keystroke or category change, so this is the cost the user
+// actually feels. The two predicates below are the cached-category form and the
+// string-deriving form it replaced, so the difference is measured, not assumed.
+func benchTitleList(mw *MainWindow) {
+	fmt.Println()
+	fmt.Println("Title list per-row cost")
+
+	rows := make([]*titleRow, 0, len(mw.titleRows))
+	for _, row := range mw.titleRows {
+		rows = append(rows, row)
+	}
+	if len(rows) == 0 {
+		fmt.Println("  no rows built; skipping")
+		return
+	}
+
+	const passes = 20
+
+	// The startup call this change removed: the entries were fetched and thrown
+	// away because the field they were stored in was never read.
+	entriesStart := time.Now()
+	gameEntries := 0
+	for i := 0; i < passes; i++ {
+		gameEntries = len(wiiudownloader.GetTitleEntries(wiiudownloader.TITLE_CATEGORY_GAME))
+	}
+	uiBenchMicro(fmt.Sprintf("GetTitleEntries(GAME) x%d", passes),
+		time.Since(entriesStart), fmt.Sprintf("%d entries per call", gameEntries))
+
+	cached := func() int {
+		n := 0
+		for _, row := range rows {
+			if row.category == wiiudownloader.TITLE_CATEGORY_GAME {
+				n++
+			}
+		}
+		return n
+	}
+	derived := func() int {
+		n := 0
+		for _, row := range rows {
+			if row.kind != wiiudownloader.GetFormattedKind(row.entry.TitleID) {
+				continue
+			}
+			if wiiudownloader.GetCategoryFromFormattedCategory(row.kind) == wiiudownloader.TITLE_CATEGORY_GAME {
+				n++
+			}
+		}
+		return n
+	}
+
+	start := time.Now()
+	var cachedCount, derivedCount int
+	for i := 0; i < passes; i++ {
+		cachedCount = cached()
+	}
+	cachedDur := time.Since(start)
+
+	start = time.Now()
+	for i := 0; i < passes; i++ {
+		derivedCount = derived()
+	}
+	derivedDur := time.Since(start)
+
+	uiBenchMicro(fmt.Sprintf("filter pass x%d (cached)", passes), cachedDur, fmt.Sprintf("%d rows per pass", len(rows)))
+	uiBenchMicro(fmt.Sprintf("filter pass x%d (derived)", passes), derivedDur, fmt.Sprintf("%d rows per pass", len(rows)))
+	if cachedDur > 0 {
+		fmt.Printf("  speedup: %.2fx; both forms select %d rows (%v)\n",
+			float64(derivedDur)/float64(cachedDur), cachedCount, cachedCount == derivedCount)
+	}
+}
+
+func uiBenchMicro(label string, d time.Duration, extra string) {
+	fmt.Printf("  %-32s %9s  %s\n", label, d.Round(time.Microsecond), extra)
+}
+
 func runUIBench() int {
 	fmt.Println("File picker benchmark (BotW-sized tree)")
 
 	config := getDefaultConfig()
 	config.ShowDonationBar = false
 	config.SuggestRelatedContent = false
-	mw := NewMainWindow(wiiudownloader.GetTitleEntries(wiiudownloader.TITLE_CATEGORY_GAME), buildHTTPClient(), config)
+	mw := NewMainWindow(buildHTTPClient(), config)
 	mw.BuildUI()
 	mw.window.Present()
 	uiSmokeSettle()
+
+	benchTitleList(mw)
+	fmt.Println()
 
 	files := benchTitleFiles()
 	// WIIU_E2E=1 benchmarks the real Breath of the Wild list instead of the

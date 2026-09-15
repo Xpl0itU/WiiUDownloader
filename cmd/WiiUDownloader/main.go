@@ -84,7 +84,7 @@ func main() {
 		})
 	}
 
-	win := NewMainWindow(wiiudownloader.GetTitleEntries(wiiudownloader.TITLE_CATEGORY_GAME), client, config)
+	win := NewMainWindow(client, config)
 	config.saveConfigCallback = func() {
 		uiIdleAdd(func() {
 			win.applyConfig(config)

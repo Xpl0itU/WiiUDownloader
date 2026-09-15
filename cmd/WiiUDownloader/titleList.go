@@ -16,11 +16,12 @@ const TITLE_QUEUE_COLUMN_WIDTH = 60
 
 // titleRow is the Go-side data behind one row; the row key is the title ID in hex.
 type titleRow struct {
-	entry   wiiudownloader.TitleEntry
-	kind    string
-	region  string
-	tidHex  string
-	inQueue bool
+	entry    wiiudownloader.TitleEntry
+	kind     string
+	region   string
+	tidHex   string
+	category uint8
+	inQueue  bool
 }
 
 // buildTitleList builds GtkStringList -> filter -> sort -> multi selection ->
@@ -44,12 +45,14 @@ func (mw *MainWindow) buildTitleList() {
 			continue
 		}
 		_, inQueue := queuedTIDs[entry.TitleID]
+		kind := wiiudownloader.GetFormattedKind(entry.TitleID)
 		mw.titleRows[key] = &titleRow{
-			entry:   entry,
-			kind:    wiiudownloader.GetFormattedKind(entry.TitleID),
-			region:  wiiudownloader.GetFormattedRegion(entry.Region),
-			tidHex:  key,
-			inQueue: inQueue,
+			entry:    entry,
+			kind:     kind,
+			region:   wiiudownloader.GetFormattedRegion(entry.Region),
+			tidHex:   key,
+			category: wiiudownloader.GetCategoryFromFormattedCategory(kind),
+			inQueue:  inQueue,
 		}
 		keys = append(keys, key)
 	}
@@ -236,13 +239,8 @@ func (mw *MainWindow) newQueueColumn() *gtk.ColumnViewColumn {
 }
 
 func (mw *MainWindow) titleMatchesFilter(row *titleRow) bool {
-	if mw.currentCategory != wiiudownloader.TITLE_CATEGORY_ALL {
-		if row.kind != wiiudownloader.GetFormattedKind(row.entry.TitleID) {
-			return false
-		}
-		if wiiudownloader.GetCategoryFromFormattedCategory(row.kind) != mw.currentCategory {
-			return false
-		}
+	if mw.currentCategory != wiiudownloader.TITLE_CATEGORY_ALL && row.category != mw.currentCategory {
+		return false
 	}
 
 	if (mw.currentRegion & row.entry.Region) == 0 {

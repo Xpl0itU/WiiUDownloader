@@ -1,10 +1,11 @@
 name: MSYS2
 
-# Releases are published from tag pushes only.
+# A tag push publishes a release. A push whose head commit message starts with
+# BUILD_NOW builds the same thing and uploads the same files as workflow
+# artifacts instead, so a build can be tried without cutting a release. Every
+# other push stops at the gate below without building anything.
 on:
   push:
-    tags:
-      - "*"
 
 permissions:
   contents: write
@@ -14,11 +15,19 @@ env:
 
 jobs:
   msys2-ucrt64:
+    if: github.ref_type == 'tag' || (github.event.head_commit != null && startsWith(github.event.head_commit.message, 'BUILD_NOW'))
     runs-on: windows-latest
     defaults:
       run:
         shell: msys2 {0}
     steps:
+      - name: What this run does
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "Tag ${{ github.ref_name }}: the built files are uploaded and then published as a release."
+          else
+            echo "BUILD_NOW commit: the built files are uploaded as artifacts. No release is created."
+          fi
       - uses: actions/checkout@v7
       - uses: msys2/setup-msys2@v2
         with:

@@ -37,6 +37,7 @@ const (
 
 const (
 	APP_NAME            = "WiiUDownloader"
+	APP_VERSION         = "3.1"
 	WINDOW_TITLE_PREFIX = APP_NAME + " - "
 	// Must match the Flatpak app id: a sandbox only lets the app own its own name.
 	APP_ID = "io.github.xpl0itu.wiiudownloader"
@@ -66,6 +67,7 @@ func main() {
 	adw.Init()
 
 	setDarkTheme(config.DarkMode)
+	installAppIcon()
 
 	if os.Getenv("WIIU_UI_SMOKE") != "" {
 		os.Exit(runUISmoke())
@@ -77,7 +79,7 @@ func main() {
 		os.Exit(runUIStress())
 	}
 
-	app := adw.NewApplication(APP_ID, gio.ApplicationFlagsNone)
+	app := adw.NewApplication(APP_ID, gio.ApplicationDefaultFlags)
 
 	if runtime.GOOS == "darwin" {
 		quitAction := gio.NewSimpleAction("quit", nil)

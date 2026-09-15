@@ -232,7 +232,7 @@ func (mw *MainWindow) BuildUI() {
 			mw.runDecryptContents(selectedPaths)
 		})
 	})
-	menuActions.Insert(decryptContentsAction)
+	menuActions.AddAction(decryptContentsAction)
 
 	generateFakeTicketAction := gio.NewSimpleAction("generate-fake-ticket", nil)
 	generateFakeTicketAction.ConnectActivate(func(*glib.Variant) {
@@ -243,13 +243,13 @@ func (mw *MainWindow) BuildUI() {
 			mw.runGenerateFakeTicketAndCert(tmdPath)
 		})
 	})
-	menuActions.Insert(generateFakeTicketAction)
+	menuActions.AddAction(generateFakeTicketAction)
 
 	addByTitleIDAction := gio.NewSimpleAction("add-by-title-id", nil)
 	addByTitleIDAction.ConnectActivate(func(*glib.Variant) {
 		mw.showAddByTitleIDDialog()
 	})
-	menuActions.Insert(addByTitleIDAction)
+	menuActions.AddAction(addByTitleIDAction)
 
 	// Title-list row context menu; the handlers read contextRowKey, so the menu
 	// needs no per-row action parameters.
@@ -261,7 +261,7 @@ func (mw *MainWindow) BuildUI() {
 		}
 		mw.setQueueMembership([]string{mw.contextRowKey}, !row.inQueue)
 	})
-	menuActions.Insert(rowToggleQueueAction)
+	menuActions.AddAction(rowToggleQueueAction)
 
 	rowSpecificFilesAction := gio.NewSimpleAction("row-specific-files", nil)
 	rowSpecificFilesAction.ConnectActivate(func(*glib.Variant) {
@@ -269,7 +269,7 @@ func (mw *MainWindow) BuildUI() {
 			mw.showSpecificFilesDialogFor(entry)
 		}
 	})
-	menuActions.Insert(rowSpecificFilesAction)
+	menuActions.AddAction(rowSpecificFilesAction)
 
 	rowSetVersionAction := gio.NewSimpleAction("row-set-version", nil)
 	rowSetVersionAction.ConnectActivate(func(*glib.Variant) {
@@ -277,7 +277,7 @@ func (mw *MainWindow) BuildUI() {
 			mw.onSetVersionRequested([]wiiudownloader.TitleEntry{entry})
 		}
 	})
-	menuActions.Insert(rowSetVersionAction)
+	menuActions.AddAction(rowSetVersionAction)
 
 	rowCopyIDAction := gio.NewSimpleAction("row-copy-id", nil)
 	rowCopyIDAction.ConnectActivate(func(*glib.Variant) {
@@ -285,13 +285,19 @@ func (mw *MainWindow) BuildUI() {
 			mw.window.Clipboard().SetText(fmt.Sprintf("%016x", entry.TitleID))
 		}
 	})
-	menuActions.Insert(rowCopyIDAction)
+	menuActions.AddAction(rowCopyIDAction)
 
 	openSettingsAction := gio.NewSimpleAction("open-settings", nil)
 	openSettingsAction.ConnectActivate(func(*glib.Variant) {
 		mw.openSettingsWindow()
 	})
-	menuActions.Insert(openSettingsAction)
+	menuActions.AddAction(openSettingsAction)
+
+	aboutAction := gio.NewSimpleAction("about", nil)
+	aboutAction.ConnectActivate(func(*glib.Variant) {
+		mw.showAboutDialog()
+	})
+	menuActions.AddAction(aboutAction)
 
 	toolsMenu := gio.NewMenu()
 	toolsMenu.Append("Decrypt Contents", "win.decrypt-contents")
@@ -300,6 +306,7 @@ func (mw *MainWindow) BuildUI() {
 
 	settingsMenu := gio.NewMenu()
 	settingsMenu.Append("Settings", "win.open-settings")
+	settingsMenu.Append("About "+APP_NAME, "win.about")
 
 	rootMenu := gio.NewMenu()
 	rootMenu.AppendSection("Tools", toolsMenu)

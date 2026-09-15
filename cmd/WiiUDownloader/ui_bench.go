@@ -302,24 +302,24 @@ func runUIBench() int {
 
 	if lastTitleFilePicker.collapseAll != nil {
 		start = time.Now()
-		coreglib.InternObject(lastTitleFilePicker.collapseAll).Emit("clicked")
+		coreglib.BaseObject(lastTitleFilePicker.collapseAll).Emit("clicked")
 		uiBenchWaitUntil(func() bool { return benchVisibleNodes("") < len(nodes) }, time.Minute)
 		uiBenchReport("collapse all", time.Since(start), fmt.Sprintf("on screen=%d", benchVisibleNodes("")))
 
 		start = time.Now()
-		coreglib.InternObject(lastTitleFilePicker.selectAll).Emit("clicked")
+		coreglib.BaseObject(lastTitleFilePicker.selectAll).Emit("clicked")
 		uiSmokePump()
 		uiBenchReport("select all (collapsed)", time.Since(start), fmt.Sprintf("checked=%d/%d", checkedCount(), fileNodes))
 
 		start = time.Now()
-		coreglib.InternObject(lastTitleFilePicker.selectNone).Emit("clicked")
+		coreglib.BaseObject(lastTitleFilePicker.selectNone).Emit("clicked")
 		uiSmokePump()
 		uiBenchReport("select none (collapsed)", time.Since(start), fmt.Sprintf("checked=%d/%d", checkedCount(), fileNodes))
 	}
 
 	if lastTitleFilePicker.expandAll != nil {
 		start = time.Now()
-		coreglib.InternObject(lastTitleFilePicker.expandAll).Emit("clicked")
+		coreglib.BaseObject(lastTitleFilePicker.expandAll).Emit("clicked")
 		uiBenchWaitUntil(func() bool { return benchVisibleNodes("") == len(nodes) }, time.Minute)
 		uiBenchReport("expand all", time.Since(start), fmt.Sprintf("on screen=%d", benchVisibleNodes("")))
 	}

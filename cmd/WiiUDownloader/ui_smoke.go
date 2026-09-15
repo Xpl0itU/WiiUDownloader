@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -14,7 +15,9 @@ import (
 	"time"
 
 	wiiudownloader "github.com/Xpl0itU/WiiUDownloader"
+	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	coreglib "github.com/diamondburned/gotk4/pkg/core/glib"
+	"github.com/diamondburned/gotk4/pkg/gdk/v4"
 	gio "github.com/diamondburned/gotk4/pkg/gio/v2"
 	glib "github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/graphene"
@@ -53,7 +56,15 @@ func uiSmokePump() {
 }
 
 func uiSmokeMenuLabel(model *gio.MenuModel, index int) string {
-	value := model.ItemAttributeValue(index, gio.MENU_ATTRIBUTE_LABEL, glib.NewVariantType("s"))
+	return uiSmokeMenuAttribute(model, index, gio.MENU_ATTRIBUTE_LABEL)
+}
+
+func uiSmokeMenuAction(model *gio.MenuModel, index int) string {
+	return uiSmokeMenuAttribute(model, index, gio.MENU_ATTRIBUTE_ACTION)
+}
+
+func uiSmokeMenuAttribute(model *gio.MenuModel, index int, attribute string) string {
+	value := model.ItemAttributeValue(index, attribute, glib.NewVariantType("s"))
 	if value == nil {
 		return ""
 	}
@@ -209,7 +220,7 @@ func uiSmokeStylesheet(s *uiSmoke) {
 			fmt.Printf("  [css] %v\n", err)
 		}
 	})
-	provider.LoadFromData(styleCSS)
+	provider.LoadFromString(styleCSS)
 	s.check(errors == 0, "style.css parses cleanly under libadwaita (%d errors)", errors)
 
 	// A bare rule for a libadwaita-owned class silently restyles its widgets:
@@ -289,6 +300,58 @@ func uiSmokeScan(w gtk.Widgetter) (int, []string) {
 	}
 	walk(w)
 	return maxRow, texts
+}
+
+func uiSmokeVisibleLinkTitles(root gtk.Widgetter) map[string]string {
+	rows := map[string]string{}
+	for _, row := range uiSmokeRows(root) {
+		if !gtk.BaseWidget(row).Visible() {
+			continue
+		}
+		uri, _ := row.ObjectProperty("uri").(string)
+		if uri == "" {
+			continue
+		}
+		title, _ := row.ObjectProperty("title").(string)
+		rows[uri] = strings.TrimPrefix(title, "_")
+	}
+	return rows
+}
+
+func uiSmokeIconFile(name string) string {
+	display := gdk.DisplayGetDefault()
+	if display == nil {
+		return ""
+	}
+	paintable := gtk.IconThemeGetForDisplay(display).LookupIcon(name, nil, 512, 1, gtk.TextDirNone, 0)
+	if paintable == nil || paintable.File() == nil {
+		return ""
+	}
+	return paintable.File().Path()
+}
+
+func uiSmokeTextContains(texts []string, want string) bool {
+	for _, text := range texts {
+		if strings.Contains(text, want) {
+			return true
+		}
+	}
+	return false
+}
+
+func uiSmokeRows(root gtk.Widgetter) []gtk.Widgetter {
+	var rows []gtk.Widgetter
+	var walk func(gtk.Widgetter)
+	walk = func(cur gtk.Widgetter) {
+		if gtk.BaseWidget(cur).CSSName() == "row" {
+			rows = append(rows, cur)
+		}
+		for _, child := range uiSmokeChildren(cur) {
+			walk(child)
+		}
+	}
+	walk(root)
+	return rows
 }
 
 func uiSmokeHasText(texts []string, want string) bool {
@@ -799,7 +862,16 @@ func runUISmoke() int {
 		model := gio.BaseMenuModel(raw)
 		s.check(model.NItems() == 2, "menu model has Tools and Settings sections (got %d)", model.NItems())
 		section := model.ItemLink(1, "section")
-		s.check(section != nil && gio.BaseMenuModel(section).NItems() == 1, "settings section holds a single flat item")
+		settingsItems := 0
+		if section != nil {
+			settingsItems = gio.BaseMenuModel(section).NItems()
+		}
+		s.check(settingsItems == 2, "the settings section holds Settings and About (got %d items)", settingsItems)
+		if settingsItems == 2 {
+			settingsModel := gio.BaseMenuModel(section)
+			s.check(uiSmokeMenuAction(settingsModel, 1) == "win.about",
+				"the About menu item is wired to win.about (got %q)", uiSmokeMenuAction(settingsModel, 1))
+		}
 
 		tools := model.ItemLink(0, "section")
 		toolsItems := 0
@@ -1389,7 +1461,7 @@ func runUISmoke() int {
 				"the search status reports matches against the total (%q)", lastTitleFilePicker.status.Text())
 		}
 		lastTitleFilePicker.bulkPasses, lastTitleFilePicker.folderPasses, lastTitleFilePicker.statusPasses = 0, 0, 0
-		coreglib.InternObject(lastTitleFilePicker.selectAll).Emit("clicked")
+		coreglib.BaseObject(lastTitleFilePicker.selectAll).Emit("clicked")
 		uiSmokeWait(100 * time.Millisecond)
 
 		active, shownActive, shownTotal := 0, 0, 0
@@ -1424,24 +1496,24 @@ func runUISmoke() int {
 		// did nothing because every file was hidden behind a folder. Run it
 		// through the real buttons, not the helper.
 		if lastTitleFilePicker.collapseAll != nil {
-			coreglib.InternObject(lastTitleFilePicker.collapseAll).Emit("clicked")
+			coreglib.BaseObject(lastTitleFilePicker.collapseAll).Emit("clicked")
 			uiSmokeWait(100 * time.Millisecond)
 			collapsedItems := -1
 			if lastTitleFilePicker.model != nil {
 				collapsedItems = int(lastTitleFilePicker.model.NItems())
 			}
-			coreglib.InternObject(lastTitleFilePicker.selectNone).Emit("clicked")
+			coreglib.BaseObject(lastTitleFilePicker.selectNone).Emit("clicked")
 			uiSmokeWait(100 * time.Millisecond)
 			s.check(collapsedItems < 6 && smokeSelectedFiles() == 0,
 				"select none clears every file with folders collapsed (%d rows on screen, %d selected)",
 				collapsedItems, smokeSelectedFiles())
 
-			coreglib.InternObject(lastTitleFilePicker.selectAll).Emit("clicked")
+			coreglib.BaseObject(lastTitleFilePicker.selectAll).Emit("clicked")
 			uiSmokeWait(100 * time.Millisecond)
 			s.check(smokeSelectedFiles() == 3,
 				"select all selects every file with folders collapsed (%d selected)", smokeSelectedFiles())
 
-			coreglib.InternObject(lastTitleFilePicker.expandAll).Emit("clicked")
+			coreglib.BaseObject(lastTitleFilePicker.expandAll).Emit("clicked")
 			uiSmokeWait(100 * time.Millisecond)
 		}
 	} else {
@@ -1919,6 +1991,34 @@ func runUISmoke() int {
 
 	uiSmokeTitlePrefixes(s, "with every dialog open")
 
+	about := mw.showAboutDialog()
+	uiSmokeSettle()
+	_, aboutTexts := uiSmokeScan(about)
+	s.check(uiSmokeHasText(aboutTexts, APP_NAME), "the about dialog names the app (%v)", aboutTexts)
+	s.check(uiSmokeTextContains(aboutTexts, APP_VERSION), "the about dialog shows the version %q", APP_VERSION)
+	linkRows := uiSmokeVisibleLinkTitles(about)
+	s.check(linkRows[REPO_URL] == "GitHub",
+		"the repo link row reads GitHub (got %q)", linkRows[REPO_URL])
+	websiteRows := 0
+	for _, title := range linkRows {
+		if title == "Website" {
+			websiteRows++
+		}
+	}
+	s.check(websiteRows == 0, "no visible link row still reads Website (%v)", linkRows)
+
+	iconFile := uiSmokeIconFile(APP_ID)
+	s.check(iconFile != "" && !strings.Contains(iconFile, "image-missing"),
+		"the app icon resolves for the about dialog (%q)", iconFile)
+	s.check(strings.HasSuffix(iconFile, filepath.Join("apps", APP_ID+".png")),
+		"the resolved icon is the bundled one (%q)", iconFile)
+
+	if source, err := os.ReadFile(filepath.Join("..", "..", "data", "WiiUDownloader.png")); err == nil {
+		s.check(bytes.Equal(source, appIconPNG), "the embedded app icon matches data/WiiUDownloader.png")
+	}
+	s.check(mw.window.ActivateAction("win.about", nil), "the win.about action is registered on the window")
+	uiSmokeSettle()
+
 	// --- settings window ---
 	if cw, err := NewConfigWindow(cfg); err != nil {
 		s.check(false, "settings window builds: %v", err)
@@ -2103,8 +2203,11 @@ func runUISmoke() int {
 
 	// --- dark mode round trip ---
 	setDarkTheme(true)
+	darkScheme := adw.StyleManagerGetDefault().ColorScheme()
 	setDarkTheme(false)
-	s.check(true, "dark mode toggles without criticals")
+	lightScheme := adw.StyleManagerGetDefault().ColorScheme()
+	s.check(darkScheme == adw.ColorSchemeForceDark && lightScheme == adw.ColorSchemeForceLight,
+		"dark mode reaches the style manager both ways (dark=%v light=%v)", darkScheme, lightScheme)
 
 	fmt.Printf("UI smoke: %d passed, %d failed\n", s.pass, s.fail)
 	if s.fail > 0 {

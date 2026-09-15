@@ -72,14 +72,11 @@ func setDarkTheme(darkMode bool) {
 	if darkMode {
 		scheme = adw.ColorSchemeForceDark
 	}
-	if manager := adw.StyleManagerGetDefault(); manager != nil {
-		manager.SetColorScheme(scheme)
+	manager := adw.StyleManagerGetDefault()
+	if manager == nil {
 		return
 	}
-	// libadwaita unavailable: fall back to GTK's own preference.
-	if gSettings := gtk.SettingsGetDefault(); gSettings != nil {
-		gSettings.SetObjectProperty("gtk-application-prefer-dark-theme", darkMode)
-	}
+	manager.SetColorScheme(scheme)
 }
 
 func applyStyling() {
@@ -93,7 +90,7 @@ func applyStyling() {
 	provider.ConnectParsingError(func(_ *gtk.CSSSection, err error) {
 		log.Printf("failed to load CSS styling: %v", err)
 	})
-	provider.LoadFromData(styleCSS)
+	provider.LoadFromString(styleCSS)
 	gtk.StyleContextAddProviderForDisplay(display, provider, gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 }
 

@@ -105,20 +105,10 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string, decryptContent
 
 		cancelled := run.Cancelled()
 		step := nextQueueStep(downloadErr, cancelled, config.ContinueOnError)
-		switch {
-		case step.remove:
-			run.SetTitleState(title.TitleID, queueStateDone)
-		case cancelled:
-			run.SetTitleState(title.TitleID, queueStateCancelled)
-		default:
-			run.SetTitleState(title.TitleID, queueStateFailed)
-		}
+		mw.applyQueueStep(run, title, step, cancelled)
 		if step.record {
 			errorType := detectErrorType(downloadErr.Error())
 			run.AddErrorWithType(title.Name, downloadErr.Error(), tidStr, errorType, title.Version)
-		}
-		if step.remove {
-			mw.queuePane.RemoveTitle(title)
 		}
 		if step.returned != nil {
 			firstErr = step.returned
@@ -145,6 +135,20 @@ func (mw *MainWindow) onDownloadQueueClicked(selectedPath string, decryptContent
 	return firstErr
 }
 
+func (mw *MainWindow) applyQueueStep(run *DownloadProgress, title wiiudownloader.TitleEntry, step queueStep, cancelled bool) {
+	switch {
+	case cancelled:
+		run.SetTitleState(title.TitleID, queueStateCancelled)
+	case step.remove:
+		run.SetTitleState(title.TitleID, queueStateDone)
+	default:
+		run.SetTitleState(title.TitleID, queueStateFailed)
+	}
+	if step.remove {
+		mw.queuePane.RemoveTitle(title)
+	}
+}
+
 type queueStep struct {
 	remove   bool  // remove the title from the queue
 	stop     bool  // stop processing further titles
@@ -153,11 +157,11 @@ type queueStep struct {
 }
 
 func nextQueueStep(downloadErr error, cancelled, continueOnError bool) queueStep {
-	if downloadErr == nil || downloadErr == context.Canceled {
-		return queueStep{remove: true}
-	}
 	if cancelled {
 		return queueStep{stop: true}
+	}
+	if downloadErr == nil || downloadErr == context.Canceled {
+		return queueStep{remove: true}
 	}
 	if continueOnError {
 		return queueStep{remove: true, record: true}

@@ -1894,6 +1894,18 @@ func runUISmoke() int {
 	s.check(mw.queuePane.runBarLabel.Text() == "Cancelling...",
 		"the run bar reports a cancelled run (%q)", mw.queuePane.runBarLabel.Text())
 
+	// Cancelling keeps the title in the queue, marked cancelled: only the run
+	// stops, so the title can be retried or removed on purpose. This drives the
+	// same two functions the download loop uses.
+	queuedBefore := mw.queuePane.GetTitleQueueSize()
+	mw.applyQueueStep(run, first, nextQueueStep(context.Canceled, true, true), true)
+	uiSmokeSettle()
+	s.check(mw.queuePane.GetTitleQueueSize() == queuedBefore,
+		"cancelling keeps the title in the queue (%d -> %d)", queuedBefore, mw.queuePane.GetTitleQueueSize())
+	s.check(mw.queuePane.rowData[rowKeyForTitleID(first.TitleID)].state == queueStateCancelled,
+		"a cancelled title is marked cancelled, not done (got %q)",
+		mw.queuePane.rowData[rowKeyForTitleID(first.TitleID)].state)
+
 	run.Finish()
 	uiSmokeSettle()
 	s.check(!mw.queuePane.runBar.Visible(), "the run bar hides when the run ends")

@@ -62,6 +62,9 @@ func main() {
 	if os.Getenv("WIIU_UI_BENCH") != "" {
 		os.Exit(runUIBench())
 	}
+	if os.Getenv("WIIU_UI_STRESS") != "" {
+		os.Exit(runUIStress())
+	}
 
 	app := adw.NewApplication(APP_ID, gio.ApplicationFlagsNone)
 

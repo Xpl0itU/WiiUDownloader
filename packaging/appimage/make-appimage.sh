@@ -5,7 +5,7 @@
 set -eu
 
 ARCH=$(uname -m)
-VERSION="${VERSION:-3.1}"
+VERSION="${VERSION:-3.2}"
 export ARCH VERSION
 
 export OUTPATH=./dist

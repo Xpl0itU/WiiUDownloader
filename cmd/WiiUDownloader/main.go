@@ -37,7 +37,7 @@ const (
 
 const (
 	APP_NAME            = "WiiUDownloader"
-	APP_VERSION         = "3.1"
+	APP_VERSION         = "3.2"
 	WINDOW_TITLE_PREFIX = APP_NAME + " - "
 	// Must match the Flatpak app id: a sandbox only lets the app own its own name.
 	APP_ID = "io.github.xpl0itu.wiiudownloader"

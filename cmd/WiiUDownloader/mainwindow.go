@@ -5,7 +5,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -107,7 +106,6 @@ type MainWindow struct {
 	configWindow          *ConfigWindow
 	lastSearchText        string
 	categoryButtons       []*gtk.ToggleButton
-	titles                []wiiudownloader.TitleEntry
 	decryptContents       bool
 	suggestRelatedContent bool
 	currentRegion         uint8
@@ -128,7 +126,7 @@ type MainWindow struct {
 	sizeFetchSemaphore    chan struct{}
 }
 
-func NewMainWindow(entries []wiiudownloader.TitleEntry, client *http.Client, config *Config) *MainWindow {
+func NewMainWindow(client *http.Client, config *Config) *MainWindow {
 	adwWin := adw.NewWindow()
 	win := &adwWin.Window
 	win.SetTitle(APP_NAME)
@@ -158,7 +156,6 @@ func NewMainWindow(entries []wiiudownloader.TitleEntry, client *http.Client, con
 		window:             win,
 		adwWindow:          adwWin,
 		queuePane:          queuePane,
-		titles:             entries,
 		searchEntry:        searchEntry,
 		currentRegion:      wiiudownloader.MCP_REGION_EUROPE | wiiudownloader.MCP_REGION_JAPAN | wiiudownloader.MCP_REGION_USA,
 		lastSearchText:     "",
@@ -218,6 +215,7 @@ func (mw *MainWindow) BuildUI() {
 	mw.uiBuilt = true
 
 	mw.buildTitleList()
+	startupTrace("buildTitleList")
 
 	mainvBox := gtk.NewBox(gtk.OrientationVertical, 6)
 	mainvBox.SetMarginTop(UI_MARGIN_SMALL)
@@ -816,7 +814,7 @@ func openURL(url string) {
 }
 
 func execCommand(name string, args ...string) error {
-	cmd := exec.Command(name, args...)
+	cmd := newCommand(name, args...)
 	return cmd.Start()
 }
 

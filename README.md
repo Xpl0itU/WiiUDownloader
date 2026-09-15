@@ -151,7 +151,7 @@ curl -Lo db.go -H 'User-Agent: NUSspliBuilder/2.1' 'https://napi.v10lator.de/db?
 cd cmd/WiiUDownloader && go build -o ../../WiiUDownloader .
 ```
 
-Requires Go 1.25+ and GTK+3 development libraries.
+Requires Go 1.26+ and GTK+4 development libraries.
 
 ---
 
@@ -169,6 +169,6 @@ GPLv3. See [LICENSE](LICENSE).
 
 Built with these excellent open-source libraries:
 
-- [gotk3](https://github.com/gotk3/gotk3), Go bindings for GTK+3
+- [gotk3](https://github.com/diamondburned/gotk4), Go bindings for GTK+4
 - [golang.org/x/crypto](https://golang.org/x/crypto), Cryptographic primitives
 - [golang.org/x/sync](https://golang.org/x/sync), Concurrency utilities

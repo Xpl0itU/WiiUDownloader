@@ -169,6 +169,6 @@ GPLv3. See [LICENSE](LICENSE).
 
 Built with these excellent open-source libraries:
 
-- [gotk3](https://github.com/diamondburned/gotk4), Go bindings for GTK+4
+- [gotk4](https://github.com/diamondburned/gotk4), Go bindings for GTK+4
 - [golang.org/x/crypto](https://golang.org/x/crypto), Cryptographic primitives
 - [golang.org/x/sync](https://golang.org/x/sync), Concurrency utilities

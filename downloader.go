@@ -591,6 +591,11 @@ func DownloadTitleContents(titleID, outputDirectory string, version int, content
 		return err
 	}
 
+	titleCipher, err := newTitleCipher(tikPath, tmd)
+	if err != nil {
+		return err
+	}
+
 	titleSize := tmd.calculateTotalSize(selected)
 
 	if progressReporter != nil {
@@ -626,22 +631,10 @@ func DownloadTitleContents(titleID, outputDirectory string, version int, content
 			if !waitUntilResumed(progressReporter) {
 				return errCancel
 			}
-			filePath := filepath.Join(outputDir, fmt.Sprintf("%08X.app", content.ID))
-			if err := downloadFileWithOptions(ctx, progressReporter, client, fmt.Sprintf("%s/%08X", baseURL, content.ID), filePath, downloadOptions{
-				ExpectedSize: expectedContentDownloadSize(content),
-				DoRetries:    true,
-				AllowResume:  true,
-				UserAgent:    "WiiUDownloader",
-			}); err != nil {
-				if isCancelled(progressReporter) {
-					return errCancel
-				}
-				return err
-			}
-
+			var h3Path string
 			if content.Type&CONTENT_TYPE_HASHED == CONTENT_TYPE_HASHED {
-				filePath = filepath.Join(outputDir, fmt.Sprintf("%08X.h3", content.ID))
-				if err := downloadFileWithOptions(ctx, progressReporter, client, fmt.Sprintf("%s/%08X.h3", baseURL, content.ID), filePath, downloadOptions{
+				h3Path = filepath.Join(outputDir, fmt.Sprintf("%08X.h3", content.ID))
+				if err := downloadFileWithOptions(ctx, progressReporter, client, fmt.Sprintf("%s/%08X.h3", baseURL, content.ID), h3Path, downloadOptions{
 					ExpectedSize: expectedH3DownloadSize(content),
 					DoRetries:    true,
 					AllowResume:  true,
@@ -655,6 +648,22 @@ func DownloadTitleContents(titleID, outputDirectory string, version int, content
 					}
 					return err
 				}
+			}
+
+			filePath := filepath.Join(outputDir, fmt.Sprintf("%08X.app", content.ID))
+			if err := downloadFileWithOptions(ctx, progressReporter, client, fmt.Sprintf("%s/%08X", baseURL, content.ID), filePath, downloadOptions{
+				ExpectedSize: expectedContentDownloadSize(content),
+				DoRetries:    true,
+				AllowResume:  true,
+				UserAgent:    "WiiUDownloader",
+				Validate: func(path string) error {
+					return verifyContentFile(path, h3Path, content, titleCipher)
+				},
+			}); err != nil {
+				if isCancelled(progressReporter) {
+					return errCancel
+				}
+				return err
 			}
 			if isCancelled(progressReporter) {
 				return errCancel

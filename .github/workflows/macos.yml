@@ -21,6 +21,7 @@ jobs:
     if: github.ref_type == 'tag' || (github.event.head_commit != null && startsWith(github.event.head_commit.message, 'BUILD_NOW'))
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [*macos-intel-target, *macos-arm-target]
     steps:
@@ -29,7 +30,7 @@ jobs:
       - name: Install Homebrew Dependencies
         uses: tecolicom/actions-use-homebrew-tools@v1
         with:
-          tools: create-dmg dylibbundler gtk4 libadwaita librsvg shared-mime-info adwaita-icon-theme gobject-introspection
+          tools: create-dmg dylibbundler gtk4 libadwaita librsvg shared-mime-info adwaita-icon-theme gobject-introspection curl
           cache: yes
       - name: Install Go
         uses: actions/setup-go@v7
@@ -41,7 +42,14 @@ jobs:
             cmd/WiiUDownloader/go.sum
       - name: Build
         run: |
-          curl --insecure -Lo db.go -H "User-Agent: NUSspliBuilder/2.1" "https://napi.v10lator.de/db?t=go"
+          BREW_CURL="$(brew --prefix curl 2>/dev/null || echo '')/bin/curl"
+          if [ -x "$BREW_CURL" ]; then
+            CURL_BIN="$BREW_CURL"
+          else
+            CURL_BIN="curl"
+          fi
+
+          $CURL_BIN -4 --compressed --retry 5 --retry-delay 3 --retry-all-errors -Lo db.go -H "User-Agent: NUSspliBuilder/2.2" "https://napi.v10lator.de/db?t=go"
           if grep -q "var titleEntry =" db.go; then
             if grep -q "type TitleEntry struct" db.go; then
               sed -i '' '/type TitleEntry struct/,/}/d' db.go

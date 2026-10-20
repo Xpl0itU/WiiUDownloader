@@ -1,8 +1,7 @@
 #!/bin/env python
 
 import os
-import urllib.request
-import ssl
+import pycurl
 import re
 
 # Don't edit below this line
@@ -14,21 +13,24 @@ def checkAndDeleteFile(file):
         os.remove(file)
 
 
-# Disable certificate verification
-ssl_context = ssl.create_default_context()
-ssl_context.check_hostname = False
-ssl_context.verify_mode = ssl.CERT_NONE
+def cDownload(url, file):
+    with open(file, "wb") as f:
+        c = pycurl.Curl()
+        c.setopt(c.URL, url)
+        c.setopt(c.WRITEDATA, f)
+        c.setopt(c.FOLLOWLOCATION, True)
+        c.setopt(c.USERAGENT, "NUSspliBuilder/2.2")
+        c.setopt(c.ACCEPT_ENCODING, "")
+        c.perform()
+        c.close()
 
-opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=ssl_context))
-opener.addheaders = [("User-agent", "NUSspliBuilder/2.1")]
-urllib.request.install_opener(opener)
 
 dest_path = "db.go"
 checkAndDeleteFile(dest_path)
 
 print("Downloading db.go...")
 temp_db = "db_temp.go"
-urllib.request.urlretrieve("https://napi.v10lator.de/db?t=go", temp_db)
+cDownload("https://napi.v10lator.de/db?t=go", temp_db)
 
 with open(temp_db, "r", encoding="utf-8") as f:
     content = f.read()

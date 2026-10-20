@@ -24,7 +24,14 @@ go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest
 
 if [ ! -f db.go ]; then
     echo "Fetching title database..."
-    curl --insecure -Lo db.go -H "User-Agent: NUSspliBuilder/2.1" "https://napi.v10lator.de/db?t=go"
+    curl --compressed -Lo db.go -H "User-Agent: NUSspliBuilder/2.2" "https://napi.v10lator.de/db?t=go"
+    if grep -q "var titleEntry =" db.go; then
+        if grep -q "type TitleEntry struct" db.go; then
+            sed -i '/type TitleEntry struct/,/}/d' db.go
+        fi
+        sed -i 's/var titleEntry =/func init() { TitleDatabase =/' db.go
+        echo "}" >> db.go
+    fi
 fi
 
 echo "Generating icon..."

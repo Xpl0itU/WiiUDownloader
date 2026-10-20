@@ -8,12 +8,12 @@
 # database it embeds) is identical to the AppImage release.
 #
 # Usage:
-#   ./scripts/build-flatpak.sh                       # arch = host arch
+#   ./scripts/build-flatpak.sh                        # arch = host arch
 #     # If ./WiiUDownloader doesn't exist, it is compiled first (AppImage-style:
 #     # curl db.go + go build in the Dockerfile.linux container), then bundled.
 #     # If it does exist (e.g. CI after the AppImage build step), it's reused.
 #   VERSION=3.0 ./scripts/build-flatpak.sh
-#   ./scripts/build-flatpak.sh x86_64                # cross-arch (needs qemu)
+#   ./scripts/build-flatpak.sh x86_64                 # cross-arch (needs qemu)
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -46,7 +46,7 @@ if [ ! -f WiiUDownloader ]; then
   DOCKER_ARCH=$(case "$QARCH" in x86_64) echo x86_64 ;; *) echo aarch64 ;; esac)
   docker build . --file Dockerfile.linux --tag wiiu-builder --build-arg ARCH="$DOCKER_ARCH"
   docker run --rm -v "$PWD":/project wiiu-builder bash -lc \
-    "curl --insecure -Lo db.go -H 'User-Agent: NUSspliBuilder/2.1' 'https://napi.v10lator.de/db?t=go' && if grep -q 'var titleEntry =' db.go; then if grep -q 'type TitleEntry struct' db.go; then sed -i '/type TitleEntry struct/,/}/d' db.go; fi && sed -i 's/var titleEntry =/func init() { TitleDatabase =/' db.go && echo '}' >> db.go; fi && go build -C cmd/WiiUDownloader -o ../../WiiUDownloader ."
+    "curl --compressed -Lo db.go -H 'User-Agent: NUSspliBuilder/2.2' 'https://napi.v10lator.de/db?t=go' && if grep -q 'var titleEntry =' db.go; then if grep -q 'type TitleEntry struct' db.go; then sed -i '/type TitleEntry struct/,/}/d' db.go; fi && sed -i 's/var titleEntry =/func init() { TitleDatabase =/' db.go && echo '}' >> db.go; fi && go build -C cmd/WiiUDownloader -o ../../WiiUDownloader ."
 fi
 # 2) Assemble the flatpak from the prebuilt binary. Runtime/sdk install into
 #    the SYSTEM flatpak dir (named volume -> downloads survive container exit).

@@ -11,6 +11,8 @@ log.txt
 db.go
 WiiUDownloader.icns
 /WiiUDownloader
+/wiiudownloader
+/wiiudownloader-cli
 *.syso
 *.ico
 *.rc
@@ -35,7 +37,6 @@ docs/
 test_cache/
 *.cache
 __pycache__/
-*_test.go
 loadedlibs.txt*
 app.log
 

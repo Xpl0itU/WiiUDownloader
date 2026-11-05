@@ -58,6 +58,7 @@ func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	if cli.IsCLICommand(os.Args) {
+		attachConsoleIfCLI()
 		os.Exit(cli.Run(os.Args[1:]))
 	}
 

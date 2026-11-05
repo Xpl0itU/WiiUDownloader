@@ -14,54 +14,11 @@ import (
 )
 
 func formatBytes(bytes uint64) string {
-	const unit = 1000
-
-	if bytes < unit {
-		return fmt.Sprintf("%d B", bytes)
-	}
-
-	value := float64(bytes)
-	units := []string{"B", "KB", "MB", "GB", "TB", "PB", "EB"}
-	unitIndex := 0
-	for value >= unit && unitIndex < len(units)-1 {
-		value /= unit
-		unitIndex++
-	}
-	value = math.Round(value*100) / 100
-	return fmt.Sprintf("%.2f %s", value, units[unitIndex])
+	return wiiudownloader.FormatBytes(bytes)
 }
 
 func normalizeFilename(filename string) string {
-	var out strings.Builder
-	shouldAppend := true
-	firstChar := true
-
-	for _, c := range filename {
-		switch {
-		case c == '_':
-			if shouldAppend {
-				out.WriteRune('_')
-				shouldAppend = false
-			}
-			firstChar = false
-		case c == ' ':
-			if shouldAppend && !firstChar {
-				out.WriteRune(' ')
-				shouldAppend = false
-			}
-		case (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'):
-			out.WriteRune(c)
-			shouldAppend = true
-			firstChar = false
-		}
-	}
-
-	result := out.String()
-	if len(result) > 0 && result[len(result)-1] == '_' {
-		result = result[:len(result)-1]
-	}
-
-	return result
+	return wiiudownloader.NormalizeFilename(filename)
 }
 
 // setDarkTheme drives libadwaita's style manager, which owns both the palette

@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Xpl0itU/WiiUDownloader/internal/cli"
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	"github.com/diamondburned/gotk4/pkg/gio/v2"
 	glib "github.com/diamondburned/gotk4/pkg/glib/v2"
@@ -55,6 +56,11 @@ func main() {
 
 	runtime.LockOSThread()
 	runtime.GOMAXPROCS(runtime.NumCPU())
+
+	if cli.IsCLICommand(os.Args) {
+		attachConsoleIfCLI()
+		os.Exit(cli.Run(os.Args[1:]))
+	}
 
 	config, configErr := loadConfig()
 	if config == nil {

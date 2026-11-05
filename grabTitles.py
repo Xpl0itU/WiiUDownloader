@@ -1,8 +1,10 @@
 #!/bin/env python
 
+import gzip
 import os
-import pycurl
 import re
+import subprocess
+import urllib.request
 
 # Don't edit below this line
 
@@ -14,15 +16,30 @@ def checkAndDeleteFile(file):
 
 
 def cDownload(url, file):
-    with open(file, "wb") as f:
-        c = pycurl.Curl()
-        c.setopt(c.URL, url)
-        c.setopt(c.WRITEDATA, f)
-        c.setopt(c.FOLLOWLOCATION, True)
-        c.setopt(c.USERAGENT, "NUSspliBuilder/2.2")
-        c.setopt(c.ACCEPT_ENCODING, "")
-        c.perform()
-        c.close()
+    # Try curl first if available (handles HTTP/1.1 and TLS negotiation with napi server)
+    try:
+        subprocess.run(
+            ["curl", "-s", "--compressed", "--http1.1", "-Lo", file, "-H", "User-Agent: NUSspliBuilder/2.2", url],
+            check=True,
+        )
+        if os.path.exists(file) and os.path.getsize(file) > 0:
+            return
+    except Exception:
+        pass
+
+    req = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": "NUSspliBuilder/2.2",
+            "Accept-Encoding": "gzip, deflate",
+        },
+    )
+    with urllib.request.urlopen(req) as response:
+        content = response.read()
+        if response.headers.get("Content-Encoding") == "gzip" or content[:2] == b"\x1f\x8b":
+            content = gzip.decompress(content)
+        with open(file, "wb") as f:
+            f.write(content)
 
 
 dest_path = "db.go"

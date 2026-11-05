@@ -96,6 +96,88 @@ For a detailed walkthrough, see the [WiiUDownloader Usage Guide](https://xpl0itu
 
 ---
 
+## Command-Line Interface (CLI)
+
+WiiUDownloader includes a standalone, pure Go command-line tool with zero CGo/GTK dependencies (`cmd/wiiudownloader`). The main GUI executable also automatically switches to CLI mode when launched with CLI commands.
+
+### Build / Install CLI
+
+```bash
+# Build the standalone binary
+go build -o wiiudownloader ./cmd/wiiudownloader
+
+# Or install globally
+go install github.com/Xpl0itU/WiiUDownloader/cmd/wiiudownloader@latest
+```
+
+### CLI Commands
+
+| Command | Description |
+|---|---|
+| `download`, `d` | Download titles (games, updates, DLCs) by Title ID or name |
+| `search`, `s` | Search database by name or Title ID with region/category filters |
+| `list`, `ls` | List titles filtered by region and category |
+| `info` | Show details, size, contents, and related updates/DLC |
+| `decrypt` | Decrypt previously downloaded title folder(s) |
+| `ticket` | Generate fake ticket (`title.tik`) and cert (`title.cert`) |
+| `files` | Inspect files inside title FST without downloading the full game |
+| `queue` | Inspect, clear, or download titles saved in GUI queue |
+| `db` | Database statistics or update cache from server |
+
+### Examples
+
+**Search titles:**
+```bash
+wiiudownloader search "Zelda" -r usa -t game
+```
+
+**Download and decrypt a game:**
+```bash
+wiiudownloader download 0005000010143500 -d
+```
+
+**Download game with all related content (latest update + DLC):**
+```bash
+wiiudownloader download 0005000010143500 -d --all
+```
+
+**Save space: delete encrypted files after decryption:**
+```bash
+wiiudownloader download 0005000010143500 -d --delete-encrypted -o ./games
+```
+
+**Batch download from a text file:**
+```bash
+wiiudownloader download --file titles.txt -o ./games -d
+```
+
+**Download titles queued in the GUI:**
+```bash
+wiiudownloader download --from-queue -d --delete-encrypted
+```
+
+**Decrypt an existing folder:**
+```bash
+wiiudownloader decrypt ./games/MarioKart8 --delete-encrypted
+```
+
+**Generate fake ticket and cert:**
+```bash
+wiiudownloader ticket 0005000010143500 -o ./output
+```
+
+**Inspect contents and exact CDN size:**
+```bash
+wiiudownloader info 0005000010143500
+```
+
+**List internal files before downloading:**
+```bash
+wiiudownloader files 0005000010143500 -s meta
+```
+
+---
+
 ## Why WiiUDownloader over other Wii U download tools
 
 **No title keys.** Other tools make you hunt down title keys from third-party sites. Those sites go offline. The files get outdated. WiiUDownloader generates what it needs.

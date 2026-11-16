@@ -17,7 +17,6 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 type tuiScreen int
@@ -46,8 +45,9 @@ type tuiDownloadDoneMsg struct {
 }
 
 type tuiExtractDoneMsg struct {
-	err   error
-	paths []string
+	err    error
+	paths  []string
+	target string
 }
 
 type tuiDecryptDoneMsg struct {
@@ -83,7 +83,8 @@ type tuiModel struct {
 	status        string
 
 	// Home
-	home list.Model
+	home        list.Model
+	homeTwoLine bool
 
 	// Search
 	searchInput   textinput.Model
@@ -95,8 +96,9 @@ type tuiModel struct {
 	searchTotal   int
 
 	// Selected title / actions
-	selected   wiiudownloader.TitleEntry
-	actionList list.Model
+	selected       wiiudownloader.TitleEntry
+	actionList     list.Model
+	actionsTwoLine bool
 
 	// Download options
 	outputInput     textinput.Model
@@ -111,7 +113,9 @@ type tuiModel struct {
 	reporter          *tuiProgress
 	progressTitle     string
 	progressOperation string
+	progressSteps     []string
 	progressStart     time.Time
+	progressElapsed   time.Duration
 	progressBytes     int64
 	progressTotal     int64
 	progressDecrypt   float64
@@ -159,8 +163,10 @@ type tuiModel struct {
 
 	// Help and message screens
 	helpView      viewport.Model
+	helpReturn    tuiScreen
 	messageTitle  string
 	messageBody   string
+	messageHint   string
 	messageReturn tuiScreen
 	messageKind   string
 }
@@ -176,27 +182,29 @@ func newTUIModel(application *app, db *titleDB) *tuiModel {
 		deleteEncrypted: false,
 		regionIndex:     0,
 		typeIndex:       0,
+		homeTwoLine:     true,
+		actionsTwoLine:  true,
 	}
 
 	model.spinner = spinner.New()
-	model.spinner.Spinner = spinner.Dot
-	model.spinner.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
+	model.spinner.Spinner = spinner.MiniDot
+	model.spinner.Style = tuiAccentStyle
 
-	model.progress = progress.New(progress.WithDefaultGradient(), progress.WithoutPercentage())
+	model.progress = progress.New(progress.WithGradient("#0EA5E9", "#6366F1"), progress.WithoutPercentage())
 	model.progress.Width = 60
 
-	model.home = newTUIList(tuiHomeItems(), 80, 18)
+	model.home = newTUIMenuList(tuiHomeItems(), 80, 18, false)
 	model.searchInput = newTUIInput("Search by name or title ID…", 50)
 	model.searchList = newTUIList(nil, 80, 12)
-	model.actionList = newTUIList(tuiActionItems(), 80, 12)
+	model.actionList = newTUIMenuList(tuiActionItems(), 80, 12, false)
 	model.outputInput = newTUIInput("Download folder", 58)
 	model.outputInput.SetValue(defaultDownloadDir())
 	model.versionInput = newTUIInput("latest", 16)
 	model.versionInput.SetValue("latest")
 	model.infoView = viewport.New(80, 18)
 	model.helpView = viewport.New(80, 18)
-	model.helpView.SetContent(tuiHelpText())
-	model.fileFilter = newTUIInput("type to filter…", 42)
+	model.helpView.SetContent(tuiHelpText(80))
+	model.fileFilter = newTUIInput("type to filter by path…", 42)
 	model.filesList = newTUIList(nil, 80, 12)
 	model.extractOutput = newTUIInput("Output folder", 58)
 	model.extractOutput.SetValue(defaultDownloadDir())
@@ -208,6 +216,7 @@ func newTUIModel(application *app, db *titleDB) *tuiModel {
 	model.setDecryptFocus(0)
 	model.titleIDInput.Focus()
 	model.blurAllInputs()
+	model.resize()
 	return model
 }
 
@@ -217,6 +226,9 @@ func newTUIInput(placeholder string, width int) textinput.Model {
 	input.CharLimit = 1024
 	input.Width = width
 	input.Prompt = ""
+	input.TextStyle = tuiTextStyle
+	input.PlaceholderStyle = tuiDimStyle
+	input.Cursor.Style = tuiAccentStyle
 	return input
 }
 
@@ -295,6 +307,7 @@ func (m *tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.infoTMD = msg.tmd
 		m.infoErr = msg.err
+		m.resize()
 		m.infoView.SetContent(m.infoContent())
 		m.infoView.GotoTop()
 		return m, nil
@@ -308,6 +321,7 @@ func (m *tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.err != nil {
 			m.showMessage("Could not load files", msg.err.Error(), screenActions, "error")
+			m.messageHint = "Check your network connection and try again. Press enter to return to the title actions."
 			return m, nil
 		}
 		m.tree = msg.tree
@@ -322,10 +336,12 @@ func (m *tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.finishProgress()
 		if msg.err != nil {
 			m.showMessage("Download failed", msg.err.Error(), screenSearch, "error")
+			m.messageHint = "Files downloaded so far were kept, so retrying resumes where it stopped. Press enter to return to the search results."
 		} else if m.reporter != nil && m.reporter.Cancelled() {
 			m.showMessage("Download cancelled", "The partial download was kept and will resume next time.", screenSearch, "cancel")
 		} else {
-			m.showMessage("Download complete", "Saved to:\n"+msg.target, screenSearch, "success")
+			body := "Saved to:\n" + msg.target + "\n\n" + m.transferSummary()
+			m.showMessage("Download complete", body, screenSearch, "success")
 		}
 		m.reporter = nil
 		m.progressCh = nil
@@ -337,7 +353,8 @@ func (m *tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else if m.reporter != nil && m.reporter.Cancelled() {
 			m.showMessage("Extraction cancelled", "No further files were extracted.", screenFiles, "cancel")
 		} else {
-			m.showMessage("Extraction complete", fmt.Sprintf("Extracted %d file(s).", len(msg.paths)), screenFiles, "success")
+			body := fmt.Sprintf("Extracted %s to:\n%s\n\n%s", plural(len(msg.paths), "file", "files"), msg.target, m.transferSummary())
+			m.showMessage("Extraction complete", body, screenFiles, "success")
 		}
 		m.reporter = nil
 		m.progressCh = nil
@@ -346,10 +363,12 @@ func (m *tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.finishProgress()
 		if msg.err != nil {
 			m.showMessage("Decryption failed", msg.err.Error(), screenHome, "error")
+			m.messageHint = "Make sure the folder contains title.tmd, title.tik and every .app file. Press enter to return to the main menu."
 		} else if m.reporter != nil && m.reporter.Cancelled() {
 			m.showMessage("Decryption cancelled", "The operation was interrupted.", screenHome, "cancel")
 		} else {
-			m.showMessage("Decryption complete", "Decrypted files are ready in:\n"+msg.path, screenHome, "success")
+			body := "Decrypted files are ready in:\n" + msg.path + "\n\nFinished in " + formatDuration(m.progressElapsed) + "."
+			m.showMessage("Decryption complete", body, screenHome, "success")
 		}
 		m.reporter = nil
 		m.progressCh = nil
@@ -358,16 +377,25 @@ func (m *tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.dbUpdating = false
 		if msg.err != nil {
 			m.showMessage("Database update failed", msg.err.Error(), screenHome, "error")
+			m.messageHint = "The current title database is still loaded. Check your network connection and try again."
 			return m, nil
+		}
+		oldCount := 0
+		if m.db != nil {
+			oldCount = len(m.db.entries)
 		}
 		newDB := newTitleDB(msg.entries, "cache")
 		newDB.setGlobal()
 		m.db = newDB
 		m.app.db = newDB
-		body := fmt.Sprintf("Loaded %d titles from:\n%s", len(newDB.entries), msg.source)
+		body := fmt.Sprintf("Loaded %s from:\n%s", plural(len(newDB.entries), "title", "titles"), msg.source)
+		if delta := len(newDB.entries) - oldCount; delta > 0 && oldCount > 0 {
+			body += fmt.Sprintf("\n\n%s since the previous database.", plural(delta, "new title", "new titles"))
+		}
 		if msg.warning != "" {
 			body += "\n\n" + msg.warning
 		}
+		m.refreshSearch()
 		m.showMessage("Title database updated", body, screenHome, "success")
 		return m, nil
 	}
@@ -375,63 +403,73 @@ func (m *tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, m.updateFocusedInput(msg)
 }
 
-func (m *tuiModel) View() string {
-	if m.width <= 0 || m.height <= 0 {
-		return ""
+// transferSummary describes a finished transfer's size and duration.
+func (m *tuiModel) transferSummary() string {
+	summary := "Finished in " + formatDuration(m.progressElapsed)
+	if m.progressTotal > 0 {
+		summary = formatBytes(m.progressTotal) + " · " + strings.ToLower(summary[:1]) + summary[1:]
 	}
-
-	title, body := m.screenView()
-	header := tuiTitleStyle.Render(" WiiUDownloader ")
-	header += " " + tuiDimStyle.Render(title)
-	if m.db != nil {
-		header += tuiDimStyle.Render(fmt.Sprintf("  ·  %d titles", len(m.db.entries)))
-	}
-	footer := tuiHelpStyle.Render(m.footer())
-	return lipgloss.JoinVertical(lipgloss.Left, header, "", body, "", footer)
+	return summary + "."
 }
 
 func (m *tuiModel) resize() {
-	width := m.width - 4
-	if width < 30 {
-		width = 30
-	}
-	height := m.height - 8
-	if height < 6 {
-		height = 6
-	}
+	width := m.contentWidth()
+	bodyHeight := m.bodyHeight()
 
-	m.home.SetSize(width, height)
-	m.actionList.SetSize(width, height)
-	m.searchList.SetSize(width, height-3)
-	if m.searchList.Height() < 4 {
-		m.searchList.SetSize(width, 4)
-	}
-	m.filesList.SetSize(width, height-4)
-	if m.filesList.Height() < 4 {
-		m.filesList.SetSize(width, 4)
+	// Menus show descriptions when there is room, otherwise one line each.
+	homeHeight := atLeast(bodyHeight-3, 3)
+	m.homeTwoLine = homeHeight >= 2*len(m.home.Items())
+	m.home.SetDelegate(&tuiRowDelegate{twoLine: m.homeTwoLine, focused: true})
+	m.home.SetSize(width, homeHeight)
+
+	actionHeight := atLeast(bodyHeight-3, 3)
+	m.actionsTwoLine = actionHeight >= 2*len(m.actionList.Items())
+	m.actionList.SetDelegate(&tuiRowDelegate{twoLine: m.actionsTwoLine, focused: true})
+	m.actionList.SetSize(width, actionHeight)
+
+	m.searchList.SetSize(width, atLeast(bodyHeight-m.searchControlLines()-2, 2))
+	m.filesList.SetSize(width, atLeast(bodyHeight-5, 2))
+
+	infoChrome := 4
+	if m.infoErr != nil {
+		infoChrome += 3
 	}
 	m.infoView.Width = width
-	m.infoView.Height = height
+	m.infoView.Height = atLeast(bodyHeight-infoChrome, 2)
 	m.helpView.Width = width
-	m.helpView.Height = height
+	m.helpView.Height = atLeast(bodyHeight-1, 2)
+	m.helpView.SetContent(tuiHelpText(width))
 
-	m.progress.Width = width - 12
-	if m.progress.Width > 56 {
-		m.progress.Width = 56
+	m.progress.Width = width - 8
+	if m.progress.Width > 60 {
+		m.progress.Width = 60
 	}
-	if m.progress.Width < 20 {
-		m.progress.Width = 20
+	if m.progress.Width < 10 {
+		m.progress.Width = 10
 	}
 
-	for _, input := range []*textinput.Model{
-		&m.searchInput, &m.outputInput, &m.versionInput, &m.fileFilter,
-		&m.extractOutput, &m.decryptInput, &m.titleIDInput,
-	} {
-		input.Width = width - 16
-		if input.Width < 16 {
-			input.Width = 16
-		}
+	fieldWidth := atLeast(width-(2+tuiLabelWidth+3)-1, 10)
+	for _, input := range []*textinput.Model{&m.outputInput, &m.extractOutput, &m.decryptInput, &m.titleIDInput} {
+		input.Width = fieldWidth
 	}
+	m.versionInput.Width = atLeast(fieldWidth, 10)
+	if m.versionInput.Width > 16 {
+		m.versionInput.Width = 16
+	}
+	m.titleIDInput.Width = atLeast(fieldWidth, 10)
+	if m.titleIDInput.Width > 28 {
+		m.titleIDInput.Width = 28
+	}
+	searchWidth := atLeast(width-(2+8+2)-1, 10)
+	m.searchInput.Width = searchWidth
+	m.fileFilter.Width = searchWidth
+}
+
+func atLeast(value, minimum int) int {
+	if value < minimum {
+		return minimum
+	}
+	return value
 }
 
 func (m *tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -482,6 +520,11 @@ func (m *tuiModel) handleHomeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "q":
 		return m, tea.Quit
+	case "/":
+		return m, m.openSearch()
+	case "?":
+		m.openHelp(screenHome)
+		return m, nil
 	case "enter":
 		item, ok := m.home.SelectedItem().(tuiMenuItem)
 		if !ok {
@@ -501,8 +544,7 @@ func (m *tuiModel) handleHomeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case screenDecrypt:
 			return m, m.openDecrypt()
 		case screenHelp:
-			m.screen = screenHelp
-			m.helpView.GotoTop()
+			m.openHelp(screenHome)
 			return m, nil
 		}
 		return m, nil
@@ -542,17 +584,36 @@ func (m *tuiModel) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		cmd := m.updateFocusedInput(msg)
 		return m, tea.Batch(cmd, m.refreshSearch())
-	case 1:
-		if key == "left" || key == "right" || key == " " || key == "enter" {
-			m.cycleRegion(key != "left")
+	case 1, 2:
+		switch key {
+		case "left", "right", " ", "enter":
+			if m.searchFocus == 1 {
+				m.cycleRegion(key != "left")
+			} else {
+				m.cycleType(key != "left")
+			}
 			return m, m.refreshSearch()
-		}
-	case 2:
-		if key == "left" || key == "right" || key == " " || key == "enter" {
-			m.cycleType(key != "left")
-			return m, m.refreshSearch()
+		case "down":
+			m.setSearchFocus(3)
+			return m, nil
+		case "up":
+			m.setSearchFocus(0)
+			return m, textinput.Blink
 		}
 	case 3:
+		switch key {
+		case "/":
+			m.setSearchFocus(0)
+			return m, textinput.Blink
+		case "?":
+			m.openHelp(screenSearch)
+			return m, nil
+		case "up":
+			if m.searchList.Index() == 0 {
+				m.setSearchFocus(0)
+				return m, textinput.Blink
+			}
+		}
 		if entry, ok := m.currentSearchEntry(); ok {
 			switch key {
 			case "enter":
@@ -576,6 +637,15 @@ func (m *tuiModel) handleActionsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		return m, m.returnToSearch()
+	case "d":
+		return m.openDownloadOptions(m.selected)
+	case "i":
+		return m.startInfo(m.selected)
+	case "f":
+		return m.startFiles(m.selected)
+	case "?":
+		m.openHelp(screenActions)
+		return m, nil
 	case "enter":
 		item, ok := m.actionList.SelectedItem().(tuiActionItem)
 		if !ok {
@@ -618,6 +688,7 @@ func (m *tuiModel) handleDownloadOptionsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd)
 			m.setDownloadFocus((m.downloadFocus + 1) % 6)
 			return m, textinput.Blink
 		}
+		m.err = ""
 		return m, m.updateFocusedInput(msg)
 	case 2:
 		if key == " " || key == "left" || key == "right" || key == "enter" {
@@ -634,13 +705,15 @@ func (m *tuiModel) handleDownloadOptionsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd)
 			}
 		}
 		return m, nil
-	case 4:
-		if key == "enter" || key == " " {
-			return m, m.beginDownload()
-		}
-		return m, nil
-	case 5:
-		if key == "enter" || key == " " {
+	case 4, 5:
+		switch key {
+		case "left", "right":
+			m.setDownloadFocus(9 - m.downloadFocus)
+			return m, nil
+		case "enter", " ":
+			if m.downloadFocus == 4 {
+				return m, m.beginDownload()
+			}
 			return m, m.openActionsCmd(m.selected)
 		}
 		return m, nil
@@ -666,10 +739,14 @@ func (m *tuiModel) handleInfoKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m *tuiModel) handleFilesKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
-	switch key {
-	case "esc":
+	if key == "esc" {
 		m.closeTree()
 		return m, m.openActionsCmd(m.selected)
+	}
+	if m.filesLoading {
+		return m, nil
+	}
+	switch key {
 	case "tab":
 		m.setFileFocus((m.fileFocus + 1) % 2)
 		return m, textinput.Blink
@@ -715,6 +792,7 @@ func (m *tuiModel) handleFilesKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmd, m.rebuildFilesListCmd())
 	}
 
+	m.status = ""
 	var cmd tea.Cmd
 	m.filesList, cmd = m.filesList.Update(msg)
 	return m, cmd
@@ -739,13 +817,16 @@ func (m *tuiModel) handleExtractOptionsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 			m.setExtractFocus(1)
 			return m, textinput.Blink
 		}
+		m.err = ""
 		return m, m.updateFocusedInput(msg)
-	case 1:
-		if key == "enter" || key == " " {
-			return m, m.beginExtract()
-		}
-	case 2:
-		if key == "enter" || key == " " {
+	case 1, 2:
+		switch key {
+		case "left", "right":
+			m.setExtractFocus(3 - m.extractFocus)
+		case "enter", " ":
+			if m.extractFocus == 1 {
+				return m, m.beginExtract()
+			}
 			return m, m.backToFiles()
 		}
 	}
@@ -771,17 +852,20 @@ func (m *tuiModel) handleDecryptKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.setDecryptFocus(1)
 			return m, textinput.Blink
 		}
+		m.err = ""
 		return m, m.updateFocusedInput(msg)
 	case 1:
 		if key == " " || key == "left" || key == "right" || key == "enter" {
 			m.decryptDelete = !m.decryptDelete
 		}
-	case 2:
-		if key == "enter" || key == " " {
-			return m, m.beginDecrypt()
-		}
-	case 3:
-		if key == "enter" || key == " " {
+	case 2, 3:
+		switch key {
+		case "left", "right":
+			m.setDecryptFocus(5 - m.decryptFocus)
+		case "enter", " ":
+			if m.decryptFocus == 2 {
+				return m, m.beginDecrypt()
+			}
 			return m, m.openHome()
 		}
 	}
@@ -810,8 +894,9 @@ func (m *tuiModel) handleTitleIDKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *tuiModel) handleHelpKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if msg.String() == "esc" {
-		return m, m.openHome()
+	switch msg.String() {
+	case "esc", "?":
+		return m, m.closeHelp()
 	}
 	var cmd tea.Cmd
 	m.helpView, cmd = m.helpView.Update(msg)
@@ -826,359 +911,6 @@ func (m *tuiModel) handleMessageKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *tuiModel) screenView() (string, string) {
-	switch m.screen {
-	case screenHome:
-		body := m.home.View()
-		if m.err != "" {
-			body += "\n" + tuiErrorStyle.Render(m.err)
-		}
-		return "Main menu", body
-	case screenSearch:
-		return "Search", m.searchView()
-	case screenActions:
-		header := fmt.Sprintf("Selected: %s", displayName(m.selected))
-		header += "\n" + tuiDimStyle.Render(fmt.Sprintf("%016x · %s · %s",
-			m.selected.TitleID,
-			wiiudownloader.GetFormattedKind(m.selected.TitleID),
-			formatRegion(m.selected.Region),
-		))
-		return "Actions", header + "\n\n" + m.actionList.View()
-	case screenDownloadOptions:
-		return "Download", m.downloadOptionsView()
-	case screenProgress:
-		return "Transfer", m.progressView()
-	case screenInfo:
-		return "Info", m.infoView2()
-	case screenFiles:
-		return "Files", m.filesView()
-	case screenExtractOptions:
-		return "Extract files", m.extractOptionsView()
-	case screenDecrypt:
-		return "Decrypt", m.decryptView()
-	case screenTitleID:
-		return "Download by title ID", m.titleIDView()
-	case screenDBUpdate:
-		return "Title database", m.dbUpdateView()
-	case screenHelp:
-		return "Help", m.helpView.View()
-	case screenMessage:
-		return "Done", m.messageView()
-	default:
-		return "", ""
-	}
-}
-
-func (m *tuiModel) searchView() string {
-	searchLabel := tuiLabelStyle.Render("Search ")
-	if m.searchFocus == 0 {
-		searchLabel = tuiAccentStyle.Render("Search ")
-	}
-	regionLabel := tuiLabelStyle.Render("Region ")
-	if m.searchFocus == 1 {
-		regionLabel = tuiAccentStyle.Render("Region ")
-	}
-	typeLabel := tuiLabelStyle.Render("Type ")
-	if m.searchFocus == 2 {
-		typeLabel = tuiAccentStyle.Render("Type ")
-	}
-
-	line1 := searchLabel + m.searchInput.View()
-	line2 := regionLabel + tuiAccentStyle.Render("["+tuiRegionChoices[m.regionIndex].label+"]") +
-		"   " + typeLabel + tuiAccentStyle.Render("["+tuiTypeChoices[m.typeIndex].label+"]")
-
-	status := fmt.Sprintf("%d results", m.searchTotal)
-	if m.searchTotal > tuiMaxSearchResults {
-		status = fmt.Sprintf("showing first %d of %d results — refine the search", tuiMaxSearchResults, m.searchTotal)
-	}
-	if m.searchTotal == 0 {
-		status = "no results"
-	}
-	if m.err != "" {
-		status = tuiErrorStyle.Render(m.err)
-	}
-	return line1 + "\n" + line2 + "\n" + m.searchList.View() + "\n" + tuiDimStyle.Render(status)
-}
-
-func (m *tuiModel) downloadOptionsView() string {
-	var builder strings.Builder
-	builder.WriteString(tuiAccentStyle.Render("Download ") + displayName(m.selected) + "\n")
-	builder.WriteString(tuiDimStyle.Render(fmt.Sprintf("%016x · %s · %s", m.selected.TitleID,
-		wiiudownloader.GetFormattedKind(m.selected.TitleID), formatRegion(m.selected.Region))) + "\n\n")
-
-	builder.WriteString(m.fieldLine("Output folder", m.outputInput.View(), m.downloadFocus == 0))
-	builder.WriteString(m.fieldLine("Version", m.versionInput.View(), m.downloadFocus == 1))
-	builder.WriteString(m.toggleLine("Decrypt contents", m.decrypt, m.downloadFocus == 2))
-	builder.WriteString(m.toggleLine("Delete encrypted files after decryption", m.deleteEncrypted, m.downloadFocus == 3))
-	if !m.decrypt {
-		builder.WriteString(tuiDimStyle.Render("  (delete encrypted requires decrypt)") + "\n")
-	}
-	builder.WriteString("\n")
-	builder.WriteString(m.actionLine("Start download", m.downloadFocus == 4))
-	builder.WriteString(m.actionLine("Back", m.downloadFocus == 5))
-	if m.err != "" {
-		builder.WriteString("\n" + tuiErrorStyle.Render(m.err) + "\n")
-	}
-
-	version, err := validateVersionText(m.versionInput.Value())
-	if err == nil {
-		dir := titleDirName(m.selected, versionInt(version, m.selected))
-		builder.WriteString("\n" + tuiDimStyle.Render("Destination: "+filepath.Join(expandHomePath(m.outputInput.Value()), dir)))
-	}
-	return builder.String()
-}
-
-func (m *tuiModel) progressView() string {
-	var builder strings.Builder
-	label := "Downloading"
-	switch m.progressOperation {
-	case "extract":
-		label = "Extracting"
-	case "decrypt":
-		label = "Decrypting"
-	}
-	if m.progressPhase == "decrypt" {
-		label = "Decrypting"
-	}
-	builder.WriteString(tuiAccentStyle.Render(label+": ") + m.progressTitle + "\n")
-	if !m.progressStart.IsZero() {
-		builder.WriteString(tuiDimStyle.Render("Elapsed "+formatDuration(time.Since(m.progressStart))) + "\n")
-	}
-	builder.WriteString("\n")
-
-	fraction := 0.0
-	if m.progressPhase == "decrypt" {
-		fraction = m.progressDecrypt
-		builder.WriteString(m.progress.ViewAs(fraction) + "\n")
-		builder.WriteString(fmt.Sprintf("Decrypting  %5.1f%%\n", fraction*100))
-	} else {
-		if m.progressTotal > 0 {
-			fraction = float64(m.progressBytes) / float64(m.progressTotal)
-		}
-		builder.WriteString(m.progress.ViewAs(clampTUI(fraction)) + "\n")
-		builder.WriteString(fmt.Sprintf("%s / %s", formatBytes(m.progressBytes), formatBytes(m.progressTotal)))
-		if m.progressSpeed > 0 {
-			builder.WriteString("   " + formatRate(m.progressSpeed))
-			if m.progressTotal > m.progressBytes {
-				eta := time.Duration(float64(m.progressTotal-m.progressBytes)/m.progressSpeed) * time.Second
-				builder.WriteString("   ETA " + formatDuration(eta))
-			}
-		}
-		builder.WriteString("\n")
-	}
-	builder.WriteString("\n")
-	if m.cancelling {
-		builder.WriteString(tuiErrorStyle.Render("Cancelling…") + "\n")
-	} else {
-		builder.WriteString(tuiDimStyle.Render("Esc cancels the current transfer. Partial downloads resume later.") + "\n")
-	}
-	return builder.String()
-}
-
-func (m *tuiModel) infoView2() string {
-	var builder strings.Builder
-	builder.WriteString(tuiAccentStyle.Render(displayName(m.infoEntry)) + "\n")
-	builder.WriteString(tuiDimStyle.Render(fmt.Sprintf("%016x · %s · %s",
-		m.infoEntry.TitleID,
-		wiiudownloader.GetFormattedKind(m.infoEntry.TitleID),
-		formatRegion(m.infoEntry.Region),
-	)) + "\n\n")
-	if m.infoLoading {
-		builder.WriteString(m.spinner.View() + " Fetching title metadata…")
-		return builder.String()
-	}
-	if m.infoErr != nil {
-		builder.WriteString(tuiErrorStyle.Render("Could not fetch metadata: "+m.infoErr.Error()) + "\n\n")
-	}
-	builder.WriteString(m.infoView.View())
-	return builder.String()
-}
-
-func (m *tuiModel) infoContent() string {
-	var builder strings.Builder
-	fmt.Fprintf(&builder, "Title ID:        %016x\n", m.infoEntry.TitleID)
-	fmt.Fprintf(&builder, "Kind:            %s\n", wiiudownloader.GetFormattedKind(m.infoEntry.TitleID))
-	fmt.Fprintf(&builder, "Region:          %s\n", formatRegion(m.infoEntry.Region))
-	fmt.Fprintf(&builder, "Category:        %s\n", categoryName(categoryOf(m.infoEntry)))
-	if m.infoEntry.Version > 0 {
-		fmt.Fprintf(&builder, "Database version: %d\n", m.infoEntry.Version)
-	}
-	fmt.Fprintf(&builder, "Requested:       %s\n", displayVersion(m.infoVersion))
-	if m.infoErr != nil {
-		fmt.Fprintf(&builder, "TMD:             unavailable (%v)\n", m.infoErr)
-		return builder.String()
-	}
-	if m.infoTMD == nil {
-		return builder.String()
-	}
-	fmt.Fprintf(&builder, "Title version:   %d\n", m.infoTMD.TitleVersion)
-	fmt.Fprintf(&builder, "Contents:        %d\n", len(m.infoTMD.Contents))
-	fmt.Fprintf(&builder, "Download size:   %s\n", formatBytes(int64(m.infoTMD.CalculateTotalSize())))
-	builder.WriteString("\nCONTENT ID   SIZE         HASHED\n")
-	for _, content := range m.infoTMD.Contents {
-		hashed := "no"
-		if content.Type&wiiudownloader.CONTENT_TYPE_HASHED != 0 {
-			hashed = "yes"
-		}
-		fmt.Fprintf(&builder, "%08x     %-12s %s\n", content.ID, formatBytes(content.DownloadSize()), hashed)
-	}
-	return builder.String()
-}
-
-func (m *tuiModel) filesView() string {
-	var builder strings.Builder
-	builder.WriteString(tuiAccentStyle.Render(displayName(m.filesEntry)) + "\n")
-	builder.WriteString(tuiDimStyle.Render(fmt.Sprintf("%016x · version %s", m.filesEntry.TitleID, displayVersion(m.filesVersion))) + "\n\n")
-	if m.filesLoading {
-		builder.WriteString(m.spinner.View() + " Fetching file list…")
-		return builder.String()
-	}
-	filterLabel := tuiLabelStyle.Render("Filter ")
-	if m.fileFocus == 0 {
-		filterLabel = tuiAccentStyle.Render("Filter ")
-	}
-	builder.WriteString(filterLabel + m.fileFilter.View() + "\n")
-	builder.WriteString(m.filesList.View() + "\n")
-	status := fmt.Sprintf("%d file(s)", len(m.filteredFiles))
-	if m.status != "" {
-		status = m.status
-	}
-	builder.WriteString(tuiDimStyle.Render(status))
-	return builder.String()
-}
-
-func (m *tuiModel) extractOptionsView() string {
-	var builder strings.Builder
-	total := uint64(0)
-	for _, path := range m.extractPaths {
-		for _, file := range m.allFiles {
-			if file.Path == path {
-				total += file.Size
-				break
-			}
-		}
-	}
-	builder.WriteString(tuiAccentStyle.Render(fmt.Sprintf("Extract %d file(s)", len(m.extractPaths))) + "\n")
-	builder.WriteString(tuiDimStyle.Render(fmt.Sprintf("About %s", formatBytes(int64(total)))) + "\n\n")
-	builder.WriteString(m.fieldLine("Output folder", m.extractOutput.View(), m.extractFocus == 0))
-	builder.WriteString("\n")
-	builder.WriteString(m.actionLine("Start extraction", m.extractFocus == 1))
-	builder.WriteString(m.actionLine("Back", m.extractFocus == 2))
-	if m.err != "" {
-		builder.WriteString("\n" + tuiErrorStyle.Render(m.err) + "\n")
-	}
-	return builder.String()
-}
-
-func (m *tuiModel) decryptView() string {
-	var builder strings.Builder
-	builder.WriteString(tuiDimStyle.Render("Decrypt a folder that contains title.tmd, title.tik and .app files.") + "\n\n")
-	builder.WriteString(m.fieldLine("Folder", m.decryptInput.View(), m.decryptFocus == 0))
-	builder.WriteString(m.toggleLine("Delete encrypted .app/.h3 files", m.decryptDelete, m.decryptFocus == 1))
-	builder.WriteString("\n")
-	builder.WriteString(m.actionLine("Start decryption", m.decryptFocus == 2))
-	builder.WriteString(m.actionLine("Back", m.decryptFocus == 3))
-	if m.err != "" {
-		builder.WriteString("\n" + tuiErrorStyle.Render(m.err) + "\n")
-	}
-	return builder.String()
-}
-
-func (m *tuiModel) titleIDView() string {
-	var builder strings.Builder
-	builder.WriteString(tuiDimStyle.Render("Enter a 16-digit title ID, or go back and use Search for a name.") + "\n\n")
-	builder.WriteString(m.fieldLine("Title ID", m.titleIDInput.View(), true))
-	if m.err != "" {
-		builder.WriteString("\n" + tuiErrorStyle.Render(m.err) + "\n")
-	}
-	return builder.String()
-}
-
-func (m *tuiModel) dbUpdateView() string {
-	if !m.dbUpdating {
-		return "Starting database update…"
-	}
-	return m.spinner.View() + " " + m.dbStatus
-}
-
-func (m *tuiModel) messageView() string {
-	var builder strings.Builder
-	style := tuiSuccessStyle
-	if m.messageKind == "error" {
-		style = tuiErrorStyle
-	} else if m.messageKind == "cancel" {
-		style = tuiErrorStyle
-	}
-	builder.WriteString(style.Render(m.messageTitle) + "\n\n")
-	width := m.width - 4
-	if width < 20 {
-		width = 20
-	}
-	builder.WriteString(lipgloss.NewStyle().Width(width).Render(m.messageBody) + "\n\n")
-	builder.WriteString(tuiDimStyle.Render("Press Enter to continue."))
-	return builder.String()
-}
-
-func (m *tuiModel) footer() string {
-	switch m.screen {
-	case screenHome:
-		return "↑/↓ move · Enter select · q quit"
-	case screenSearch:
-		return "type to search · Tab focus · ←/→ filter · ↑/↓ results · Enter actions · d/i/f shortcuts · Esc back"
-	case screenActions:
-		return "↑/↓ move · Enter select · Esc back"
-	case screenDownloadOptions:
-		return "↑/↓ or Tab move · Space toggles · Enter start · Esc back"
-	case screenProgress:
-		return "Esc cancel · Ctrl+C twice to force quit"
-	case screenInfo:
-		return "↑/↓ scroll · PgUp/PgDn page · Esc back"
-	case screenFiles:
-		return "Tab filter/list · Enter extract selected · a extract filtered · Esc back"
-	case screenExtractOptions:
-		return "↑/↓ or Tab move · Enter start · Esc back"
-	case screenDecrypt:
-		return "↑/↓ or Tab move · Space toggle · Enter start · Esc back"
-	case screenTitleID:
-		return "Enter continue · Esc back"
-	case screenDBUpdate:
-		return "Please wait · Ctrl+C quit"
-	case screenHelp:
-		return "↑/↓ scroll · Esc back"
-	case screenMessage:
-		return "Enter continue"
-	default:
-		return ""
-	}
-}
-
-func (m *tuiModel) fieldLine(label, value string, focused bool) string {
-	labelStyle := tuiLabelStyle
-	if focused {
-		labelStyle = tuiAccentStyle
-	}
-	return labelStyle.Render(fmt.Sprintf("%-16s ", label+":")) + value + "\n"
-}
-
-func (m *tuiModel) toggleLine(label string, value, focused bool) string {
-	marker := "[ ]"
-	if value {
-		marker = "[x]"
-	}
-	style := tuiLabelStyle
-	if focused {
-		style = tuiAccentStyle
-	}
-	return style.Render(fmt.Sprintf("%-16s ", label+":")) + style.Render(marker) + "\n"
-}
-
-func (m *tuiModel) actionLine(label string, focused bool) string {
-	if focused {
-		return tuiAccentStyle.Render("> "+label) + "\n"
-	}
-	return "  " + label + "\n"
-}
-
 func (m *tuiModel) openHome() tea.Cmd {
 	m.blurAllInputs()
 	m.closeTree()
@@ -1186,6 +918,25 @@ func (m *tuiModel) openHome() tea.Cmd {
 	m.err = ""
 	m.status = ""
 	return nil
+}
+
+func (m *tuiModel) openHelp(from tuiScreen) {
+	m.blurAllInputs()
+	m.helpReturn = from
+	m.screen = screenHelp
+	m.helpView.GotoTop()
+}
+
+func (m *tuiModel) closeHelp() tea.Cmd {
+	switch m.helpReturn {
+	case screenSearch:
+		return m.returnToSearch()
+	case screenActions:
+		m.screen = screenActions
+		return nil
+	default:
+		return m.openHome()
+	}
 }
 
 func (m *tuiModel) openSearch() tea.Cmd {
@@ -1213,7 +964,7 @@ func (m *tuiModel) openActions(entry wiiudownloader.TitleEntry) (tea.Model, tea.
 func (m *tuiModel) openActionsCmd(entry wiiudownloader.TitleEntry) tea.Cmd {
 	m.blurAllInputs()
 	m.selected = entry
-	m.actionList = newTUIList(tuiActionItems(), m.actionList.Width(), m.actionList.Height())
+	m.actionList = newTUIMenuList(tuiActionItems(), m.actionList.Width(), m.actionList.Height(), !m.actionsTwoLine)
 	m.actionList.Select(0)
 	m.screen = screenActions
 	m.err = ""
@@ -1258,6 +1009,7 @@ func (m *tuiModel) openExtractOptions(paths []string) *tuiModel {
 	m.extractOutput.SetValue(defaultDownloadDir())
 	m.screen = screenExtractOptions
 	m.err = ""
+	m.status = ""
 	m.setExtractFocus(0)
 	return m
 }
@@ -1275,6 +1027,7 @@ func (m *tuiModel) showMessage(title, body string, returnTo tuiScreen, kind stri
 	m.screen = screenMessage
 	m.messageTitle = title
 	m.messageBody = body
+	m.messageHint = ""
 	m.messageReturn = returnTo
 	m.messageKind = kind
 	m.blurAllInputs()
@@ -1302,6 +1055,7 @@ func (m *tuiModel) setSearchFocus(focus int) {
 	if focus == 0 {
 		m.searchInput.Focus()
 	}
+	m.searchList.SetDelegate(&tuiRowDelegate{focused: focus == 3})
 }
 
 func (m *tuiModel) setDownloadFocus(focus int) {
@@ -1339,6 +1093,7 @@ func (m *tuiModel) setFileFocus(focus int) {
 	if focus == 0 {
 		m.fileFilter.Focus()
 	}
+	m.filesList.SetDelegate(&tuiRowDelegate{focused: focus == 1})
 }
 
 func (m *tuiModel) blurAllInputs() {
@@ -1461,6 +1216,7 @@ func (m *tuiModel) startInfo(entry wiiudownloader.TitleEntry) (tea.Model, tea.Cm
 	m.infoLoading = true
 	m.screen = screenInfo
 	m.blurAllInputs()
+	m.resize()
 	client := m.app.client
 	return m, tea.Batch(m.spinner.Tick, func() tea.Msg {
 		tmd, fetchErr := wiiudownloader.FetchTitleTMD(entry.TitleID, version, client)
@@ -1515,7 +1271,8 @@ func (m *tuiModel) rebuildFilesList() tea.Cmd {
 	if len(items) > 0 {
 		m.filesList.Select(0)
 	}
-	m.status = fmt.Sprintf("%d of %d file(s)", len(filtered), len(m.allFiles))
+	// The file count is rendered by the view; status holds transient notices.
+	m.status = ""
 	return cmd
 }
 
@@ -1526,6 +1283,29 @@ func (m *tuiModel) closeTree() {
 	}
 	m.allFiles = nil
 	m.filteredFiles = nil
+}
+
+// resetProgress prepares the transfer screen for a new operation.
+func (m *tuiModel) resetProgress(title, operation, phase string, steps []string) {
+	m.progressCh = make(chan tuiProgressMsg, 256)
+	m.reporter = newTUIProgress(m.progressCh)
+	m.progressTitle = title
+	m.progressOperation = operation
+	m.progressSteps = steps
+	m.progressStart = time.Now()
+	m.progressElapsed = 0
+	m.progressBytes = 0
+	m.progressTotal = 0
+	m.progressDecrypt = 0
+	m.progressPhase = phase
+	m.progressSpeed = 0
+	m.progressLastBytes = 0
+	m.progressLastTime = time.Time{}
+	m.cancelling = false
+	m.err = ""
+	m.status = ""
+	m.screen = screenProgress
+	m.blurAllInputs()
 }
 
 func (m *tuiModel) beginDownload() tea.Cmd {
@@ -1550,27 +1330,15 @@ func (m *tuiModel) beginDownload() tea.Cmd {
 	deleteEncrypted := m.deleteEncrypted && decrypt
 	client := m.app.client
 
-	m.progressCh = make(chan tuiProgressMsg, 256)
-	m.reporter = newTUIProgress(m.progressCh)
-	m.progressTitle = displayName(entry)
-	m.progressOperation = "download"
-	m.progressStart = time.Now()
-	m.progressBytes = 0
-	m.progressTotal = 0
-	m.progressDecrypt = 0
-	m.progressPhase = "download"
-	m.progressSpeed = 0
-	m.progressLastBytes = 0
-	m.progressLastTime = time.Time{}
-	m.cancelling = false
-	m.err = ""
-	m.status = ""
-	m.screen = screenProgress
-	m.blurAllInputs()
+	steps := []string{"Download"}
+	if decrypt {
+		steps = append(steps, "Decrypt")
+	}
+	m.resetProgress(displayName(entry), "download", "download", steps)
 
 	reporter := m.reporter
 	ch := m.progressCh
-	return tea.Batch(waitForTUIProgress(ch), func() tea.Msg {
+	return tea.Batch(waitForTUIProgress(ch), m.spinner.Tick, func() tea.Msg {
 		downloadErr := wiiudownloader.DownloadTitle(
 			fmt.Sprintf("%016x", entry.TitleID),
 			target,
@@ -1599,29 +1367,13 @@ func (m *tuiModel) beginExtract() tea.Cmd {
 	paths := append([]string(nil), m.extractPaths...)
 	tree := m.tree
 
-	m.progressCh = make(chan tuiProgressMsg, 256)
-	m.reporter = newTUIProgress(m.progressCh)
-	m.progressTitle = displayName(m.filesEntry)
-	m.progressOperation = "extract"
-	m.progressStart = time.Now()
-	m.progressBytes = 0
-	m.progressTotal = 0
-	m.progressDecrypt = 0
-	m.progressPhase = "download"
-	m.progressSpeed = 0
-	m.progressLastBytes = 0
-	m.progressLastTime = time.Time{}
-	m.cancelling = false
-	m.err = ""
-	m.status = ""
-	m.screen = screenProgress
-	m.blurAllInputs()
+	m.resetProgress(displayName(m.filesEntry), "extract", "download", []string{"Extract"})
 
 	reporter := m.reporter
 	ch := m.progressCh
-	return tea.Batch(waitForTUIProgress(ch), func() tea.Msg {
+	return tea.Batch(waitForTUIProgress(ch), m.spinner.Tick, func() tea.Msg {
 		extractErr := tree.DownloadFiles(target, paths, reporter)
-		return tuiExtractDoneMsg{err: extractErr, paths: paths}
+		return tuiExtractDoneMsg{err: extractErr, paths: paths, target: target}
 	})
 }
 
@@ -1638,27 +1390,11 @@ func (m *tuiModel) beginDecrypt() tea.Cmd {
 	}
 	deleteEncrypted := m.decryptDelete
 
-	m.progressCh = make(chan tuiProgressMsg, 256)
-	m.reporter = newTUIProgress(m.progressCh)
-	m.progressTitle = filepath.Base(path)
-	m.progressOperation = "decrypt"
-	m.progressStart = time.Now()
-	m.progressBytes = 0
-	m.progressTotal = 0
-	m.progressDecrypt = 0
-	m.progressPhase = "decrypt"
-	m.progressSpeed = 0
-	m.progressLastBytes = 0
-	m.progressLastTime = time.Time{}
-	m.cancelling = false
-	m.err = ""
-	m.status = ""
-	m.screen = screenProgress
-	m.blurAllInputs()
+	m.resetProgress(filepath.Base(path), "decrypt", "decrypt", []string{"Decrypt"})
 
 	reporter := m.reporter
 	ch := m.progressCh
-	return tea.Batch(waitForTUIProgress(ch), func() tea.Msg {
+	return tea.Batch(waitForTUIProgress(ch), m.spinner.Tick, func() tea.Msg {
 		decryptErr := wiiudownloader.DecryptContents(path, reporter, deleteEncrypted, "")
 		return tuiDecryptDoneMsg{err: decryptErr, path: path}
 	})
@@ -1734,6 +1470,9 @@ func (m *tuiModel) cancelCurrent() tea.Cmd {
 func (m *tuiModel) finishProgress() {
 	m.cancelling = false
 	m.status = ""
+	if !m.progressStart.IsZero() {
+		m.progressElapsed = time.Since(m.progressStart)
+	}
 }
 
 func waitForTUIProgress(ch <-chan tuiProgressMsg) tea.Cmd {
@@ -1757,6 +1496,8 @@ func (m *tuiModel) loading() bool {
 		return m.filesLoading
 	case screenDBUpdate:
 		return m.dbUpdating
+	case screenProgress:
+		return m.reporter != nil
 	default:
 		return false
 	}

@@ -201,9 +201,13 @@ Keyboard highlights:
 |---|---|
 | `↑`/`↓` | Move through menus and lists |
 | `Tab` / `Shift+Tab` | Move between search, filters and results |
-| `←`/`→` | Change the focused region or type filter |
+| `←`/`→` | Change the focused region/type filter, or switch buttons |
 | `Enter` | Select, confirm, or open actions |
 | `d` / `i` / `f` | Download, show info, or browse files for the selected result |
+| `/` | Open search, or jump back to the search box |
+| `?` | Open help |
+| `a` | In the file browser, extract all currently filtered files |
+| `PgUp` / `PgDn` | Scroll info, help, and file listings |
 | `Esc` | Back, or cancel the active transfer |
 | `Ctrl+C` | Cancel/quit; press twice during a transfer to force quit |
 | `q` | Quit from the main menu |

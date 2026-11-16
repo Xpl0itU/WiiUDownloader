@@ -57,7 +57,7 @@ Wii U USB Helper is abandoned. It only runs on Windows. Antivirus software frequ
 - Optional: delete encrypted files after decryption to save disk space
 - Resume interrupted downloads
 - Re-decrypt previously downloaded files without re-downloading
-- Command-line interface (`wiiudl`) for Linux and macOS, with JSON output for scripting
+- Command-line interface (`wiiudl`) and full-screen TUI for Linux and macOS, with JSON output for scripting
 
 ---
 
@@ -174,6 +174,44 @@ go build -trimpath -o wiiudl ./cmd/wiiudl
 go install ./cmd/wiiudl
 ```
 
+### Interactive TUI
+
+Run `wiiudl` with no command in a terminal to open the full-screen TUI, or start
+it explicitly:
+
+```bash
+./wiiudl
+# or
+./wiiudl tui
+```
+
+The TUI is a guided interface:
+
+- **Search titles** by name or title ID; filter by region and content type.
+- **Download** with output folder, version, decryption and cleanup options.
+- **Watch live progress** with speed, ETA and a progress bar.
+- **Inspect metadata** including TMD version, content count, size and contents.
+- **Browse and extract files** from a title without downloading the whole game.
+- **Decrypt** an existing title folder.
+- **Update the title database** without leaving the interface.
+
+Keyboard highlights:
+
+| Key | Action |
+|---|---|
+| `↑`/`↓` | Move through menus and lists |
+| `Tab` / `Shift+Tab` | Move between search, filters and results |
+| `←`/`→` | Change the focused region or type filter |
+| `Enter` | Select, confirm, or open actions |
+| `d` / `i` / `f` | Download, show info, or browse files for the selected result |
+| `Esc` | Back, or cancel the active transfer |
+| `Ctrl+C` | Cancel/quit; press twice during a transfer to force quit |
+| `q` | Quit from the main menu |
+
+The TUI requires an interactive terminal. When input or output is redirected,
+`wiiudl` prints the regular help instead. Every non-interactive command below
+still works normally.
+
 ### Quick start
 
 ```bash
@@ -212,6 +250,7 @@ go install ./cmd/wiiudl
 | `download <title...>` | Download one or more titles, optionally decrypting them |
 | `extract <title>` | Download and extract selected files (`--file`, `--filter`, `--all`) |
 | `decrypt <dir...>` | Decrypt folders left by a download without `--decrypt` |
+| `tui` | Start the full-screen interactive interface |
 | `db update\|info\|clear` | Manage the cached title database |
 | `version` | Print the CLI version |
 
@@ -219,7 +258,7 @@ Run `./wiiudl help <command>` for the full flag list of any command.
 
 Useful global flags: `--db PATH` (use a local JSON or generated Go database),
 `--no-db-fetch`, `--quiet`, and `--json` (search, info, files, download,
-extract, decrypt and db update).
+extract, decrypt and db update; the TUI always renders its own interface).
 A title argument is either a 16-digit hex title ID or a name/query. In scripts,
 prefer title IDs or pass `--first` when a name may match multiple regions.
 
@@ -244,8 +283,10 @@ CLI will use it as a built-in fallback.
 - `2`: usage error
 - `130`: interrupted
 
-The first Ctrl+C cancels the current transfer cleanly; press it again to force
-quit. Progress is written to stderr, so `--json` output on stdout stays clean.
+In regular commands the first Ctrl+C cancels the current transfer cleanly; press
+it again to force quit. Progress is written to stderr, so `--json` output on
+stdout stays clean. In the TUI, `Esc` cancels a transfer, `Ctrl+C` quits, and a
+second `Ctrl+C` during a transfer force-quits.
 
 ---
 

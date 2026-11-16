@@ -60,33 +60,31 @@ func run(args []string) int {
 
 	rest := global.Args()
 	if len(rest) == 0 {
+		// Make bare `wiiudl` useful on a terminal: launch the TUI. When output
+		// is redirected, keep the traditional help text so scripts and pipes
+		// keep getting the same behavior.
+		if application.interactive && isTerminal(os.Stdout) && !application.json {
+			if err := cmdTUI(application, nil); err != nil {
+				fmt.Fprintf(application.stderr, "%s: %v\n", cliName, err)
+				return 1
+			}
+			return 0
+		}
 		printGeneralUsage(application.stdout)
 		return 0
 	}
 
 	command, commandArgs := rest[0], rest[1:]
-	var err error
 	switch command {
-	case "search", "list":
-		err = cmdSearch(application, commandArgs)
-	case "download":
-		err = cmdDownload(application, commandArgs)
-	case "info":
-		err = cmdInfo(application, commandArgs)
-	case "files":
-		err = cmdFiles(application, commandArgs)
-	case "extract":
-		err = cmdExtract(application, commandArgs)
-	case "decrypt":
-		err = cmdDecrypt(application, commandArgs)
-	case "db":
-		err = cmdDB(application, commandArgs)
 	case "version":
 		fmt.Fprintf(application.stdout, "%s %s\n", cliName, cliVersion)
 		return 0
 	case "help":
 		return runHelp(application, commandArgs)
-	default:
+	}
+
+	err := dispatchCommand(application, command, commandArgs)
+	if errors.Is(err, errUnknownCommand) {
 		fmt.Fprintf(application.stderr, "%s: unknown command %q\n\n", cliName, command)
 		printGeneralUsage(application.stderr)
 		return 2
@@ -109,6 +107,31 @@ func run(args []string) int {
 		return 130
 	}
 	return 1
+}
+
+var errUnknownCommand = errors.New("unknown command")
+
+func dispatchCommand(application *app, command string, args []string) error {
+	switch command {
+	case "search", "list":
+		return cmdSearch(application, args)
+	case "download":
+		return cmdDownload(application, args)
+	case "info":
+		return cmdInfo(application, args)
+	case "files":
+		return cmdFiles(application, args)
+	case "extract":
+		return cmdExtract(application, args)
+	case "decrypt":
+		return cmdDecrypt(application, args)
+	case "db":
+		return cmdDB(application, args)
+	case "tui", "interactive", "i":
+		return cmdTUI(application, args)
+	default:
+		return fmt.Errorf("%w: %s", errUnknownCommand, command)
+	}
 }
 
 func runHelp(application *app, args []string) int {
@@ -134,6 +157,8 @@ func runHelp(application *app, args []string) int {
 		return exitCode(cmdExtract(application, []string{"-h"}))
 	case "decrypt":
 		return exitCode(cmdDecrypt(application, []string{"-h"}))
+	case "tui", "interactive", "i":
+		return exitCode(cmdTUI(application, []string{"-h"}))
 	case "db":
 		fmt.Fprintln(application.stdout, dbUsage)
 		return 0
@@ -269,12 +294,15 @@ Commands:
   download <title...>     Download one or more titles
   extract <title>         Download and extract selected files from a title
   decrypt <dir...>        Decrypt previously downloaded title folders
+  tui                     Start the full-screen interactive interface
   db <update|info|clear>  Manage the title database cache
   version                 Print the CLI version
   help [command]          Show help for the CLI or a command
 
 A <title> is a 16-digit hex title ID (00050000101c9500 or 0x00050000101C9500)
 or a name/query. Ambiguous names prompt for a selection on a terminal.
+
+Running wiiudl with no command in a terminal opens the TUI.
 
 Global flags:
   --db PATH          Use a title database file (JSON or generated Go source)
@@ -286,6 +314,8 @@ The title database is downloaded once and cached in your user cache directory.
 Set WIIUD_DB_URL to use a different source.
 
 Examples:
+  %s
+  %s tui
   %s search zelda
   %s search --region usa --type game --limit 10 mario
   %s info 00050000101c9500
@@ -294,7 +324,7 @@ Examples:
   %s extract 00050000101c9500 --file content/...
   %s decrypt ~/Games/Game [Game] [00050000101c9500]
   %s db update
-`, cliName, cliVersion, cliName, cliName, cliName, cliName, cliName, cliName, cliName, cliName, cliName)
+`, cliName, cliVersion, cliName, cliName, cliName, cliName, cliName, cliName, cliName, cliName, cliName, cliName, cliName)
 }
 
 var dbUsage = `Usage:

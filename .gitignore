@@ -45,3 +45,10 @@ app.log
 .bak2
 
 .smoke
+
+# CLI binary
+/wiiudl
+
+# Interrupted download artifacts
+*.part
+*.resume.json

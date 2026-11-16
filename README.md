@@ -57,6 +57,7 @@ Wii U USB Helper is abandoned. It only runs on Windows. Antivirus software frequ
 - Optional: delete encrypted files after decryption to save disk space
 - Resume interrupted downloads
 - Re-decrypt previously downloaded files without re-downloading
+- Command-line interface (`wiiudl`) for Linux and macOS, with JSON output for scripting
 
 ---
 
@@ -152,6 +153,99 @@ cd cmd/WiiUDownloader && go build -o ../../WiiUDownloader .
 ```
 
 Requires Go 1.26+ and GTK+4 development libraries.
+
+---
+
+## Command-line interface (macOS and Linux)
+
+`wiiudl` is a GTK-free CLI built from the same core library as the desktop app.
+It supports searching the title database, inspecting titles, downloading games,
+listing and extracting individual files, and decrypting existing downloads.
+
+### Build
+
+No GTK or libadwaita packages are needed:
+
+```bash
+git clone https://github.com/Xpl0itU/WiiUDownloader.git
+cd WiiUDownloader
+go build -trimpath -o wiiudl ./cmd/wiiudl
+# or install it into your Go bin directory:
+go install ./cmd/wiiudl
+```
+
+### Quick start
+
+```bash
+# Download and cache the title database (first run does this automatically)
+./wiiudl db update
+
+# Browse and inspect
+./wiiudl search zelda
+./wiiudl search --region usa --type game --limit 20 mario
+./wiiudl info --contents 00050000101c9500
+
+# Download a game (decrypted files ready for Cemu or a console)
+./wiiudl download --decrypt -o ~/Games 00050000101c9500
+
+# Names work too; ambiguous matches prompt on a terminal
+./wiiudl download --decrypt --delete-encrypted -o ~/Games "Breath of the Wild"
+
+# Pin a title version instead of using the latest
+./wiiudl download --version 208 -o ~/Games 00050000101c9500
+
+# List or extract individual files
+./wiiudl files 00050000101c9500 --filter .rpx
+./wiiudl extract 00050000101c9500 --file code/U-King.rpx -o ~/Downloads
+
+# Decrypt a folder downloaded earlier without --decrypt
+./wiiudl decrypt --delete-encrypted "$HOME/Games/Game [Game] [00050000101c9500]"
+```
+
+### Commands
+
+| Command | What it does |
+|---|---|
+| `search [query...]` | Search titles by name or title ID; no query lists the database |
+| `info <title...>` | Show database metadata, TMD version, content count and size |
+| `files <title>` | List the files inside a title (downloads only its FST) |
+| `download <title...>` | Download one or more titles, optionally decrypting them |
+| `extract <title>` | Download and extract selected files (`--file`, `--filter`, `--all`) |
+| `decrypt <dir...>` | Decrypt folders left by a download without `--decrypt` |
+| `db update\|info\|clear` | Manage the cached title database |
+| `version` | Print the CLI version |
+
+Run `./wiiudl help <command>` for the full flag list of any command.
+
+Useful global flags: `--db PATH` (use a local JSON or generated Go database),
+`--no-db-fetch`, `--quiet`, and `--json` (search, info, files, download,
+extract, decrypt and db update).
+A title argument is either a 16-digit hex title ID or a name/query. In scripts,
+prefer title IDs or pass `--first` when a name may match multiple regions.
+
+### Title database
+
+On first use `wiiudl` downloads the same database the GUI builds into `db.go`
+and caches it:
+
+- Linux: `~/.cache/WiiUDownloader/titles.json` (or `$XDG_CACHE_HOME`)
+- macOS: `~/Library/Caches/WiiUDownloader/titles.json`
+
+Refresh it with `wiiudl db update`. Set `WIIUD_DB_URL` to use a mirror, or pass
+`--db PATH` to use a custom database file. If the database cannot be fetched and
+the command only uses title IDs, `wiiudl` continues using the IDs alone. You can
+also generate `db.go` before building (see the GUI instructions above) and the
+CLI will use it as a built-in fallback.
+
+### Exit codes and interrupts
+
+- `0`: success
+- `1`: one or more operations failed
+- `2`: usage error
+- `130`: interrupted
+
+The first Ctrl+C cancels the current transfer cleanly; press it again to force
+quit. Progress is written to stderr, so `--json` output on stdout stays clean.
 
 ---
 
